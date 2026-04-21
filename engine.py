@@ -1,17 +1,18 @@
 import copy
+import uuid
 from typing import Any, Dict, Optional
 
 
 class TradingSignalEvaluationEngine:
     def __init__(self) -> None:
-        pass
+        # Strategy parameters for current GBP/USD 2m setup
+        self.min_rr_long = 1.6
+        self.min_rr_short = 1.8
+        self.min_rr_countertrend = 2.0
+        self.max_account_risk_pct = 1.0
 
     @staticmethod
     def _get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
-        """
-        Safe nested getter using dot-paths.
-        Example: _get(payload, "risk.proposed_entry")
-        """
         current: Any = d
         for key in path.split("."):
             if not isinstance(current, dict) or key not in current:
@@ -21,7 +22,7 @@ class TradingSignalEvaluationEngine:
 
     @staticmethod
     def _to_float(value: Any, default: float = 0.0) -> float:
-        if value is None:
+        if value is None or value == "":
             return default
         try:
             return float(value)
@@ -43,300 +44,503 @@ class TradingSignalEvaluationEngine:
         return default
 
     @staticmethod
-    def _infer_rsi_reversal(trigger_reason: str) -> bool:
-        text = (trigger_reason or "").lower()
-        return "rsi reversal" in text or "rsi recovery" in text
+    def _round_units(units: float) -> int:
+        if units == 0:
+            return 0
+        return int(round(units))
 
-    @staticmethod
-    def _infer_macd_improving(trigger_reason: str) -> bool:
-        text = (trigger_reason or "").lower()
-        return "macd fade" in text or "macd improvement" in text or "macd exhaustion" in text
+    def _validate_payload(self, payload: Dict[str, Any], account: Dict[str, Any]) -> None:
+        schema_name = self._get(payload, "schema_name")
+        schema_version = self._get(payload, "schema_version")
+        event_type = self._get(payload, "event_type")
+        direction = self._get(payload, "signal.direction")
+        entry = self._get(payload, "risk.proposed_entry")
+        stop = self._get(payload, "risk.proposed_stop_loss")
+        take_profit = self._get(payload, "risk.proposed_take_profit")
+        rr_ratio = self._get(payload, "risk.rr_ratio")
+        symbol = self._get(payload, "instrument.symbol")
+        asset_class = self._get(payload, "instrument.asset_class")
+        timeframe = self._get(payload, "market.timeframe")
 
-    @staticmethod
-    def _round_position_size(units: float) -> float:
-        # For FX units, integer-like sizing is usually cleaner for execution.
-        if units <= 0:
-            return 0.0
-        return float(round(units))
+        if schema_name != "st_ludaetuc_canonical_payload":
+            raise ValueError("Invalid schema_name")
+        if schema_version != "1.0.0":
+            raise ValueError("Invalid schema_version")
+        if event_type != "signal":
+            raise ValueError("Invalid event_type")
+        if direction not in {"long", "short"}:
+            raise ValueError("Invalid signal.direction")
+        if symbol in (None, ""):
+            raise ValueError("Missing instrument.symbol")
+        if asset_class in (None, ""):
+            raise ValueError("Missing instrument.asset_class")
+        if timeframe in (None, ""):
+            raise ValueError("Missing market.timeframe")
+        if entry in (None, "") or stop in (None, "") or take_profit in (None, ""):
+            raise ValueError("Missing proposed execution prices")
+        if rr_ratio in (None, ""):
+            raise ValueError("Missing risk.rr_ratio")
 
-    def evaluate(self, full_input: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Input:
-        {
-          "payload": { ...canonical St Ludaetuc payload... },
-          "account": {
-            "balance": ...,
-            "margin_available": ...,
-            ...
-          }
+        balance = self._to_float(account.get("balance"), 0.0)
+        margin_available = self._to_float(account.get("margin_available"), 0.0)
+        if balance <= 0:
+            raise ValueError("Invalid account.balance")
+        if margin_available < 0:
+            raise ValueError("Invalid account.margin_available")
+
+    def _score_signal_quality(self, payload: Dict[str, Any]) -> int:
+        direction = self._get(payload, "signal.direction", "neutral")
+        strength_label = self._get(payload, "signal.strength_label", "unknown")
+        trigger_reason = str(self._get(payload, "signal.trigger_reason", "") or "")
+        rsi = self._to_float(self._get(payload, "indicators.rsi"), 0.0)
+        ema_fast = self._to_float(self._get(payload, "indicators.ema_fast"), 0.0)
+        ema_slow = self._to_float(self._get(payload, "indicators.ema_slow"), 0.0)
+        macd_hist = self._to_float(self._get(payload, "indicators.macd_histogram"), 0.0)
+        volatility_regime = str(self._get(payload, "structure.volatility_regime", "unknown") or "unknown")
+        market_regime = str(self._get(payload, "structure.market_regime", "unknown") or "unknown")
+
+        score = 0
+
+        strength_map = {
+            "very_strong": 25,
+            "strong": 20,
+            "moderate": 15,
+            "weak": 8,
+            "very_weak": 3,
+            "unknown": 5,
         }
+        score += strength_map.get(strength_label, 5)
 
-        Output:
-        {
-          "payload": { ...same canonical payload with manus block populated... }
-        }
-        """
-        input_payload = copy.deepcopy(full_input.get("payload", {}))
-        account = full_input.get("account", {}) or {}
+        if trigger_reason:
+            score += 10
 
-        # -----------------------------
-        # Extract canonical fields
-        # -----------------------------
-        signal_id = self._get(input_payload, "meta.signal_id")
-        direction = self._get(input_payload, "signal.direction", "unknown")
-        trigger_reason = self._get(input_payload, "signal.trigger_reason", "")
+        if direction == "long":
+            if rsi > 48:
+                score += 10
+            if ema_fast >= ema_slow:
+                score += 15
+            if macd_hist >= 0:
+                score += 10
+        elif direction == "short":
+            if rsi < 52:
+                score += 10
+            if ema_fast <= ema_slow:
+                score += 15
+            if macd_hist <= 0:
+                score += 10
 
-        proposed_entry = self._to_float(self._get(input_payload, "risk.proposed_entry", None), 0.0)
-        proposed_stop_loss = self._to_float(self._get(input_payload, "risk.proposed_stop_loss", None), 0.0)
-        proposed_take_profit = self._to_float(self._get(input_payload, "risk.proposed_take_profit", None), 0.0)
+        if volatility_regime in {"normal", "high"}:
+            score += 10
+        elif volatility_regime == "very_low":
+            score -= 10
 
-        rr_ratio = self._to_float(self._get(input_payload, "risk.rr_ratio", None), 0.0)
-        stop_distance_price = self._to_float(self._get(input_payload, "risk.stop_distance_price", None), 0.0)
-        max_spread_allowed = self._to_float(self._get(input_payload, "risk.max_spread_allowed", None), 0.0)
+        if market_regime in {"trend", "reversal", "trend_pullback", "range_to_reversal"}:
+            score += 10
 
-        spread_price_raw = self._get(input_payload, "price.spread_price", None)
-        spread_price = None if spread_price_raw is None else self._to_float(spread_price_raw, 0.0)
+        return max(0, min(100, round(score)))
 
-        band_touch_confirmed = self._to_bool(
-            self._get(input_payload, "signal.band_touch_confirmed", False),
-            False,
-        )
-        regime_ok = self._to_bool(self._get(input_payload, "signal.regime_ok", False), False)
+    def _score_risk(self, payload: Dict[str, Any], account: Dict[str, Any]) -> int:
+        rr_ratio = self._to_float(self._get(payload, "risk.rr_ratio"), 0.0)
+        stop_distance_price = self._to_float(self._get(payload, "risk.stop_distance_price"), 0.0)
+        risk_percent = self._to_float(self._get(payload, "risk.risk_percent"), 0.0)
+        position_size_units = self._to_float(self._get(payload, "risk.position_size_units"), 0.0)
+        margin_available = self._to_float(account.get("margin_available"), 0.0)
+        drawdown_guard_status = str(self._get(payload, "risk.drawdown_guard_status", "unknown") or "unknown")
 
-        vwap_deviation_percent = self._to_float(
-            self._get(input_payload, "context.vwap_deviation_percent", None),
-            0.0,
-        )
-
-        market_regime = str(self._get(input_payload, "structure.market_regime", "") or "")
-        volatility_regime = str(self._get(input_payload, "structure.volatility_regime", "") or "")
-        session_name = str(self._get(input_payload, "market.session_name", "unknown") or "unknown")
-
-        bb_width_percent = self._to_float(
-            self._get(input_payload, "context.bb_width_percent", None),
-            0.0,
-        )
-        min_bb_width_pct = self._to_float(
-            self._get(input_payload, "extensions.strategy_params.min_bb_width_pct", None),
-            0.0,
-        )
-        max_bb_width_pct = self._to_float(
-            self._get(input_payload, "extensions.strategy_params.max_bb_width_pct", None),
-            999999.0,
-        )
-
-        min_stop_pips = self._to_float(
-            self._get(input_payload, "extensions.strategy_params.min_stop_pips", None),
-            0.0,
-        )
-        max_stop_pips = self._to_float(
-            self._get(input_payload, "extensions.strategy_params.max_stop_pips", None),
-            999999.0,
-        )
-
-        pip_size = self._to_float(self._get(input_payload, "instrument.pip_size", None), 0.0001)
-        risk_percent = self._to_float(self._get(input_payload, "risk.risk_percent", None), 0.5)
-        account_balance = self._to_float(account.get("balance", None), 0.0)
-        margin_available = self._to_float(account.get("margin_available", None), 0.0)
-
-        confidence_raw = self._to_float(self._get(input_payload, "signal.confidence_raw", None), 0.0)
-
-        # -----------------------------
-        # Derived booleans
-        # -----------------------------
-        rsi_reversal_present = self._infer_rsi_reversal(trigger_reason)
-        macd_improving = self._infer_macd_improving(trigger_reason)
-
-        bb_width_ok = min_bb_width_pct <= bb_width_percent <= max_bb_width_pct if max_bb_width_pct >= min_bb_width_pct else False
-        stop_distance_pips = stop_distance_price / pip_size if pip_size > 0 and stop_distance_price > 0 else 0.0
-
-        # -----------------------------
-        # Initialize manus block
-        # -----------------------------
-        manus_block: Dict[str, Any] = {
-            "signal_quality_score": 0,
-            "risk_score": 0,
-            "context_score": 0,
-            "strategy_fit_score": 0,
-            "expected_value_score": 0,
-            "approval_status": "rejected",
-            "approval_reason": "Initial evaluation pending",
-            "final_entry": None,
-            "final_stop_loss": None,
-            "final_take_profit": None,
-            "final_position_size": None,
-        }
-
-        # -----------------------------
-        # 1. Signal Quality Score
-        # -----------------------------
-        signal_quality_score = 0
-
-        if band_touch_confirmed:
-            signal_quality_score += 20
-
-        if abs(vwap_deviation_percent) > 0.075:
-            signal_quality_score += 20
-
-        if rsi_reversal_present:
-            signal_quality_score += 15
-
-        if macd_improving:
-            signal_quality_score += 15
-
-        if regime_ok:
-            signal_quality_score += 10
-
-        # Optional use of Pine's own confidence score as a soft boost
-        if confidence_raw >= 80:
-            signal_quality_score += 10
-        elif confidence_raw >= 65:
-            signal_quality_score += 5
-
-        manus_block["signal_quality_score"] = min(100, round(signal_quality_score))
-
-        # -----------------------------
-        # 2. Risk Score
-        # -----------------------------
-        risk_score = 100
-        risk_notes = []
+        score = 100
 
         if rr_ratio < 1.2:
-            risk_score -= 30
-            risk_notes.append("RR below 1.2")
+            score -= 40
+        elif rr_ratio < 1.6:
+            score -= 20
 
-        if stop_distance_pips > 0:
-            if stop_distance_pips < min_stop_pips:
-                risk_score -= 20
-                risk_notes.append("Stop too small")
-            elif stop_distance_pips > max_stop_pips:
-                risk_score -= 20
-                risk_notes.append("Stop too large")
-        else:
-            risk_score -= 20
-            risk_notes.append("Missing stop distance")
+        if stop_distance_price <= 0:
+            score -= 30
 
-        # Only penalize spread if spread exists.
-        if spread_price is not None and max_spread_allowed > 0:
-            if spread_price > max_spread_allowed:
-                risk_score -= 30
-                risk_notes.append("Spread above allowed max")
+        if risk_percent <= 0 or risk_percent > self.max_account_risk_pct:
+            score -= 20
 
-        # Optional basic margin sanity
+        if position_size_units <= 0:
+            score -= 20
+
         if margin_available <= 0:
-            risk_score -= 20
-            risk_notes.append("No margin available")
+            score -= 30
 
-        manus_block["risk_score"] = max(0, round(risk_score))
+        if drawdown_guard_status == "warn":
+            score -= 15
+        elif drawdown_guard_status == "fail":
+            score = 0
 
-        # -----------------------------
-        # 3. Context Score
-        # -----------------------------
-        context_score = 70
+        return max(0, min(100, round(score)))
 
-        if session_name == "unknown":
-            context_score -= 30
+    def _score_context(self, payload: Dict[str, Any]) -> int:
+        session_name = str(self._get(payload, "market.session_name", "unknown") or "unknown")
+        session_phase = str(self._get(payload, "market.session_phase", "unknown") or "unknown")
+        context_status = str(self._get(payload, "context.context_status", "unknown") or "unknown")
 
-        context_status = str(self._get(input_payload, "context.context_status", "unchecked") or "unchecked")
-        if context_status == "blocked":
-            context_score = 0
+        score = 50
+
+        if session_name == "overlap_london_new_york":
+            score += 35
+        elif session_name == "london":
+            score += 30
+        elif session_name == "new_york":
+            score += 20
+        elif session_name == "asia":
+            score += 5
+        elif session_name == "overnight":
+            score -= 25
+        elif session_name == "unknown":
+            score -= 15
+
+        if session_phase == "active":
+            score += 10
+        elif session_phase == "late":
+            score -= 5
+        elif session_phase == "post_close":
+            score -= 10
+
+        if context_status == "clear":
+            score += 10
+        elif context_status == "warning":
+            score -= 15
+        elif context_status == "blocked":
+            score = 0
         elif context_status == "unchecked":
-            # Neutral for v1
-            pass
+            score -= 5
 
-        manus_block["context_score"] = max(0, round(context_score))
+        return max(0, min(100, round(score)))
 
-        # -----------------------------
-        # 4. Strategy Fit Score
-        # -----------------------------
-        strategy_fit_score = 0
+    def _score_strategy_fit(self, payload: Dict[str, Any]) -> int:
+        direction = str(self._get(payload, "signal.direction", "neutral") or "neutral")
+        trend_bias = str(self._get(payload, "structure.trend_bias", "unknown") or "unknown")
+        htf_bias = str(self._get(payload, "structure.higher_timeframe_bias", "unknown") or "unknown")
+        volatility_regime = str(self._get(payload, "structure.volatility_regime", "unknown") or "unknown")
+        market_regime = str(self._get(payload, "structure.market_regime", "unknown") or "unknown")
+        countertrend_override = self._to_bool(self._get(payload, "extensions.countertrend_short_override"), False)
 
-        if market_regime == "mean_reversion_friendly":
-            strategy_fit_score += 40
+        score = 0
 
-        if volatility_regime in {"low", "normal"}:
-            strategy_fit_score += 30
+        if direction == "long":
+            if htf_bias == "bullish":
+                score += 35
+            elif htf_bias == "mixed":
+                score += 20
+            elif htf_bias == "bearish":
+                score -= 20
 
-        if bb_width_ok:
-            strategy_fit_score += 30
+            if trend_bias == "bullish":
+                score += 20
 
-        manus_block["strategy_fit_score"] = min(100, round(strategy_fit_score))
+        elif direction == "short":
+            if htf_bias == "bearish":
+                score += 35
+            elif htf_bias == "mixed":
+                score += 10
+            elif htf_bias == "bullish":
+                score -= 25
 
-        # -----------------------------
-        # 5. Expected Value Score
-        # -----------------------------
-        expected_value_score = (
-            manus_block["signal_quality_score"]
-            + manus_block["risk_score"]
-            + manus_block["strategy_fit_score"]
-        ) / 3.0
+            if trend_bias == "bearish":
+                score += 20
 
-        manus_block["expected_value_score"] = round(expected_value_score)
+            if countertrend_override:
+                score += 10
 
-        # -----------------------------
-        # Approval Logic
-        # -----------------------------
-        approval_status = "rejected"
-        approval_reason = ""
+        if volatility_regime in {"normal", "high"}:
+            score += 20
+        elif volatility_regime == "very_low":
+            score -= 15
 
-        # Hard rejects
-        if not signal_id:
-            approval_reason = "Missing meta.signal_id."
-        elif proposed_entry <= 0 or proposed_stop_loss <= 0 or proposed_take_profit <= 0:
-            approval_reason = "Missing proposed execution prices."
-        elif rr_ratio < 1.1:
-            approval_reason = "Risk-reward ratio too low."
-        elif manus_block["risk_score"] < 50:
-            approval_reason = "Risk score too low."
-        elif direction not in {"long", "short"}:
-            approval_reason = "Invalid signal direction."
-        elif account_balance <= 0:
-            approval_reason = "Invalid account balance."
-        # Approve
-        elif (
-            manus_block["signal_quality_score"] >= 70
-            and manus_block["risk_score"] >= 60
-            and manus_block["strategy_fit_score"] >= 60
-            and manus_block["expected_value_score"] >= 55
-        ):
-            approval_status = "approved"
-            approval_reason = "Signal meets all approval criteria."
-        else:
-            approval_reason = "Signal does not meet approval thresholds."
+        if market_regime in {"trend", "reversal", "range_to_reversal"}:
+            score += 15
 
-        manus_block["approval_status"] = approval_status
-        manus_block["approval_reason"] = approval_reason
+        return max(0, min(100, round(score)))
 
-        # -----------------------------
-        # Final execution parameters
-        # -----------------------------
-        final_entry = proposed_entry
-        final_stop_loss = proposed_stop_loss
-        final_take_profit = proposed_take_profit
-        final_position_size: Optional[float] = None
+    def _score_expected_value(
+        self,
+        signal_quality_score: int,
+        risk_score: int,
+        context_score: int,
+        strategy_fit_score: int,
+        payload: Dict[str, Any],
+    ) -> int:
+        rr_ratio = self._to_float(self._get(payload, "risk.rr_ratio"), 0.0)
 
-        if approval_status == "approved":
-            risk_fraction = risk_percent / 100.0  # Pine sends 0.5 for 0.5%
-            risk_per_trade = account_balance * risk_fraction
+        score = (
+            0.25 * signal_quality_score
+            + 0.25 * risk_score
+            + 0.20 * context_score
+            + 0.30 * strategy_fit_score
+        )
 
+        if rr_ratio >= 2.0:
+            score += 5
+        elif rr_ratio < 1.5:
+            score -= 10
+
+        return max(0, min(100, round(score)))
+
+    def _approval_decision(
+        self,
+        payload: Dict[str, Any],
+        account: Dict[str, Any],
+        signal_quality_score: int,
+        risk_score: int,
+        context_score: int,
+        strategy_fit_score: int,
+        expected_value_score: int,
+    ) -> Dict[str, Optional[str]]:
+        direction = str(self._get(payload, "signal.direction", "neutral") or "neutral")
+        rr_ratio = self._to_float(self._get(payload, "risk.rr_ratio"), 0.0)
+        htf_bias = str(self._get(payload, "structure.higher_timeframe_bias", "unknown") or "unknown")
+        countertrend_override = self._to_bool(self._get(payload, "extensions.countertrend_short_override"), False)
+        margin_available = self._to_float(account.get("margin_available"), 0.0)
+        position_size_units = self._to_float(self._get(payload, "risk.position_size_units"), 0.0)
+
+        if direction == "long" and rr_ratio < self.min_rr_long:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "RR below long minimum threshold",
+                "rejection_stage": "risk",
+                "recommendation": "reject",
+            }
+
+        if direction == "short":
+            min_rr = self.min_rr_countertrend if htf_bias == "bullish" else self.min_rr_short
+            if rr_ratio < min_rr:
+                return {
+                    "approval_status": "rejected",
+                    "approval_reason": None,
+                    "rejection_reason": "RR below short minimum threshold",
+                    "rejection_stage": "risk",
+                    "recommendation": "reject",
+                }
+
+            if htf_bias == "bullish" and not countertrend_override:
+                return {
+                    "approval_status": "rejected",
+                    "approval_reason": None,
+                    "rejection_reason": "Short conflicts with bullish HTF bias without override",
+                    "rejection_stage": "strategy_fit",
+                    "recommendation": "reject",
+                }
+
+        if margin_available <= 0:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Insufficient available margin",
+                "rejection_stage": "risk",
+                "recommendation": "reject",
+            }
+
+        if position_size_units <= 0:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Invalid proposed position size",
+                "rejection_stage": "risk",
+                "recommendation": "reject",
+            }
+
+        if signal_quality_score < 65:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Signal quality too low",
+                "rejection_stage": "signal_quality",
+                "recommendation": "reject",
+            }
+
+        if risk_score < 60:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Risk score too low",
+                "rejection_stage": "risk",
+                "recommendation": "reject",
+            }
+
+        if context_score < 40:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Context score too low",
+                "rejection_stage": "context",
+                "recommendation": "reject",
+            }
+
+        if strategy_fit_score < 60:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Strategy fit too low",
+                "rejection_stage": "strategy_fit",
+                "recommendation": "reject",
+            }
+
+        if expected_value_score < 60:
+            return {
+                "approval_status": "rejected",
+                "approval_reason": None,
+                "rejection_reason": "Expected value too low",
+                "rejection_stage": "expected_value",
+                "recommendation": "reject",
+            }
+
+        return {
+            "approval_status": "approved",
+            "approval_reason": "Signal passed signal quality, risk, context, strategy fit, and expected value checks",
+            "rejection_reason": None,
+            "rejection_stage": None,
+            "recommendation": "execute",
+        }
+
+    def _build_execution_plan(
+        self,
+        payload: Dict[str, Any],
+        account: Dict[str, Any],
+        approved: bool,
+    ) -> Dict[str, Any]:
+        direction = str(self._get(payload, "signal.direction", "neutral") or "neutral")
+        entry = self._to_float(self._get(payload, "risk.proposed_entry"), 0.0)
+        stop = self._to_float(self._get(payload, "risk.proposed_stop_loss"), 0.0)
+        take_profit = self._to_float(self._get(payload, "risk.proposed_take_profit"), 0.0)
+        rr_ratio = self._to_float(self._get(payload, "risk.rr_ratio"), 0.0)
+        units = self._to_float(self._get(payload, "risk.position_size_units"), 0.0)
+        stop_distance_price = self._to_float(self._get(payload, "risk.stop_distance_price"), 0.0)
+        risk_percent = self._to_float(self._get(payload, "risk.risk_percent"), 0.0)
+        balance = self._to_float(account.get("balance"), 0.0)
+
+        final_units: Optional[int]
+        if approved:
+            risk_amount = balance * (risk_percent / 100.0)
             if stop_distance_price > 0:
-                # This is a simple v1 size model.
-                # Later you may replace this with broker/instrument-aware sizing.
-                units = risk_per_trade / stop_distance_price
-                final_position_size = self._round_position_size(units)
+                inferred_units = risk_amount / stop_distance_price
+                signed_units = inferred_units if direction == "long" else -inferred_units
+                final_units = self._round_units(signed_units)
             else:
-                final_position_size = 0.0
+                final_units = self._round_units(units if direction == "long" else -abs(units))
         else:
-            final_position_size = None
+            final_units = None
 
-        manus_block["final_entry"] = final_entry
-        manus_block["final_stop_loss"] = final_stop_loss
-        manus_block["final_take_profit"] = final_take_profit
-        manus_block["final_position_size"] = final_position_size
+        lots = None if final_units is None else round(final_units / 100000.0, 5)
 
-        # -----------------------------
-        # Write only to payload.manus
-        # -----------------------------
-        input_payload["manus"] = manus_block
+        if approved:
+            trade_plan = (
+                f"{'Buy' if direction == 'long' else 'Sell'} "
+                f"{self._get(payload, 'instrument.broker_symbol', 'UNKNOWN')} "
+                f"at {entry} with stop {stop} and target {take_profit}"
+            )
+        else:
+            trade_plan = None
 
-        return {"payload": input_payload}
+        return {
+            "final_entry": entry if approved else None,
+            "final_stop_loss": stop if approved else None,
+            "final_take_profit": take_profit if approved else None,
+            "final_position_size": final_units,
+            "final_position_size_lots": lots,
+            "final_rr_ratio": rr_ratio if approved else None,
+            "final_holding_period_est": "intraday_20_to_60m" if approved else None,
+            "final_trade_plan": trade_plan,
+        }
+
+    def evaluate(self, full_input: Dict[str, Any]) -> Dict[str, Any]:
+        payload = copy.deepcopy(full_input.get("payload", {}))
+        account = full_input.get("account", {}) or {}
+
+        self._validate_payload(payload, account)
+
+        signal_quality_score = self._score_signal_quality(payload)
+        risk_score = self._score_risk(payload, account)
+        context_score = self._score_context(payload)
+        strategy_fit_score = self._score_strategy_fit(payload)
+        expected_value_score = self._score_expected_value(
+            signal_quality_score,
+            risk_score,
+            context_score,
+            strategy_fit_score,
+            payload,
+        )
+
+        execution_quality_score = min(100, round((risk_score + context_score) / 2))
+        confidence_score = min(
+            100,
+            round(
+                0.25 * signal_quality_score
+                + 0.25 * risk_score
+                + 0.20 * context_score
+                + 0.30 * strategy_fit_score
+            ),
+        )
+
+        decision = self._approval_decision(
+            payload,
+            account,
+            signal_quality_score,
+            risk_score,
+            context_score,
+            strategy_fit_score,
+            expected_value_score,
+        )
+
+        execution_plan = self._build_execution_plan(
+            payload=payload,
+            account=account,
+            approved=decision["approval_status"] == "approved",
+        )
+
+        regime_classification = (
+            f"{self._get(payload, 'structure.market_regime', 'unknown')}_"
+            f"{self._get(payload, 'signal.direction', 'neutral')}_"
+            f"{self._get(payload, 'structure.volatility_regime', 'unknown')}_"
+            f"{self._get(payload, 'market.session_name', 'unknown')}"
+        )
+
+        notes = [
+            f"Session={self._get(payload, 'market.session_name', 'unknown')}",
+            f"HTF bias={self._get(payload, 'structure.higher_timeframe_bias', 'unknown')}",
+            f"Direction={self._get(payload, 'signal.direction', 'neutral')}",
+            f"RR={self._get(payload, 'risk.rr_ratio', None)}",
+            f"Context={self._get(payload, 'context.context_status', 'unknown')}",
+        ]
+
+        manus_block = {
+            "signal_quality_score": signal_quality_score,
+            "risk_score": risk_score,
+            "context_score": context_score,
+            "strategy_fit_score": strategy_fit_score,
+            "expected_value_score": expected_value_score,
+            "approval_status": decision["approval_status"],
+            "approval_reason": decision["approval_reason"],
+            "final_entry": execution_plan["final_entry"],
+            "final_stop_loss": execution_plan["final_stop_loss"],
+            "final_take_profit": execution_plan["final_take_profit"],
+            "final_position_size": execution_plan["final_position_size"],
+        }
+
+        payload["manus"] = manus_block
+
+        return {
+            "request_id": str(uuid.uuid4()),
+            "status": "ok",
+            "payload": payload,
+            "decision": decision,
+            "scores": {
+                "signal_quality_score": signal_quality_score,
+                "risk_score": risk_score,
+                "context_score": context_score,
+                "strategy_fit_score": strategy_fit_score,
+                "expected_value_score": expected_value_score,
+                "execution_quality_score": execution_quality_score,
+                "confidence_score": confidence_score,
+            },
+            "classification": {
+                "asset_specific_logic_used": "forex_major_fx_v2",
+                "regime_classification": regime_classification,
+            },
+            "execution_plan": execution_plan,
+            "notes": notes,
+        }
