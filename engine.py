@@ -1,666 +1,806 @@
-# engine.py
 
-import copy
-import math
+"""
+St Ludaetuc Manus Engine v3.0.0
+Multi-instrument cognitive decision engine for:
+GBP/USD, EUR/USD, AUD/USD, USD/CAD, USD/JPY, XAG/USD, XAU/USD.
+
+TradingView remains a candidate generator.
+Manus remains the final decision authority.
+
+Run:
+    uvicorn manus_engine_multi_asset_v3:app --host 0.0.0.0 --port 10000
+
+Endpoints:
+    GET  /health
+    POST /evaluate
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from math import floor, isfinite
 from typing import Any, Dict, Optional, Tuple
 
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
 
-class TradingSignalEvaluationEngine:
+
+ENGINE_VERSION = "3.0.0"
+RULESET_VERSION = "manus_ruleset_multi_asset_2026_07_08_v3"
+
+
+# -----------------------------------------------------------------------------
+# Data models
+# -----------------------------------------------------------------------------
+class EvaluateRequest(BaseModel):
     """
-    St Ludaetuc Manus Evaluation Engine
-    Supports:
-      - GBP/USD forex ruleset
-      - XAU/USD gold/metals ruleset
-
-    Input:
-      {
-        "payload": {... canonical payload ...},
-        "account": {
-          "balance": ...,
-          "margin_available": ...,
-          "open_trade_count": optional,
-          "portfolio_heat_percent": optional
-        }
-      }
-
-    Output:
-      {
-        "payload": {... same payload with populated manus block ...}
-      }
+    Accepts either:
+      1. direct canonical payload body
+      2. {"payload": {...}, "account": {...}}
     """
+    payload: Optional[Dict[str, Any]] = None
+    account: Optional[Dict[str, Any]] = None
 
-    # ---------------------------------------------------------------------
-    # Generic helpers
-    # ---------------------------------------------------------------------
-    @staticmethod
-    def _get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
-        cur: Any = d
-        for key in path.split("."):
-            if not isinstance(cur, dict) or key not in cur:
-                return default
-            cur = cur[key]
-        return cur
+    model_config = {"extra": "allow"}
 
-    @staticmethod
-    def _to_float(value: Any, default: float = 0.0) -> float:
-        if value is None:
-            return default
-        try:
-            if isinstance(value, str) and value.lower() in {"null", "none", ""}:
-                return default
-            return float(value)
-        except (TypeError, ValueError):
-            return default
 
-    @staticmethod
-    def _to_int(value: Any, default: int = 0) -> int:
-        try:
-            return int(float(value))
-        except (TypeError, ValueError):
-            return default
+@dataclass(frozen=True)
+class InstrumentConfig:
+    symbol: str
+    display_name: str
+    asset_class: str
+    broker_symbol: str
+    base_currency: str
+    quote_currency: str
+    pip_size: float
+    tick_size: float
+    contract_size: float
+    unit_step: float
+    min_units: float
+    max_units: float
 
-    @staticmethod
-    def _to_bool(value: Any, default: bool = False) -> bool:
-        if isinstance(value, bool):
-            return value
-        if value is None:
+    # Empirical / operating thresholds.
+    normal_atr_min: float
+    normal_atr_max: float
+    high_atr_max: float
+    max_spread: float
+    max_slippage: float
+
+    min_rr: float
+    target_rr_floor: float
+    default_risk_percent: float
+    max_risk_percent: float
+
+    stop_atr_min_mult: float
+    stop_atr_max_mult: float
+    default_stop_atr_mult: float
+
+    preferred_sessions: Tuple[str, ...]
+    blocked_sessions: Tuple[str, ...]
+
+
+# Thresholds for FX pairs are derived from the uploaded 5m market-data CSV distributions:
+# median ATR / upper quartile ATR / p90 ATR / common spread and slippage.
+# XAU/XAG use conservative defaults because no metal CSV was attached in this request.
+INSTRUMENTS: Dict[str, InstrumentConfig] = {
+    "GBP_USD": InstrumentConfig(
+        symbol="GBPUSD", display_name="GBP/USD", asset_class="forex", broker_symbol="GBP_USD",
+        base_currency="GBP", quote_currency="USD", pip_size=0.0001, tick_size=0.00001,
+        contract_size=100000, unit_step=1, min_units=1, max_units=200000,
+        normal_atr_min=0.00025, normal_atr_max=0.00070, high_atr_max=0.00105,
+        max_spread=0.00030, max_slippage=0.00020,
+        min_rr=1.25, target_rr_floor=1.45, default_risk_percent=0.35, max_risk_percent=0.50,
+        stop_atr_min_mult=1.00, stop_atr_max_mult=2.25, default_stop_atr_mult=1.35,
+        preferred_sessions=("london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("asia", "overnight", "unknown", "OffHours"),
+    ),
+    "EUR_USD": InstrumentConfig(
+        symbol="EURUSD", display_name="EUR/USD", asset_class="forex", broker_symbol="EUR_USD",
+        base_currency="EUR", quote_currency="USD", pip_size=0.0001, tick_size=0.00001,
+        contract_size=100000, unit_step=1, min_units=1, max_units=200000,
+        normal_atr_min=0.00018, normal_atr_max=0.00060, high_atr_max=0.00090,
+        max_spread=0.00030, max_slippage=0.00020,
+        min_rr=1.20, target_rr_floor=1.45, default_risk_percent=0.35, max_risk_percent=0.50,
+        stop_atr_min_mult=1.00, stop_atr_max_mult=2.20, default_stop_atr_mult=1.35,
+        preferred_sessions=("london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("asia", "overnight", "unknown", "OffHours"),
+    ),
+    "AUD_USD": InstrumentConfig(
+        symbol="AUDUSD", display_name="AUD/USD", asset_class="forex", broker_symbol="AUD_USD",
+        base_currency="AUD", quote_currency="USD", pip_size=0.0001, tick_size=0.00001,
+        contract_size=100000, unit_step=1, min_units=1, max_units=200000,
+        normal_atr_min=0.00016, normal_atr_max=0.00050, high_atr_max=0.00080,
+        max_spread=0.00035, max_slippage=0.00020,
+        min_rr=1.20, target_rr_floor=1.45, default_risk_percent=0.30, max_risk_percent=0.45,
+        stop_atr_min_mult=1.05, stop_atr_max_mult=2.30, default_stop_atr_mult=1.40,
+        preferred_sessions=("london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("overnight", "unknown", "OffHours"),
+    ),
+    "USD_CAD": InstrumentConfig(
+        symbol="USDCAD", display_name="USD/CAD", asset_class="forex", broker_symbol="USD_CAD",
+        base_currency="USD", quote_currency="CAD", pip_size=0.0001, tick_size=0.00001,
+        contract_size=100000, unit_step=1, min_units=1, max_units=200000,
+        normal_atr_min=0.00018, normal_atr_max=0.00055, high_atr_max=0.00085,
+        max_spread=0.00035, max_slippage=0.00020,
+        min_rr=1.25, target_rr_floor=1.50, default_risk_percent=0.30, max_risk_percent=0.45,
+        stop_atr_min_mult=1.05, stop_atr_max_mult=2.35, default_stop_atr_mult=1.40,
+        preferred_sessions=("london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("asia", "overnight", "unknown", "OffHours"),
+    ),
+    "USD_JPY": InstrumentConfig(
+        symbol="USDJPY", display_name="USD/JPY", asset_class="forex", broker_symbol="USD_JPY",
+        base_currency="USD", quote_currency="JPY", pip_size=0.01, tick_size=0.001,
+        contract_size=100000, unit_step=1, min_units=1, max_units=200000,
+        normal_atr_min=0.035, normal_atr_max=0.105, high_atr_max=0.160,
+        max_spread=0.030, max_slippage=0.020,
+        min_rr=1.25, target_rr_floor=1.50, default_risk_percent=0.30, max_risk_percent=0.45,
+        stop_atr_min_mult=1.05, stop_atr_max_mult=2.40, default_stop_atr_mult=1.45,
+        preferred_sessions=("asia", "london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("overnight", "unknown", "OffHours"),
+    ),
+    "XAU_USD": InstrumentConfig(
+        symbol="XAUUSD", display_name="XAU/USD", asset_class="metals", broker_symbol="XAU_USD",
+        base_currency="XAU", quote_currency="USD", pip_size=0.01, tick_size=0.01,
+        contract_size=1, unit_step=1, min_units=1, max_units=100,
+        normal_atr_min=1.50, normal_atr_max=8.00, high_atr_max=15.00,
+        max_spread=0.60, max_slippage=0.30,
+        min_rr=1.35, target_rr_floor=1.60, default_risk_percent=0.20, max_risk_percent=0.35,
+        stop_atr_min_mult=1.20, stop_atr_max_mult=2.80, default_stop_atr_mult=1.65,
+        preferred_sessions=("london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("asia", "overnight", "unknown", "OffHours"),
+    ),
+    "XAG_USD": InstrumentConfig(
+        symbol="XAGUSD", display_name="XAG/USD", asset_class="metals", broker_symbol="XAG_USD",
+        base_currency="XAG", quote_currency="USD", pip_size=0.001, tick_size=0.001,
+        contract_size=1, unit_step=1, min_units=1, max_units=5000,
+        normal_atr_min=0.020, normal_atr_max=0.120, high_atr_max=0.220,
+        max_spread=0.050, max_slippage=0.025,
+        min_rr=1.35, target_rr_floor=1.60, default_risk_percent=0.20, max_risk_percent=0.35,
+        stop_atr_min_mult=1.20, stop_atr_max_mult=2.80, default_stop_atr_mult=1.70,
+        preferred_sessions=("london", "overlap_london_new_york", "new_york", "London"),
+        blocked_sessions=("asia", "overnight", "unknown", "OffHours"),
+    ),
+}
+
+ALIASES = {
+    "GBPUSD": "GBP_USD", "GBP/USD": "GBP_USD", "GBP_USD": "GBP_USD",
+    "EURUSD": "EUR_USD", "EUR/USD": "EUR_USD", "EUR_USD": "EUR_USD",
+    "AUDUSD": "AUD_USD", "AUD/USD": "AUD_USD", "AUD_USD": "AUD_USD",
+    "USDCAD": "USD_CAD", "USD/CAD": "USD_CAD", "USD_CAD": "USD_CAD",
+    "USDJPY": "USD_JPY", "USD/JPY": "USD_JPY", "USD_JPY": "USD_JPY",
+    "XAUUSD": "XAU_USD", "XAU/USD": "XAU_USD", "XAU_USD": "XAU_USD",
+    "XAGUSD": "XAG_USD", "XAG/USD": "XAG_USD", "XAG_USD": "XAG_USD",
+}
+
+
+# -----------------------------------------------------------------------------
+# Utilities
+# -----------------------------------------------------------------------------
+def now_utc() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def deep_get(obj: Dict[str, Any], path: str, default: Any = None) -> Any:
+    cur: Any = obj
+    for part in path.split("."):
+        if not isinstance(cur, dict) or part not in cur:
             return default
-        if isinstance(value, str):
-            v = value.strip().lower()
-            if v in {"true", "1", "yes", "y"}:
-                return True
-            if v in {"false", "0", "no", "n"}:
-                return False
+        cur = cur[part]
+    return cur
+
+
+def deep_set(obj: Dict[str, Any], path: str, value: Any) -> None:
+    cur = obj
+    parts = path.split(".")
+    for part in parts[:-1]:
+        if part not in cur or not isinstance(cur[part], dict):
+            cur[part] = {}
+        cur = cur[part]
+    cur[parts[-1]] = value
+
+
+def as_float(x: Any, default: Optional[float] = None) -> Optional[float]:
+    if x is None:
+        return default
+    try:
+        if isinstance(x, str):
+            x = x.replace("£", "").replace("$", "").replace(",", "").strip()
+        v = float(x)
+        return v if isfinite(v) else default
+    except Exception:
         return default
 
-    @staticmethod
-    def _clamp(v: float, lo: float, hi: float) -> float:
-        return max(lo, min(hi, v))
 
-    @staticmethod
-    def _round_to_step(units: float, step: float) -> float:
-        if step <= 0:
-            return units
-        return math.floor(units / step) * step
+def as_str(x: Any, default: str = "") -> str:
+    if x is None:
+        return default
+    return str(x)
 
-    @staticmethod
-    def _round_price(price: float, tick_size: float) -> float:
-        if tick_size <= 0:
-            return price
-        return round(round(price / tick_size) * tick_size, 10)
 
-    def _base_manus_block(self) -> Dict[str, Any]:
+def round_to_tick(price: float, tick: float) -> float:
+    if tick <= 0:
+        return price
+    return round(round(price / tick) * tick, 10)
+
+
+def normalize_symbol(payload: Dict[str, Any]) -> Optional[str]:
+    candidates = [
+        deep_get(payload, "instrument.broker_symbol"),
+        deep_get(payload, "instrument.symbol"),
+        deep_get(payload, "instrument.display_name"),
+        deep_get(payload, "asset_specific.fx.broker_symbol"),
+    ]
+    for raw in candidates:
+        if not raw:
+            continue
+        key = str(raw).upper().replace(" ", "")
+        if key in ALIASES:
+            return ALIASES[key]
+        compact = key.replace("_", "").replace("/", "")
+        if compact in ALIASES:
+            return ALIASES[compact]
+    return None
+
+
+def canonical_payload(req: EvaluateRequest) -> Dict[str, Any]:
+    body = req.model_dump(exclude_none=True)
+    if isinstance(req.payload, dict):
+        return req.payload
+    # If no wrapper was used, treat entire request body as the payload.
+    body.pop("payload", None)
+    body.pop("account", None)
+    return body
+
+
+def get_account_equity(account: Optional[Dict[str, Any]], payload: Dict[str, Any]) -> float:
+    account = account or {}
+    for key in ("equity", "balance", "NAV", "nav", "marginAvailable", "account_equity"):
+        v = as_float(account.get(key))
+        if v and v > 0:
+            return v
+    for path in ("account.equity", "account.balance", "risk.account_equity", "extensions.account.equity"):
+        v = as_float(deep_get(payload, path))
+        if v and v > 0:
+            return v
+    return 10_000.0
+
+
+# -----------------------------------------------------------------------------
+# Cognitive scoring
+# -----------------------------------------------------------------------------
+def score_signal_quality(payload: Dict[str, Any], cfg: InstrumentConfig) -> Tuple[int, Dict[str, Any]]:
+    direction = as_str(deep_get(payload, "signal.direction"), "neutral").lower()
+    rsi = as_float(deep_get(payload, "indicators.rsi"))
+    ema_fast = as_float(deep_get(payload, "indicators.ema_fast"))
+    ema_slow = as_float(deep_get(payload, "indicators.ema_slow"))
+    macd_hist = as_float(deep_get(payload, "indicators.macd_histogram"))
+    trend_bias = as_str(deep_get(payload, "structure.trend_bias"), "unknown").lower()
+    htf_bias = as_str(deep_get(payload, "structure.higher_timeframe_bias"), "unknown").lower()
+    entry_model = as_str(deep_get(payload, "signal.entry_model"), "unknown").lower()
+    strength = as_str(deep_get(payload, "signal.strength_label"), "unknown").lower()
+
+    score = 50
+    reasons = []
+
+    if direction not in ("long", "short"):
+        return 0, {"fail": True, "reason": "Signal direction is not long or short."}
+
+    aligned_ema = (
+        direction == "long" and ema_fast is not None and ema_slow is not None and ema_fast >= ema_slow
+    ) or (
+        direction == "short" and ema_fast is not None and ema_slow is not None and ema_fast <= ema_slow
+    )
+    if aligned_ema:
+        score += 12; reasons.append("EMA alignment supports direction.")
+    else:
+        score -= 12; reasons.append("EMA alignment does not support direction.")
+
+    aligned_htf = (
+        direction == "long" and htf_bias == "bullish"
+    ) or (
+        direction == "short" and htf_bias == "bearish"
+    )
+    mixed_htf = htf_bias in ("mixed", "sideways", "unknown")
+    if aligned_htf:
+        score += 18; reasons.append("Higher timeframe bias supports direction.")
+    elif mixed_htf:
+        score -= 5; reasons.append("Higher timeframe bias is mixed/unknown.")
+    else:
+        score -= 22; reasons.append("Higher timeframe bias conflicts with direction.")
+
+    aligned_trend = (
+        direction == "long" and trend_bias == "bullish"
+    ) or (
+        direction == "short" and trend_bias == "bearish"
+    )
+    if aligned_trend:
+        score += 10; reasons.append("Trend bias supports direction.")
+    elif trend_bias == "mixed":
+        score -= 3; reasons.append("Trend bias is mixed.")
+    else:
+        score -= 12; reasons.append("Trend bias conflicts with direction.")
+
+    if rsi is not None:
+        if direction == "long":
+            if 38 <= rsi <= 62:
+                score += 8; reasons.append("RSI is in constructive long range.")
+            elif rsi > 72:
+                score -= 10; reasons.append("RSI is extended for long.")
+        if direction == "short":
+            if 38 <= rsi <= 62:
+                score += 8; reasons.append("RSI is in constructive short range.")
+            elif rsi < 28:
+                score -= 10; reasons.append("RSI is extended for short.")
+
+    if macd_hist is not None:
+        if (direction == "long" and macd_hist >= 0) or (direction == "short" and macd_hist <= 0):
+            score += 7; reasons.append("MACD histogram supports direction.")
+        else:
+            score -= 5; reasons.append("MACD histogram is adverse/early.")
+
+    if "pullback" in entry_model:
+        score += 5
+    elif "mean_reversion" in entry_model:
+        score += 3
+    elif "momentum" in entry_model:
+        score += 1
+
+    if strength in ("strong", "very_strong"):
+        score += 5
+    elif strength in ("weak", "very_weak"):
+        score -= 8
+
+    return max(0, min(100, score)), {"reasons": reasons}
+
+
+def score_risk(payload: Dict[str, Any], cfg: InstrumentConfig) -> Tuple[int, Dict[str, Any]]:
+    atr = as_float(deep_get(payload, "indicators.atr"))
+    rr = as_float(deep_get(payload, "risk.rr_ratio"))
+    proposed_entry = as_float(deep_get(payload, "risk.proposed_entry")) or as_float(deep_get(payload, "price.close"))
+    stop = as_float(deep_get(payload, "risk.proposed_stop_loss"))
+    take_profit = as_float(deep_get(payload, "risk.proposed_take_profit"))
+    spread = as_float(deep_get(payload, "price.spread_price")) or as_float(deep_get(payload, "risk.estimated_spread_cost")) or as_float(deep_get(payload, "extensions.assumed_spread_price"))
+    slippage = as_float(deep_get(payload, "risk.estimated_slippage")) or as_float(deep_get(payload, "extensions.assumed_slippage_price"))
+    risk_percent = as_float(deep_get(payload, "risk.risk_percent"), cfg.default_risk_percent)
+
+    score = 50
+    reasons = []
+
+    if proposed_entry is None or stop is None or take_profit is None:
+        return 0, {"fail": True, "reason": "Missing entry, stop loss, or take profit proposal."}
+
+    stop_distance = abs(proposed_entry - stop)
+    target_distance = abs(take_profit - proposed_entry)
+    if stop_distance <= 0 or target_distance <= 0:
+        return 0, {"fail": True, "reason": "Invalid stop/target geometry."}
+
+    if rr is None:
+        rr = target_distance / stop_distance
+
+    if rr >= cfg.target_rr_floor:
+        score += 18; reasons.append("RR is above preferred floor.")
+    elif rr >= cfg.min_rr:
+        score += 8; reasons.append("RR is acceptable but not ideal.")
+    else:
+        score -= 30; reasons.append("RR is below instrument minimum.")
+
+    if atr is not None and atr > 0:
+        stop_atr = stop_distance / atr
+        if cfg.stop_atr_min_mult <= stop_atr <= cfg.stop_atr_max_mult:
+            score += 12; reasons.append("Stop distance is ATR-consistent.")
+        elif stop_atr < cfg.stop_atr_min_mult:
+            score -= 16; reasons.append("Stop is too tight relative to ATR.")
+        else:
+            score -= 8; reasons.append("Stop is wide relative to ATR.")
+        if cfg.normal_atr_min <= atr <= cfg.normal_atr_max:
+            score += 10; reasons.append("ATR is normal for instrument.")
+        elif atr <= cfg.high_atr_max:
+            score += 2; reasons.append("ATR is elevated but tradable.")
+        else:
+            score -= 18; reasons.append("ATR is extreme for instrument.")
+
+    if spread is not None:
+        if spread <= cfg.max_spread:
+            score += 5; reasons.append("Spread is acceptable.")
+        else:
+            score -= 20; reasons.append("Spread exceeds instrument limit.")
+
+    if slippage is not None:
+        if slippage <= cfg.max_slippage:
+            score += 3; reasons.append("Slippage allowance is acceptable.")
+        else:
+            score -= 12; reasons.append("Slippage allowance exceeds instrument limit.")
+
+    if risk_percent is not None:
+        if risk_percent <= cfg.max_risk_percent:
+            score += 5; reasons.append("Risk percent is within limit.")
+        else:
+            score -= 30; reasons.append("Risk percent exceeds Manus max.")
+
+    return max(0, min(100, score)), {
+        "reasons": reasons,
+        "rr": rr,
+        "stop_distance": stop_distance,
+        "target_distance": target_distance,
+        "risk_percent": risk_percent,
+    }
+
+
+def score_context(payload: Dict[str, Any], cfg: InstrumentConfig) -> Tuple[int, Dict[str, Any]]:
+    context_status = as_str(deep_get(payload, "context.context_status"), "unchecked").lower()
+    high_impact = deep_get(payload, "context.high_impact_event_nearby")
+    mins_to_event = as_float(deep_get(payload, "context.minutes_to_next_high_impact_event"))
+    session = as_str(deep_get(payload, "market.session_name"), "unknown")
+    rollover = bool(deep_get(payload, "market.rollover_window_flag", False))
+
+    score = 55
+    reasons = []
+
+    if rollover:
+        return 0, {"fail": True, "reason": "Rollover window is blocked."}
+
+    if context_status == "blocked":
+        return 0, {"fail": True, "reason": "Context status is blocked."}
+    if context_status == "clear":
+        score += 15; reasons.append("External context is clear.")
+    elif context_status in ("warning",):
+        score -= 18; reasons.append("External context warning.")
+    else:
+        score -= 3; reasons.append("External context unchecked.")
+
+    if high_impact is True and (mins_to_event is None or mins_to_event <= 30):
+        return 0, {"fail": True, "reason": "High-impact event is too close."}
+    if high_impact is True and mins_to_event is not None and mins_to_event <= 60:
+        score -= 20; reasons.append("High-impact event within 60 minutes.")
+
+    if session in cfg.preferred_sessions:
+        score += 15; reasons.append("Session is preferred for instrument.")
+    elif session in cfg.blocked_sessions:
+        score -= 30; reasons.append("Session is blocked or historically weak.")
+    else:
+        score -= 5; reasons.append("Session is neutral/unknown for instrument.")
+
+    return max(0, min(100, score)), {"reasons": reasons}
+
+
+def score_strategy_fit(payload: Dict[str, Any], cfg: InstrumentConfig) -> Tuple[int, Dict[str, Any]]:
+    vol_regime = as_str(deep_get(payload, "structure.volatility_regime"), "unknown").lower()
+    market_regime = as_str(deep_get(payload, "structure.market_regime"), "unknown").lower()
+    direction = as_str(deep_get(payload, "signal.direction"), "neutral").lower()
+    htf = as_str(deep_get(payload, "structure.higher_timeframe_bias"), "unknown").lower()
+
+    score = 50
+    reasons = []
+
+    if vol_regime == "normal":
+        score += 20; reasons.append("Normal volatility regime.")
+    elif vol_regime in ("low", "high"):
+        score += 5; reasons.append("Tradable but non-ideal volatility.")
+    elif vol_regime in ("very_low", "extreme", "unknown"):
+        score -= 20; reasons.append("Weak volatility regime for execution.")
+
+    if market_regime in ("trend_pullback", "range_to_reversal", "trend"):
+        score += 10; reasons.append("Market regime matches supported models.")
+    elif market_regime in ("breakout", "range_to_breakout"):
+        score += 2; reasons.append("Breakout regime is allowed with caution.")
+    else:
+        score -= 5; reasons.append("Market regime is unclear.")
+
+    if (direction == "long" and htf == "bullish") or (direction == "short" and htf == "bearish"):
+        score += 15; reasons.append("Direction matches HTF.")
+    elif htf == "mixed":
+        score -= 5; reasons.append("HTF is mixed.")
+    else:
+        score -= 20; reasons.append("Counter-HTF trade.")
+
+    return max(0, min(100, score)), {"reasons": reasons}
+
+
+def expected_value_score(signal: int, risk: int, context: int, fit: int) -> int:
+    return max(0, min(100, round(signal * 0.30 + risk * 0.30 + context * 0.20 + fit * 0.20)))
+
+
+# -----------------------------------------------------------------------------
+# Execution planning
+# -----------------------------------------------------------------------------
+def plan_trade(payload: Dict[str, Any], cfg: InstrumentConfig, account: Optional[Dict[str, Any]], risk_diag: Dict[str, Any]) -> Dict[str, Any]:
+    direction = as_str(deep_get(payload, "signal.direction"), "neutral").lower()
+    entry = as_float(deep_get(payload, "risk.proposed_entry")) or as_float(deep_get(payload, "price.close"))
+    atr = as_float(deep_get(payload, "indicators.atr"))
+    proposed_stop = as_float(deep_get(payload, "risk.proposed_stop_loss"))
+    proposed_tp = as_float(deep_get(payload, "risk.proposed_take_profit"))
+    risk_percent = as_float(deep_get(payload, "risk.risk_percent"), cfg.default_risk_percent) or cfg.default_risk_percent
+    risk_percent = min(risk_percent, cfg.max_risk_percent)
+
+    if entry is None:
+        raise ValueError("Cannot plan trade without entry/close price.")
+
+    # Use Pine proposal if valid; otherwise create ATR-consistent fixed SL/TP.
+    stop = proposed_stop
+    take_profit = proposed_tp
+
+    if stop is None or take_profit is None:
+        if atr is None or atr <= 0:
+            raise ValueError("Cannot create SL/TP without ATR or valid Pine proposal.")
+        stop_distance = atr * cfg.default_stop_atr_mult
+        if direction == "long":
+            stop = entry - stop_distance
+            take_profit = entry + stop_distance * cfg.target_rr_floor
+        elif direction == "short":
+            stop = entry + stop_distance
+            take_profit = entry - stop_distance * cfg.target_rr_floor
+        else:
+            raise ValueError("Cannot plan trade for neutral direction.")
+
+    stop = round_to_tick(stop, cfg.tick_size)
+    take_profit = round_to_tick(take_profit, cfg.tick_size)
+    entry = round_to_tick(entry, cfg.tick_size)
+
+    stop_distance = abs(entry - stop)
+    target_distance = abs(take_profit - entry)
+    rr = target_distance / stop_distance if stop_distance > 0 else 0
+
+    # If the proposed RR is below the target floor, adjust TP only.
+    if rr < cfg.target_rr_floor and stop_distance > 0:
+        if direction == "long":
+            take_profit = round_to_tick(entry + stop_distance * cfg.target_rr_floor, cfg.tick_size)
+        else:
+            take_profit = round_to_tick(entry - stop_distance * cfg.target_rr_floor, cfg.tick_size)
+        target_distance = abs(take_profit - entry)
+        rr = target_distance / stop_distance
+
+    equity = get_account_equity(account, payload)
+    risk_cash = equity * risk_percent / 100.0
+    raw_units = risk_cash / stop_distance if stop_distance > 0 else 0.0
+
+    # Conservative sizing by instrument contract/unit model.
+    units = floor(raw_units / cfg.unit_step) * cfg.unit_step
+    units = max(cfg.min_units, min(cfg.max_units, units))
+    signed_units = -units if direction == "short" else units
+    lots = signed_units / cfg.contract_size if cfg.contract_size else signed_units
+
+    return {
+        "final_entry": entry,
+        "final_stop_loss": stop,
+        "final_take_profit": take_profit,
+        "final_position_size": signed_units,
+        "final_position_size_lots": lots,
+        "final_rr_ratio": rr,
+        "risk_percent": risk_percent,
+        "risk_cash": risk_cash,
+        "equity_used": equity,
+        "fixed_exit_model": True,
+    }
+
+
+def hard_rejection(payload: Dict[str, Any], cfg: InstrumentConfig, scores: Dict[str, int], diagnostics: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    direction = as_str(deep_get(payload, "signal.direction"), "neutral").lower()
+    event_type = as_str(deep_get(payload, "event_type"), "signal").lower()
+    if event_type not in ("signal", "decision"):
+        return "schema", f"Unsupported event_type for evaluation: {event_type}"
+    if direction not in ("long", "short"):
+        return "signal", "No executable long/short direction."
+
+    # Propagate fail from individual agents.
+    for stage in ("signal", "risk", "context"):
+        if diagnostics.get(stage, {}).get("fail"):
+            return stage, diagnostics[stage].get("reason", f"{stage} agent failed.")
+
+    if scores["signal_quality"] < 45:
+        return "signal", "Signal quality score below minimum."
+    if scores["risk"] < 45:
+        return "risk", "Risk score below minimum."
+    if scores["context"] < 40:
+        return "context", "Context score below minimum."
+    if scores["strategy_fit"] < 40:
+        return "strategy_fit", "Strategy fit score below minimum."
+    if scores["expected_value"] < 55:
+        return "expected_value", "Expected value score below approval threshold."
+
+    # Additional geometry check.
+    rr = diagnostics.get("risk", {}).get("rr")
+    if rr is not None and rr < cfg.min_rr:
+        return "risk", f"RR {rr:.2f} below {cfg.symbol} minimum {cfg.min_rr:.2f}."
+
+    return None
+
+
+# -----------------------------------------------------------------------------
+# FastAPI app
+# -----------------------------------------------------------------------------
+app = FastAPI(
+    title="St Ludaetuc Manus Engine",
+    version=ENGINE_VERSION,
+    description="Multi-instrument Manus decision engine for St Ludaetuc.",
+)
+
+
+@app.get("/health")
+def health() -> Dict[str, Any]:
+    return {
+        "status": "ok",
+        "engine_version": ENGINE_VERSION,
+        "ruleset_version": RULESET_VERSION,
+        "supported_instruments": sorted(INSTRUMENTS.keys()),
+        "timestamp_utc": now_utc(),
+    }
+
+
+@app.post("/evaluate")
+def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
+    payload = canonical_payload(req)
+    if not isinstance(payload, dict):
         return {
-            "signal_quality_score": 0,
-            "risk_score": 0,
-            "context_score": 0,
-            "strategy_fit_score": 0,
-            "execution_quality_score": 0,
-            "expected_value_score": 0,
-            "confidence_score": 0,
             "approval_status": "rejected",
-            "approval_reason": "Initial evaluation pending",
-            "rejection_category": None,
+            "rejection_stage": "schema",
+            "rejection_reason": "Request body is not a valid payload object.",
+            "engine_version": ENGINE_VERSION,
+        }
+
+    symbol_key = normalize_symbol(payload)
+    if symbol_key is None or symbol_key not in INSTRUMENTS:
+        return {
+            "approval_status": "rejected",
+            "rejection_stage": "instrument",
+            "rejection_reason": "Unsupported or missing instrument symbol.",
+            "engine_version": ENGINE_VERSION,
+            "supported_instruments": sorted(INSTRUMENTS.keys()),
+        }
+
+    cfg = INSTRUMENTS[symbol_key]
+
+    signal_score, signal_diag = score_signal_quality(payload, cfg)
+    risk_score, risk_diag = score_risk(payload, cfg)
+    context_score, context_diag = score_context(payload, cfg)
+    fit_score, fit_diag = score_strategy_fit(payload, cfg)
+    ev_score = expected_value_score(signal_score, risk_score, context_score, fit_score)
+
+    scores = {
+        "signal_quality": signal_score,
+        "risk": risk_score,
+        "context": context_score,
+        "strategy_fit": fit_score,
+        "expected_value": ev_score,
+    }
+    diagnostics = {
+        "signal": signal_diag,
+        "risk": risk_diag,
+        "context": context_diag,
+        "strategy_fit": fit_diag,
+        "instrument_config": {
+            "symbol": cfg.symbol,
+            "broker_symbol": cfg.broker_symbol,
+            "asset_class": cfg.asset_class,
+            "min_rr": cfg.min_rr,
+            "target_rr_floor": cfg.target_rr_floor,
+            "max_spread": cfg.max_spread,
+            "max_slippage": cfg.max_slippage,
+            "normal_atr_min": cfg.normal_atr_min,
+            "normal_atr_max": cfg.normal_atr_max,
+            "high_atr_max": cfg.high_atr_max,
+        },
+        "engine_version": ENGINE_VERSION,
+        "ruleset_version": RULESET_VERSION,
+        "evaluated_at_utc": now_utc(),
+    }
+
+    rejection = hard_rejection(payload, cfg, scores, diagnostics)
+
+    result_payload = dict(payload)
+    if rejection:
+        stage, reason = rejection
+        deep_set(result_payload, "manus.signal_quality_score", signal_score)
+        deep_set(result_payload, "manus.risk_score", risk_score)
+        deep_set(result_payload, "manus.context_score", context_score)
+        deep_set(result_payload, "manus.strategy_fit_score", fit_score)
+        deep_set(result_payload, "manus.expected_value_score", ev_score)
+        deep_set(result_payload, "manus.confidence_score", ev_score)
+        deep_set(result_payload, "manus.approval_status", "rejected")
+        deep_set(result_payload, "manus.approval_reason", None)
+        deep_set(result_payload, "manus.rejection_stage", stage)
+        deep_set(result_payload, "manus.rejection_reason", reason)
+        deep_set(result_payload, "manus.diagnostics", diagnostics)
+
+        return {
+            "approval_status": "rejected",
+            "approval_reason": None,
+            "rejection_stage": stage,
+            "rejection_reason": reason,
+            "signal_quality_score": signal_score,
+            "risk_score": risk_score,
+            "context_score": context_score,
+            "strategy_fit_score": fit_score,
+            "expected_value_score": ev_score,
+            "confidence_score": ev_score,
             "final_entry": None,
             "final_stop_loss": None,
             "final_take_profit": None,
             "final_position_size": None,
-            "ruleset_used": None,
-            "risk_notes": [],
-            "strategy_notes": [],
+            "final_position_size_lots": None,
+            "final_rr_ratio": None,
+            "final_trade_plan": None,
+            "diagnostics": diagnostics,
+            "payload": result_payload,
         }
 
-    def _reject(
-        self,
-        payload: Dict[str, Any],
-        reason: str,
-        category: str = "general",
-        ruleset: str = "unknown",
-        scores: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        out = copy.deepcopy(payload)
-        manus = self._base_manus_block()
-        if scores:
-            manus.update(scores)
-        manus["approval_status"] = "rejected"
-        manus["approval_reason"] = reason
-        manus["rejection_category"] = category
-        manus["ruleset_used"] = ruleset
-        out["manus"] = manus
-        return {"payload": out}
-
-    # ---------------------------------------------------------------------
-    # Public entry point
-    # ---------------------------------------------------------------------
-    def evaluate(self, full_input: Dict[str, Any]) -> Dict[str, Any]:
-        payload = copy.deepcopy(full_input.get("payload", {}) or {})
-        account = full_input.get("account", {}) or {}
-
-        asset_class = str(self._get(payload, "instrument.asset_class", "") or "").lower()
-        broker_symbol = str(self._get(payload, "instrument.broker_symbol", "") or "").upper()
-        symbol = str(self._get(payload, "instrument.symbol", "") or "").upper()
-
-        if asset_class == "forex" and broker_symbol in {"GBP_USD", "GBPUSD"}:
-            return self.evaluate_gbpusd(payload, account)
-
-        if asset_class in {"metals", "commodities"} and broker_symbol in {"XAU_USD", "XAUUSD"}:
-            return self.evaluate_xauusd(payload, account)
-
-        if symbol in {"GBPUSD", "GBP/USD"}:
-            return self.evaluate_gbpusd(payload, account)
-
-        if symbol in {"XAUUSD", "XAU/USD"}:
-            return self.evaluate_xauusd(payload, account)
-
-        return self._reject(
-            payload,
-            f"Unsupported instrument/ruleset: asset_class={asset_class}, broker_symbol={broker_symbol}, symbol={symbol}",
-            "unsupported_instrument",
-            "router",
-        )
-
-    # ---------------------------------------------------------------------
-    # Shared extraction / sizing
-    # ---------------------------------------------------------------------
-    def _extract_common(self, payload: Dict[str, Any], account: Dict[str, Any]) -> Dict[str, Any]:
-        entry = self._to_float(self._get(payload, "risk.proposed_entry"), 0.0)
-        sl = self._to_float(self._get(payload, "risk.proposed_stop_loss"), 0.0)
-        tp = self._to_float(self._get(payload, "risk.proposed_take_profit"), 0.0)
-
-        stop_dist = self._to_float(self._get(payload, "risk.stop_distance_price"), 0.0)
-        if stop_dist <= 0 and entry > 0 and sl > 0:
-            stop_dist = abs(entry - sl)
-
-        target_dist = self._to_float(self._get(payload, "risk.target_distance_price"), 0.0)
-        if target_dist <= 0 and entry > 0 and tp > 0:
-            target_dist = abs(tp - entry)
-
-        rr = self._to_float(self._get(payload, "risk.rr_ratio"), 0.0)
-        if rr <= 0 and stop_dist > 0 and target_dist > 0:
-            rr = target_dist / stop_dist
-
+    try:
+        plan = plan_trade(payload, cfg, req.account, risk_diag)
+    except Exception as exc:
+        stage, reason = "execution_planning", str(exc)
+        deep_set(result_payload, "manus.approval_status", "rejected")
+        deep_set(result_payload, "manus.rejection_stage", stage)
+        deep_set(result_payload, "manus.rejection_reason", reason)
+        deep_set(result_payload, "manus.diagnostics", diagnostics)
         return {
-            "signal_id": self._get(payload, "meta.signal_id"),
-            "direction": str(self._get(payload, "signal.direction", "unknown") or "unknown").lower(),
-            "signal_type": str(self._get(payload, "signal.signal_type", "entry") or "entry").lower(),
-            "confidence_raw": self._to_float(self._get(payload, "signal.confidence_raw"), 0.0),
-            "entry_model": str(self._get(payload, "signal.entry_model", "") or ""),
-            "trigger_reason": str(self._get(payload, "signal.trigger_reason", "") or ""),
-            "entry": entry,
-            "sl": sl,
-            "tp": tp,
-            "stop_dist": stop_dist,
-            "target_dist": target_dist,
-            "rr": rr,
-            "risk_percent": self._to_float(self._get(payload, "risk.risk_percent"), 0.25),
-            "max_spread_allowed": self._to_float(self._get(payload, "risk.max_spread_allowed"), 0.0),
-            "max_slippage_allowed": self._to_float(self._get(payload, "risk.max_slippage_allowed"), 0.0),
-            "spread_price": self._get(payload, "price.spread_price", None),
-            "session": str(self._get(payload, "market.session_name", "unknown") or "unknown").lower(),
-            "session_phase": str(self._get(payload, "market.session_phase", "unknown") or "unknown").lower(),
-            "vol_regime": str(self._get(payload, "structure.volatility_regime", "unknown") or "unknown").lower(),
-            "market_regime": str(self._get(payload, "structure.market_regime", "unknown") or "unknown").lower(),
-            "htf_bias": str(self._get(payload, "structure.higher_timeframe_bias", "unknown") or "unknown").lower(),
-            "trend_bias": str(self._get(payload, "structure.trend_bias", "unknown") or "unknown").lower(),
-            "context_status": str(self._get(payload, "context.context_status", "unchecked") or "unchecked").lower(),
-            "pip_size": self._to_float(self._get(payload, "instrument.pip_size"), 0.0001),
-            "tick_size": self._to_float(self._get(payload, "instrument.tick_size"), 0.00001),
-            "unit_step": self._to_float(self._get(payload, "instrument.unit_step"), 1.0),
-            "min_units": self._to_float(self._get(payload, "instrument.min_units"), 1.0),
-            "max_units": self._to_float(self._get(payload, "instrument.max_units"), 100000.0),
-            "balance": self._to_float(account.get("balance"), 0.0),
-            "margin_available": self._to_float(account.get("margin_available"), 0.0),
-            "open_trade_count": self._to_int(account.get("open_trade_count"), 0),
-            "portfolio_heat_percent": self._to_float(account.get("portfolio_heat_percent"), 0.0),
+            "approval_status": "rejected",
+            "rejection_stage": stage,
+            "rejection_reason": reason,
+            "diagnostics": diagnostics,
+            "payload": result_payload,
         }
 
-    def _position_size(
-        self,
-        balance: float,
-        risk_percent: float,
-        stop_dist: float,
-        min_units: float,
-        max_units: float,
-        unit_step: float,
-        direction: str,
-        risk_cap: float,
-    ) -> float:
-        risk_percent = min(max(risk_percent, 0.0), risk_cap)
-        risk_amount = balance * (risk_percent / 100.0)
-
-        if balance <= 0 or stop_dist <= 0 or risk_amount <= 0:
-            return 0.0
-
-        raw_units = risk_amount / stop_dist
-        units = self._round_to_step(raw_units, unit_step)
-        units = self._clamp(units, min_units, max_units)
-
-        if direction == "short":
-            return -abs(units)
-        return abs(units)
-
-    def _validate_core_prices(self, c: Dict[str, Any]) -> Optional[Tuple[str, str]]:
-        if not c["signal_id"]:
-            return "Missing meta.signal_id", "schema"
-        if c["direction"] not in {"long", "short"}:
-            return "Invalid or neutral direction", "signal"
-        if c["signal_type"] not in {"entry", "signal"}:
-            return "Signal type is not an entry", "signal"
-        if c["entry"] <= 0 or c["sl"] <= 0 or c["tp"] <= 0:
-            return "Missing proposed execution prices", "risk"
-        if c["stop_dist"] <= 0:
-            return "Missing or invalid stop distance", "risk"
-        return None
-
-    # ---------------------------------------------------------------------
-    # GBP/USD ruleset
-    # ---------------------------------------------------------------------
-    def evaluate_gbpusd(self, payload: Dict[str, Any], account: Dict[str, Any]) -> Dict[str, Any]:
-        ruleset = "gbpusd_forex_ruleset_v1"
-        c = self._extract_common(payload, account)
-        manus = self._base_manus_block()
-        manus["ruleset_used"] = ruleset
-
-        core_error = self._validate_core_prices(c)
-        if core_error:
-            reason, cat = core_error
-            return self._reject(payload, reason, cat, ruleset)
-
-        # GBP/USD guardrails
-        GBP_RISK_CAP = 0.50
-        GBP_MIN_RR = 0.55
-        GBP_MAX_SPREAD = c["max_spread_allowed"] or 0.00015
-        GBP_MAX_SLIPPAGE = c["max_slippage_allowed"] or 0.00008
-        GBP_ALLOWED_VOL = {"low", "normal", "high"}
-        GBP_BLOCK_SESSIONS = {"unknown", "overnight"}
-        GBP_MAX_PORTFOLIO_HEAT = 1.50
-        GBP_MAX_OPEN_TRADES = 1
-
-        risk_notes = []
-        strategy_notes = []
-
-        spread_price = None if c["spread_price"] is None else self._to_float(c["spread_price"], 0.0)
-
-        # Hard rejects
-        if c["session"] in GBP_BLOCK_SESSIONS:
-            return self._reject(payload, f"GBP/USD blocked session: {c['session']}", "context", ruleset)
-
-        if c["vol_regime"] in {"very_low", "extreme", "unknown"}:
-            return self._reject(payload, f"GBP/USD blocked volatility regime: {c['vol_regime']}", "strategy_fit", ruleset)
-
-        if c["rr"] < GBP_MIN_RR:
-            return self._reject(payload, f"GBP/USD RR below minimum: {c['rr']:.2f}", "risk", ruleset)
-
-        if spread_price is not None and spread_price > GBP_MAX_SPREAD:
-            return self._reject(payload, "GBP/USD spread above allowed maximum", "execution_cost", ruleset)
-
-        if c["balance"] <= 0:
-            return self._reject(payload, "Invalid account balance", "account", ruleset)
-
-        if c["margin_available"] <= 0:
-            return self._reject(payload, "No margin available", "account", ruleset)
-
-        if c["open_trade_count"] >= GBP_MAX_OPEN_TRADES:
-            return self._reject(payload, "GBP/USD max open trades reached", "portfolio_heat", ruleset)
-
-        if c["portfolio_heat_percent"] > GBP_MAX_PORTFOLIO_HEAT:
-            return self._reject(payload, "Portfolio heat above GBP/USD limit", "portfolio_heat", ruleset)
-
-        # Scores
-        signal_quality = 40
-        if c["confidence_raw"] >= 80:
-            signal_quality += 20
-        elif c["confidence_raw"] >= 65:
-            signal_quality += 12
-        elif c["confidence_raw"] >= 50:
-            signal_quality += 6
-
-        if c["direction"] == "long" and c["htf_bias"] == "bullish":
-            signal_quality += 15
-        if c["direction"] == "short" and c["htf_bias"] == "bearish":
-            signal_quality += 15
-
-        if c["trend_bias"] in {"bullish", "bearish"}:
-            signal_quality += 10
-
-        if "score" in c["entry_model"] or "profit_factor" in c["entry_model"]:
-            signal_quality += 5
-
-        risk_score = 100
-        if c["rr"] < 0.70:
-            risk_score -= 20
-            risk_notes.append("Low scalp RR")
-        if c["stop_dist"] / c["pip_size"] < 2:
-            risk_score -= 20
-            risk_notes.append("Stop distance very tight")
-        if c["risk_percent"] > GBP_RISK_CAP:
-            risk_score -= 25
-            risk_notes.append("Risk above GBP cap")
-        if spread_price is None:
-            risk_score -= 5
-            risk_notes.append("Spread unavailable")
-
-        context_score = 70
-        if c["session"] in {"london", "overlap_london_new_york", "new_york"}:
-            context_score += 15
-        if c["context_status"] == "blocked":
-            context_score = 0
-        elif c["context_status"] == "warning":
-            context_score -= 20
-
-        strategy_fit = 50
-        if c["vol_regime"] == "normal":
-            strategy_fit += 20
-        elif c["vol_regime"] == "high":
-            strategy_fit += 15
-        elif c["vol_regime"] == "low":
-            strategy_fit += 5
-
-        if c["market_regime"] in {"trend_pullback", "high_frequency_loss_reduced", "profit_factor_filtered_score_scalp"}:
-            strategy_fit += 20
-        elif c["market_regime"] in {"micro_scalp", "high_frequency_score_scalp"}:
-            strategy_fit += 10
-
-        execution_quality = 75
-        if spread_price is not None and spread_price <= GBP_MAX_SPREAD * 0.65:
-            execution_quality += 10
-
-        signal_quality = int(self._clamp(signal_quality, 0, 100))
-        risk_score = int(self._clamp(risk_score, 0, 100))
-        context_score = int(self._clamp(context_score, 0, 100))
-        strategy_fit = int(self._clamp(strategy_fit, 0, 100))
-        execution_quality = int(self._clamp(execution_quality, 0, 100))
-
-        expected_value = round(
-            signal_quality * 0.30
-            + risk_score * 0.25
-            + context_score * 0.15
-            + strategy_fit * 0.20
-            + execution_quality * 0.10
-        )
-
-        confidence = expected_value
-
-        approval = (
-            signal_quality >= 60
-            and risk_score >= 60
-            and context_score >= 55
-            and strategy_fit >= 55
-            and expected_value >= 62
-        )
-
-        final_size = None
-        if approval:
-            final_size = self._position_size(
-                c["balance"],
-                c["risk_percent"],
-                c["stop_dist"],
-                c["min_units"],
-                c["max_units"],
-                c["unit_step"],
-                c["direction"],
-                GBP_RISK_CAP,
-            )
-
-        manus.update({
-            "signal_quality_score": signal_quality,
-            "risk_score": risk_score,
-            "context_score": context_score,
-            "strategy_fit_score": strategy_fit,
-            "execution_quality_score": execution_quality,
-            "expected_value_score": expected_value,
-            "confidence_score": confidence,
-            "approval_status": "approved" if approval and final_size and abs(final_size) > 0 else "rejected",
-            "approval_reason": "GBP/USD signal approved." if approval else "GBP/USD signal did not meet Manus thresholds.",
-            "rejection_category": None if approval else "threshold",
-            "final_entry": self._round_price(c["entry"], c["tick_size"]),
-            "final_stop_loss": self._round_price(c["sl"], c["tick_size"]),
-            "final_take_profit": self._round_price(c["tp"], c["tick_size"]),
-            "final_position_size": final_size,
-            "risk_notes": risk_notes,
-            "strategy_notes": strategy_notes,
-        })
-
-        out = copy.deepcopy(payload)
-        out["manus"] = manus
-        return {"payload": out}
-
-    # ---------------------------------------------------------------------
-    # XAU/USD gold ruleset
-    # ---------------------------------------------------------------------
-    def evaluate_xauusd(self, payload: Dict[str, Any], account: Dict[str, Any]) -> Dict[str, Any]:
-        ruleset = "xauusd_gold_ruleset_v1"
-        c = self._extract_common(payload, account)
-        manus = self._base_manus_block()
-        manus["ruleset_used"] = ruleset
-
-        core_error = self._validate_core_prices(c)
-        if core_error:
-            reason, cat = core_error
-            return self._reject(payload, reason, cat, ruleset)
-
-        # XAU-specific guardrails
-        XAU_RISK_CAP = 0.25
-        XAU_MIN_RR = 1.20
-        XAU_MAX_SPREAD = c["max_spread_allowed"] or 0.35
-        XAU_MIN_STOP = 0.90
-        XAU_MAX_STOP = 6.00
-        XAU_MAX_OPEN_TRADES = 2
-        XAU_MAX_PORTFOLIO_HEAT = 1.00
-        XAU_ALLOWED_VOL = {"normal", "high"}
-        XAU_BLOCK_SESSIONS = {"unknown", "overnight"}
-
-        risk_notes = []
-        strategy_notes = []
-
-        spread_price = None if c["spread_price"] is None else self._to_float(c["spread_price"], 0.0)
-
-        ext = payload.get("extensions", {}) or {}
-
-        rr_pass = self._to_bool(ext.get("rr_pass"), c["rr"] >= XAU_MIN_RR)
-        chop_blocked = self._to_bool(ext.get("chop_blocked"), False)
-        spike_blocked = self._to_bool(ext.get("spike_cooldown_blocked"), False)
-        vol_blocked = self._to_bool(ext.get("volatility_blocked"), False)
-        session_blocked = self._to_bool(ext.get("session_blocked"), False)
-
-        pyramid_layer = self._to_int(ext.get("pyramid_layer"), 1)
-        current_open_layers = self._to_int(ext.get("current_open_layers"), 0)
-        max_pyramid_layers = self._to_int(ext.get("max_pyramid_layers"), 2)
-
-        pyramid_long_quality = self._to_bool(ext.get("pyramid_long_quality"), False)
-        pyramid_short_quality = self._to_bool(ext.get("pyramid_short_quality"), False)
-
-        room_long_pass = self._to_bool(ext.get("room_long_pass"), True)
-        room_short_pass = self._to_bool(ext.get("room_short_pass"), True)
-        quality_gate_long = self._to_bool(ext.get("quality_gate_long"), c["direction"] == "long")
-        quality_gate_short = self._to_bool(ext.get("quality_gate_short"), c["direction"] == "short")
-
-        adx = self._to_float(self._get(payload, "indicators.adx"), 0.0)
-
-        # Hard rejects
-        if session_blocked or c["session"] in XAU_BLOCK_SESSIONS:
-            return self._reject(payload, f"XAU/USD blocked session: {c['session']}", "context", ruleset)
-
-        if vol_blocked or c["vol_regime"] not in XAU_ALLOWED_VOL:
-            return self._reject(payload, f"XAU/USD blocked volatility regime: {c['vol_regime']}", "strategy_fit", ruleset)
-
-        if chop_blocked:
-            return self._reject(payload, "XAU/USD chop filter blocked candidate", "strategy_fit", ruleset)
-
-        if spike_blocked:
-            return self._reject(payload, "XAU/USD post-spike cooldown active", "strategy_fit", ruleset)
-
-        if c["rr"] < XAU_MIN_RR or not rr_pass:
-            return self._reject(payload, f"XAU/USD RR below minimum: {c['rr']:.2f}", "risk", ruleset)
-
-        if c["stop_dist"] < XAU_MIN_STOP:
-            return self._reject(payload, "XAU/USD stop distance too small", "risk", ruleset)
-
-        if c["stop_dist"] > XAU_MAX_STOP:
-            return self._reject(payload, "XAU/USD stop distance too large", "risk", ruleset)
-
-        if spread_price is not None and spread_price > XAU_MAX_SPREAD:
-            return self._reject(payload, "XAU/USD spread above allowed maximum", "execution_cost", ruleset)
-
-        if c["balance"] <= 0:
-            return self._reject(payload, "Invalid account balance", "account", ruleset)
-
-        if c["margin_available"] <= 0:
-            return self._reject(payload, "No margin available", "account", ruleset)
-
-        if current_open_layers >= max_pyramid_layers or c["open_trade_count"] >= XAU_MAX_OPEN_TRADES:
-            return self._reject(payload, "XAU/USD max pyramid/open-trade limit reached", "portfolio_heat", ruleset)
-
-        if c["portfolio_heat_percent"] > XAU_MAX_PORTFOLIO_HEAT:
-            return self._reject(payload, "Portfolio heat above XAU/USD limit", "portfolio_heat", ruleset)
-
-        if pyramid_layer > 1:
-            if c["direction"] == "long" and not pyramid_long_quality:
-                return self._reject(payload, "XAU/USD long layer-2 lacks pyramid quality", "pyramiding", ruleset)
-            if c["direction"] == "short" and not pyramid_short_quality:
-                return self._reject(payload, "XAU/USD short layer-2 lacks pyramid quality", "pyramiding", ruleset)
-
-        if c["direction"] == "long" and not room_long_pass:
-            return self._reject(payload, "XAU/USD insufficient room to recent high", "structure", ruleset)
-
-        if c["direction"] == "short" and not room_short_pass:
-            return self._reject(payload, "XAU/USD insufficient room to recent low", "structure", ruleset)
-
-        if c["direction"] == "long" and not quality_gate_long:
-            return self._reject(payload, "XAU/USD long quality gate failed", "signal_quality", ruleset)
-
-        if c["direction"] == "short" and not quality_gate_short:
-            return self._reject(payload, "XAU/USD short quality gate failed", "signal_quality", ruleset)
-
-        # Scores
-        signal_quality = 35
-        if c["confidence_raw"] >= 85:
-            signal_quality += 25
-        elif c["confidence_raw"] >= 72:
-            signal_quality += 20
-        elif c["confidence_raw"] >= 60:
-            signal_quality += 10
-
-        if c["direction"] == "long" and c["htf_bias"] == "bullish":
-            signal_quality += 15
-        if c["direction"] == "short" and c["htf_bias"] == "bearish":
-            signal_quality += 15
-
-        if adx >= 20:
-            signal_quality += 10
-        elif adx >= 16:
-            signal_quality += 6
-
-        if c["market_regime"] in {"trend_pullback", "breakout", "range_to_reversal"}:
-            signal_quality += 10
-
-        risk_score = 100
-        if c["risk_percent"] > XAU_RISK_CAP:
-            risk_score -= 25
-            risk_notes.append("Risk above XAU cap")
-        if c["rr"] < 1.35:
-            risk_score -= 10
-            risk_notes.append("RR acceptable but modest")
-        if spread_price is None:
-            risk_score -= 5
-            risk_notes.append("Spread unavailable")
-        if pyramid_layer > 1:
-            risk_score -= 8
-            risk_notes.append("Additional pyramid layer risk")
-
-        context_score = 70
-        if c["session"] == "overlap_london_new_york":
-            context_score += 20
-        elif c["session"] == "london":
-            context_score += 15
-        elif c["session"] == "new_york":
-            context_score += 10
-        elif c["session"] == "asia":
-            context_score -= 5
-
-        if c["context_status"] == "blocked":
-            context_score = 0
-        elif c["context_status"] == "warning":
-            context_score -= 20
-
-        strategy_fit = 45
-        if c["vol_regime"] == "normal":
-            strategy_fit += 20
-        elif c["vol_regime"] == "high":
-            strategy_fit += 18
-
-        if c["market_regime"] == "trend_pullback":
-            strategy_fit += 20
-        elif c["market_regime"] == "breakout":
-            strategy_fit += 15
-        elif c["market_regime"] == "range_to_reversal":
-            strategy_fit += 10
-
-        if not chop_blocked and not spike_blocked:
-            strategy_fit += 10
-
-        execution_quality = 75
-        if spread_price is not None and spread_price <= XAU_MAX_SPREAD * 0.70:
-            execution_quality += 10
-        if c["session"] in {"london", "overlap_london_new_york", "new_york"}:
-            execution_quality += 5
-
-        signal_quality = int(self._clamp(signal_quality, 0, 100))
-        risk_score = int(self._clamp(risk_score, 0, 100))
-        context_score = int(self._clamp(context_score, 0, 100))
-        strategy_fit = int(self._clamp(strategy_fit, 0, 100))
-        execution_quality = int(self._clamp(execution_quality, 0, 100))
-
-        expected_value = round(
-            signal_quality * 0.30
-            + risk_score * 0.25
-            + context_score * 0.15
-            + strategy_fit * 0.20
-            + execution_quality * 0.10
-        )
-
-        confidence = expected_value
-
-        approval = (
-            signal_quality >= 70
-            and risk_score >= 65
-            and context_score >= 55
-            and strategy_fit >= 65
-            and expected_value >= 68
-        )
-
-        final_size = None
-        if approval:
-            final_size = self._position_size(
-                c["balance"],
-                c["risk_percent"],
-                c["stop_dist"],
-                c["min_units"],
-                c["max_units"],
-                c["unit_step"],
-                c["direction"],
-                XAU_RISK_CAP,
-            )
-
-        manus.update({
-            "signal_quality_score": signal_quality,
-            "risk_score": risk_score,
-            "context_score": context_score,
-            "strategy_fit_score": strategy_fit,
-            "execution_quality_score": execution_quality,
-            "expected_value_score": expected_value,
-            "confidence_score": confidence,
-            "approval_status": "approved" if approval and final_size and abs(final_size) > 0 else "rejected",
-            "approval_reason": "XAU/USD signal approved." if approval else "XAU/USD signal did not meet Manus thresholds.",
-            "rejection_category": None if approval else "threshold",
-            "final_entry": self._round_price(c["entry"], c["tick_size"]),
-            "final_stop_loss": self._round_price(c["sl"], c["tick_size"]),
-            "final_take_profit": self._round_price(c["tp"], c["tick_size"]),
-            "final_position_size": final_size,
-            "risk_notes": risk_notes,
-            "strategy_notes": strategy_notes,
-        })
-
-        out = copy.deepcopy(payload)
-        out["manus"] = manus
-        return {"payload": out}
+    approval_reason = (
+        f"Approved by Manus {ENGINE_VERSION}: {cfg.display_name} signal passed "
+        f"signal/risk/context/strategy checks with confidence {ev_score}."
+    )
+
+    final_trade_plan = {
+        "model": "fixed_entry_fixed_exit",
+        "instrument": cfg.broker_symbol,
+        "entry": plan["final_entry"],
+        "stop_loss": plan["final_stop_loss"],
+        "take_profit": plan["final_take_profit"],
+        "position_size": plan["final_position_size"],
+        "position_size_lots": plan["final_position_size_lots"],
+        "rr_ratio": plan["final_rr_ratio"],
+        "risk_percent": plan["risk_percent"],
+        "risk_cash": plan["risk_cash"],
+        "equity_used": plan["equity_used"],
+        "no_trailing_stop": True,
+        "no_breakeven_move": True,
+        "no_partial_exit": True,
+    }
+
+    deep_set(result_payload, "manus.signal_quality_score", signal_score)
+    deep_set(result_payload, "manus.risk_score", risk_score)
+    deep_set(result_payload, "manus.context_score", context_score)
+    deep_set(result_payload, "manus.strategy_fit_score", fit_score)
+    deep_set(result_payload, "manus.execution_quality_score", risk_score)
+    deep_set(result_payload, "manus.expected_value_score", ev_score)
+    deep_set(result_payload, "manus.confidence_score", ev_score)
+    deep_set(result_payload, "manus.approval_status", "approved")
+    deep_set(result_payload, "manus.approval_reason", approval_reason)
+    deep_set(result_payload, "manus.rejection_stage", None)
+    deep_set(result_payload, "manus.rejection_reason", None)
+    deep_set(result_payload, "manus.final_entry", plan["final_entry"])
+    deep_set(result_payload, "manus.final_stop_loss", plan["final_stop_loss"])
+    deep_set(result_payload, "manus.final_take_profit", plan["final_take_profit"])
+    deep_set(result_payload, "manus.final_position_size", plan["final_position_size"])
+    deep_set(result_payload, "manus.final_position_size_lots", plan["final_position_size_lots"])
+    deep_set(result_payload, "manus.final_rr_ratio", plan["final_rr_ratio"])
+    deep_set(result_payload, "manus.final_trade_plan", final_trade_plan)
+    deep_set(result_payload, "manus.diagnostics", diagnostics)
+
+    return {
+        "approval_status": "approved",
+        "approval_reason": approval_reason,
+        "rejection_stage": None,
+        "rejection_reason": None,
+        "signal_quality_score": signal_score,
+        "risk_score": risk_score,
+        "context_score": context_score,
+        "strategy_fit_score": fit_score,
+        "execution_quality_score": risk_score,
+        "expected_value_score": ev_score,
+        "confidence_score": ev_score,
+        "final_entry": plan["final_entry"],
+        "final_stop_loss": plan["final_stop_loss"],
+        "final_take_profit": plan["final_take_profit"],
+        "final_position_size": plan["final_position_size"],
+        "final_position_size_lots": plan["final_position_size_lots"],
+        "final_rr_ratio": plan["final_rr_ratio"],
+        "final_trade_plan": final_trade_plan,
+        "diagnostics": diagnostics,
+        "payload": result_payload,
+    }
