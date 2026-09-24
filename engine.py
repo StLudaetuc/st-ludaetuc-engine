@@ -1,3 +1,13 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass
+from math import floor, isfinite
+from typing import Any, Dict, Optional, Tuple
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
 ENGINE_VERSION = "3.2.0"
 RULESET_VERSION = "manus_ruleset_2026_07_v3_2"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
