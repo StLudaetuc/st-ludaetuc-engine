@@ -1,3 +1,15 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass
+from math import floor, isfinite
+from typing import Any, Dict, Optional, Tuple
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+from shadow_scorer import shadow_score_0_100
+
+
 ENGINE_VERSION = "3.2.0"
 RULESET_VERSION = "manus_ruleset_2026_07_v3_2"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
@@ -565,6 +577,45 @@ class TradingSignalEvaluationEngine:
         }
 
 
+def _build_shadow_features(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Builds the flat feature dict shadow_scorer.py expects, from engine.py's
+    nested payload. Shadow-mode only — never touches approval logic."""
+    display_name = get_path(payload, "instrument.display_name")
+    if not display_name:
+        raw_symbol = get_path(payload, "instrument.symbol") or get_path(payload, "instrument.broker_symbol") or ""
+        clean = str(raw_symbol).upper().replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
+        display_name = f"{clean[:3]}/{clean[3:]}" if len(clean) == 6 else clean
+    return {
+        "indicators_rsi": get_path(payload, "indicators.rsi"),
+        "indicators_atr": get_path(payload, "indicators.atr"),
+        "indicators_atr_percent_of_price": get_path(payload, "indicators.atr_percent_of_price"),
+        "indicators_ema_fast": get_path(payload, "indicators.ema_fast"),
+        "indicators_ema_slow": get_path(payload, "indicators.ema_slow"),
+        "indicators_macd_line": get_path(payload, "indicators.macd_line"),
+        "indicators_macd_signal": get_path(payload, "indicators.macd_signal"),
+        "indicators_macd_histogram": get_path(payload, "indicators.macd_histogram"),
+        "indicators_bb_basis": get_path(payload, "indicators.bb_basis"),
+        "indicators_bb_upper": get_path(payload, "indicators.bb_upper"),
+        "indicators_bb_lower": get_path(payload, "indicators.bb_lower"),
+        "indicators_bb_width": get_path(payload, "indicators.bb_width"),
+        "structure_distance_to_recent_high": get_path(payload, "structure.distance_to_recent_high"),
+        "structure_distance_to_recent_low": get_path(payload, "structure.distance_to_recent_low"),
+        "structure_nearest_support": get_path(payload, "structure.nearest_support"),
+        "structure_nearest_resistance": get_path(payload, "structure.nearest_resistance"),
+        "instrument_norm": display_name,
+        "market_session_name": get_path(payload, "market.session_name"),
+        "market_session_phase": get_path(payload, "market.session_phase"),
+        "market_market_state": get_path(payload, "market.market_state"),
+        "signal_type": get_path(payload, "signal.type"),
+        "signal_strength_label": get_path(payload, "signal.strength_label"),
+        "signal_entry_model": get_path(payload, "signal.entry_model"),
+        "structure_trend_bias": get_path(payload, "structure.trend_bias"),
+        "structure_market_regime": get_path(payload, "structure.market_regime"),
+        "structure_higher_timeframe_bias": get_path(payload, "structure.higher_timeframe_bias"),
+        "context_context_status": get_path(payload, "context.context_status"),
+    }
+
+
 engine = TradingSignalEvaluationEngine()
 app = FastAPI(title="St Ludaetuc Manus Engine", version=ENGINE_VERSION)
 
@@ -584,4 +635,14 @@ def health() -> Dict[str, Any]:
 
 @app.post("/evaluate")
 def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
-    return engine.evaluate(req.model_dump())
+    result = engine.evaluate(req.model_dump())
+    try:
+        shadow_payload = req.payload if isinstance(req.payload, dict) else req.model_dump()
+        shadow_features = _build_shadow_features(shadow_payload)
+        shadow_score = shadow_score_0_100(shadow_features)
+    except Exception:
+        shadow_score = None
+    result["shadow_score_v0"] = shadow_score
+    if isinstance(result.get("manus"), dict):
+        result["manus"]["shadow_score_v0"] = shadow_score
+    return result
