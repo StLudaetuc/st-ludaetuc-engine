@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from shadow_scorer import shadow_score_0_100
 
 
-ENGINE_VERSION = "3.3.0"
+ENGINE_VERSION = "3.4.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -18,6 +18,11 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 class EvaluateRequest(BaseModel):
     payload: Optional[Dict[str, Any]] = None
     account: Optional[Dict[str, Any]] = None
+    # Ground-truth pair symbol from the calling Make scenario (e.g. "AUDUSD"),
+    # independent of whatever the Pine Script payload's instrument.* fields
+    # say. Optional and backward compatible: callers that don't send it get
+    # the old payload-self-reported behavior unchanged. See normalize_symbol().
+    authoritative_instrument: Optional[str] = None
     model_config = {"extra": "allow"}
 
 
@@ -161,7 +166,27 @@ def round_to_step(units: float, step: float) -> float:
     return floor(units / step) * step if step > 0 else units
 
 
-def normalize_symbol(payload: Dict[str, Any]) -> Optional[str]:
+def normalize_symbol(payload: Dict[str, Any], authoritative: Optional[str] = None) -> Tuple[Optional[str], str]:
+    # `authoritative` is a pair symbol supplied by the CALLER (Make), not by
+    # the Pine Script alert payload. Each Make scenario already hardcodes its
+    # own correct OANDA instrument for order placement (see modules
+    # 101/102), so it can supply that same value here as ground truth. This
+    # takes priority over the payload's self-reported instrument.* fields,
+    # which come straight from the TradingView alert and have been found to
+    # be wrong for pairs still running a pre-rebuild, cloned-from-EURUSD
+    # Pine script (their instrument.symbol/broker_symbol/display_name say
+    # "EURUSD" regardless of the pair actually being traded). Without this,
+    # normalize_symbol() silently picks the wrong InstrumentConfig - wrong
+    # spread/slippage limits, ATR stop multiplier, and session gating - for
+    # every one of those mislabeled pairs. This is a mitigation, not a fix:
+    # the payload's own instrument.* fields should still be corrected at the
+    # Pine Script source; this just stops the engine from being fooled by
+    # them in the meantime.
+    if authoritative:
+        key = str(authoritative).upper().replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
+        if key in INSTRUMENTS:
+            return key, "authoritative_override"
+
     for raw in (
         get_path(payload, "instrument.symbol"),
         get_path(payload, "instrument.broker_symbol"),
@@ -170,8 +195,8 @@ def normalize_symbol(payload: Dict[str, Any]) -> Optional[str]:
         if raw:
             key = str(raw).upper().replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
             if key in INSTRUMENTS:
-                return key
-    return None
+                return key, "payload_self_reported"
+    return None, "unresolved"
 
 
 def normalize_model(payload: Dict[str, Any]) -> str:
@@ -455,7 +480,7 @@ class TradingSignalEvaluationEngine:
         if not payload:
             return self._reject({}, "Invalid or empty payload.", "schema", "INVALID_PAYLOAD")
 
-        symbol = normalize_symbol(payload)
+        symbol, instrument_resolved_via = normalize_symbol(payload, req.authoritative_instrument)
         if symbol is None:
             return self._reject(payload, "Unsupported or missing instrument.", "instrument", "UNSUPPORTED_INSTRUMENT")
 
@@ -482,6 +507,7 @@ class TradingSignalEvaluationEngine:
             "ruleset_version": RULESET_VERSION,
             "calibration_version": CALIBRATION_VERSION,
             "probability_is_calibrated": False,
+            "instrument_resolved_via": instrument_resolved_via,
             "data_quality": dq_diag,
             "costs": cost_diag,
             "trade_plan_preview": plan,
