@@ -10,8 +10,8 @@ from pydantic import BaseModel
 from shadow_scorer import shadow_score_0_100
 
 
-ENGINE_VERSION = "3.2.0"
-RULESET_VERSION = "manus_ruleset_2026_07_v3_2"
+ENGINE_VERSION = "3.3.0"
+RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
 
@@ -36,6 +36,7 @@ class InstrumentConfig:
     max_slippage_price: float
     sl_atr_mult: float
     default_rr: float
+    structure_buffer_pips: float
     preferred_sessions: Tuple[str, ...]
     blocked_sessions: Tuple[str, ...]
 
@@ -52,14 +53,21 @@ class ModelPolicy:
     blocked_regimes: Tuple[str, ...]
 
 
+# structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
+# input (candidate generator, section "12. PROPOSED STOP AND TARGET").
+# Confirmed at 0.6 pips / 12-bar lookback for GBPUSD in
+# STL_GBPUSD_2m_CandidateGenerator_v5.pine. The other pairs still run their
+# pre-rebuild Pine scripts, so 0.6 is used here as the same base-template
+# default for now - re-verify this value against each pair's script once it
+# is rebuilt from the GBPUSD v5.0.0 template.
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown")),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown")),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, ("asia", "london", "overlap_london_new_york"), ("overnight", "unknown")),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown")),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown")),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("overnight", "unknown")),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
 }
 
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
@@ -121,6 +129,24 @@ def as_float(x: Any, default: Optional[float] = None) -> Optional[float]:
 
 def as_str(x: Any, default: str = "") -> str:
     return default if x is None else str(x)
+
+
+def as_bool(x: Any, default: bool = False) -> bool:
+    # Make.com's HTTP templates send every field as a JSON string (e.g. "true"),
+    # not a native JSON boolean, so a strict `x is True` check silently never
+    # fires. Coerce both real booleans and their string/number spellings.
+    if x is None:
+        return default
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, (int, float)):
+        return bool(x)
+    s = str(x).strip().lower()
+    if s in ("true", "1", "yes", "y", "on"):
+        return True
+    if s in ("false", "0", "no", "n", "off", ""):
+        return False
+    return default
 
 
 def clamp(value: float, low: float, high: float) -> float:
@@ -240,12 +266,12 @@ def signal_score(payload: Dict[str, Any], model: str) -> float:
 def context_score(payload: Dict[str, Any], cfg: InstrumentConfig) -> float:
     session = as_str(get_path(payload, "market.session_name"), "unknown").lower()
     status = as_str(get_path(payload, "context.context_status"), "unchecked").lower()
-    event = get_path(payload, "context.high_impact_event_nearby")
+    event = as_bool(get_path(payload, "context.high_impact_event_nearby"), False)
 
     score = 50.0
     score += 15 if session in cfg.preferred_sessions else (-25 if session in cfg.blocked_sessions else -5)
     score += 20 if status == "clear" else (-15 if status in ("warning", "unchecked", "unknown", "") else -50)
-    if event is True:
+    if event:
         score -= 35
     return clamp(score, 0.0, 100.0)
 
@@ -269,23 +295,70 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     direction = as_str(get_path(payload, "signal.direction"), "neutral").lower()
     entry = as_float(get_path(payload, "risk.proposed_entry")) or as_float(get_path(payload, "price.close")) or 0.0
     atr = as_float(get_path(payload, "indicators.atr"), 0.0) or 0.0
-    sl = as_float(get_path(payload, "risk.proposed_stop_loss"))
-    tp = as_float(get_path(payload, "risk.proposed_take_profit"))
+
+    # pine_proposal_only / allow_manus_override_sl_tp: when the candidate
+    # generator marks its own proposed_stop_loss/proposed_take_profit as a
+    # non-authoritative proposal (rather than a value to execute verbatim),
+    # and explicitly grants the engine permission to override it, the engine
+    # ignores Pine's numbers and computes its own stop/target below - the
+    # same math already used as the missing-data fallback, just now applied
+    # unconditionally rather than only when Pine sent nothing. This is what
+    # makes Manus the actual execution authority for risk placement, instead
+    # of a pass-through of Pine's suggestion.
+    pine_proposal_only = as_bool(get_path(payload, "extensions.pine_proposal_only"), False)
+    allow_override = as_bool(get_path(payload, "extensions.allow_manus_override_sl_tp"), False)
+    engine_authoritative_sl_tp = pine_proposal_only and allow_override
+
+    sl = None if engine_authoritative_sl_tp else as_float(get_path(payload, "risk.proposed_stop_loss"))
+    tp = None if engine_authoritative_sl_tp else as_float(get_path(payload, "risk.proposed_take_profit"))
     source = "payload"
+    stop_basis = None
 
     if sl is None or tp is None:
-        dist = atr * cfg.sl_atr_mult if atr > 0 else entry * 0.001
+        # Mirrors Pine's own stop formula exactly (candidate generator
+        # v5.0.0, section "12. PROPOSED STOP AND TARGET"): the wider of a
+        # plain ATR stop and a structure stop set just beyond the recent
+        # N-bar swing high/low plus a small buffer. structure.nearest_support
+        # / structure.nearest_resistance are Pine's own rolling
+        # ta.lowest(low, structureLookback) / ta.highest(high,
+        # structureLookback) values (confirmed forwarded by Make module 98),
+        # so this reproduces Pine's proposal rather than a cruder ATR-only
+        # approximation - the engine's fallback/authoritative stop now
+        # matches what Pine itself would have proposed.
+        buffer_price = cfg.structure_buffer_pips * cfg.pip_size
+        nearest_support = as_float(get_path(payload, "structure.nearest_support"))
+        nearest_resistance = as_float(get_path(payload, "structure.nearest_resistance"))
+        atr_dist = atr * cfg.sl_atr_mult if atr > 0 else entry * 0.001
         rr = max(cfg.default_rr, policy.min_rr)
+
         if direction == "long":
-            sl, tp = entry - dist, entry + dist * rr
+            atr_stop = entry - atr_dist
+            if nearest_support is not None:
+                structure_stop = nearest_support - buffer_price
+                sl = min(atr_stop, structure_stop)
+                stop_basis = "structure" if structure_stop < atr_stop else "atr"
+            else:
+                sl = atr_stop
+                stop_basis = "atr"
+            raw_stop_dist = entry - sl
+            tp = entry + raw_stop_dist * rr
         elif direction == "short":
-            sl, tp = entry + dist, entry - dist * rr
+            atr_stop = entry + atr_dist
+            if nearest_resistance is not None:
+                structure_stop = nearest_resistance + buffer_price
+                sl = max(atr_stop, structure_stop)
+                stop_basis = "structure" if structure_stop > atr_stop else "atr"
+            else:
+                sl = atr_stop
+                stop_basis = "atr"
+            raw_stop_dist = sl - entry
+            tp = entry - raw_stop_dist * rr
         else:
             sl, tp = None, None
-        source = "manus_atr_fallback"
+        source = "manus_authoritative_atr_structure" if engine_authoritative_sl_tp else "manus_atr_structure_fallback"
 
     if sl is None or tp is None or entry <= 0:
-        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "source": source}
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "source": source, "stop_basis": stop_basis}
 
     entry, sl, tp = round_to_tick(entry, cfg.tick_size), round_to_tick(sl, cfg.tick_size), round_to_tick(tp, cfg.tick_size)
     stop_dist = abs(entry - sl)
@@ -310,6 +383,7 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         "risk_percent": risk_pct,
         "risk_cash": risk_cash,
         "source": source,
+        "stop_basis": stop_basis,
     }
 
 
@@ -499,7 +573,7 @@ class TradingSignalEvaluationEngine:
             "expected_net_r": round(net_r, 4),
             "expected_value_score": round(net_r, 4),
             "approval_status": status,
-            "approval_reason": "Approved by Manus v3.2 deterministic ruleset." if status == "approved" else None,
+            "approval_reason": "Approved by Manus v3.3 deterministic ruleset." if status == "approved" else None,
             "rejection_stage": stage,
             "rejection_reason": reason,
             "rejection_reason_code": code,
@@ -527,6 +601,7 @@ class TradingSignalEvaluationEngine:
                     "risk_percent": plan["risk_percent"],
                     "risk_cash": plan["risk_cash"],
                     "planning_source": plan["source"],
+                    "stop_basis": plan.get("stop_basis"),
                     "no_mid_trade_adjustment": True,
                 },
             })
