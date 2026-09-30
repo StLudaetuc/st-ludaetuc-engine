@@ -1037,6 +1037,12 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
                     "approval_status": result.get("approval_status"),
                     "rejection_stage": result.get("rejection_stage"),
                     "rejection_reason_code": result.get("rejection_reason_code"),
+                    "data_quality_score": manus.get("data_quality_score"),
+                    "signal_quality_score": manus.get("signal_quality_score"),
+                    "risk_score": manus.get("risk_score"),
+                    "context_score": manus.get("context_score"),
+                    "strategy_fit_score": manus.get("strategy_fit_score"),
+                    "pre_gate_score": manus.get("pre_gate_score"),
                     "predicted_win_probability": manus.get("predicted_win_probability"),
                     "predicted_tp_before_sl_probability": manus.get("predicted_tp_before_sl_probability"),
                     "expected_gross_r": manus.get("expected_gross_r"),
@@ -1044,6 +1050,13 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
                     "expected_net_r": manus.get("expected_net_r"),
                     "final_trade_plan": manus.get("final_trade_plan"),
                     "shadow_score_v0": shadow_score,
+                    # The full raw signal payload (every indicator/structure/
+                    # context field the candidate generator sent), not just
+                    # Manus's derived scores. Andy's call: for the richest
+                    # possible future model-training feature set, we want
+                    # the underlying inputs archived alongside the decision,
+                    # not just the decision itself.
+                    "raw_signal_payload": payload_in,
                 },
                 event_id=hashlib.sha256(f"prediction:{trade_id}".encode("utf-8")).hexdigest(),
                 trade_id=str(trade_id),
