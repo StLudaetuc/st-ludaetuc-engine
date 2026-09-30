@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import floor, isfinite
 from typing import Any, Dict, Optional, Tuple
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from shadow_scorer import shadow_score_0_100
+
+# Bare (unquoted) NaN / Infinity / -Infinity tokens are valid Python/JS/Pine
+# number literals but not valid JSON. TradingView's {{plot(...)}} alert
+# placeholders can substitute one of these verbatim (e.g. an indicator that
+# has no value yet), which otherwise breaks strict JSON parsing outright.
+# Matched only when not already inside quotes-adjacent word characters, so
+# it won't touch a legitimate string that happens to contain "NaN" as text.
+_JSON_NAN_INF_RE = re.compile(r'(?<![\w"])(-?Infinity|NaN)(?![\w"])')
 
 try:
     import psycopg2
@@ -948,12 +958,34 @@ def health() -> Dict[str, Any]:
 
 
 @app.post("/market-data")
-def market_data(tick: MarketDataTick):
+async def market_data(request: Request):
     """Direct TradingView -> Render ingestion for the Market Data Centre.
     Deliberately never touches Make - see the explicit 'I don't want the
     market data going through make' decision. Must respond well inside
-    TradingView's 3s webhook timeout, so this does exactly one insert."""
-    body = tick.model_dump()
+    TradingView's 3s webhook timeout, so this does exactly one insert.
+
+    Takes the raw Request rather than a declared Pydantic model on
+    purpose: TradingView's {{plot(...)}} placeholders can substitute the
+    bare tokens NaN / Infinity / -Infinity (e.g. an indicator with no
+    value yet) into the message. Those are valid Pine/JS number literals
+    but not valid JSON, and FastAPI's automatic model-binding rejects the
+    whole request with a 422 before our code ever runs - which is exactly
+    what was silently dropping every tick tonight. We parse the body
+    ourselves so a bad token can be neutralised instead of losing the tick."""
+    raw_bytes = await request.body()
+    raw_text = raw_bytes.decode("utf-8", errors="replace")
+    try:
+        body = json.loads(raw_text)
+    except json.JSONDecodeError:
+        sanitized = _JSON_NAN_INF_RE.sub("null", raw_text)
+        try:
+            body = json.loads(sanitized)
+        except json.JSONDecodeError as exc:
+            logging.error("market-data: unparseable body even after sanitizing: %r", raw_text[:2000])
+            return JSONResponse(status_code=422, content={"status": "error", "error": f"invalid JSON: {exc}", "raw_body_preview": raw_text[:500]})
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=422, content={"status": "error", "error": "expected a JSON object", "raw_body_preview": raw_text[:500]})
+
     ticker_raw = body.get("ticker") or body.get("symbol")
     instrument = _normalize_tv_ticker(ticker_raw) or None
     timeframe = _normalize_tv_interval(body.get("interval")) or None
