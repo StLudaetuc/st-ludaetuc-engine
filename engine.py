@@ -1,18 +1,192 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+import os
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from math import floor, isfinite
 from typing import Any, Dict, Optional, Tuple
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from shadow_scorer import shadow_score_0_100
+
+try:
+    import psycopg2
+    from psycopg2 import pool as _pg_pool
+    from psycopg2.extras import Json as _PgJson
+except Exception:  # pragma: no cover - psycopg2 should always be installed, but
+    # the events pipeline is best-effort and must never take trading down.
+    psycopg2 = None
+    _pg_pool = None
+    _PgJson = None
 
 
 ENGINE_VERSION = "3.4.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
+
+# --- St Ludaetuc Market Data Centre / canonical events ledger -------------
+#
+# One generic `events` table (Cloud V1 charter, Canonical Event Ledger,
+# section 6) backs three event types so far:
+#   - "market_data"   : raw OHLCV ticks pushed directly from TradingView,
+#                        never routed through Make (by explicit decision).
+#   - "prediction"    : every /evaluate call's confidence/expected-value
+#                        output, keyed by the signal's trade_id, so it can
+#                        later be joined against...
+#   - "trade_outcome" : ...the actual closed-trade result, to finally make
+#                        `probability_is_calibrated` mean something.
+#
+# All DB access is best-effort from the trading path's point of view: a
+# Postgres hiccup must never block or fail a /evaluate call. It's only
+# allowed to be loud (500) on /market-data and /trade-outcome, since there
+# logging the event *is* the whole point of the request.
+EVENTS_SCHEMA_VERSION = "v1"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+_db_pool = None
+
+
+def _get_pool():
+    global _db_pool
+    if _db_pool is None and DATABASE_URL and _pg_pool is not None:
+        try:
+            _db_pool = _pg_pool.SimpleConnectionPool(1, 5, DATABASE_URL, connect_timeout=5)
+        except Exception:
+            logging.exception("Failed to create Postgres connection pool")
+            _db_pool = None
+    return _db_pool
+
+
+_EVENTS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS events (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    destination TEXT,
+    trade_id TEXT,
+    instrument TEXT,
+    timeframe TEXT,
+    event_time TIMESTAMPTZ NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    schema_version TEXT NOT NULL DEFAULT 'v1',
+    strategy_version TEXT,
+    model_version TEXT,
+    environment TEXT NOT NULL DEFAULT 'production',
+    status TEXT,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    related_experiment_id TEXT,
+    related_deployment_id TEXT,
+    payload JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_type_time ON events (event_type, event_time DESC);
+CREATE INDEX IF NOT EXISTS idx_events_instrument_tf_time ON events (instrument, timeframe, event_time DESC);
+CREATE INDEX IF NOT EXISTS idx_events_trade_id ON events (trade_id);
+"""
+
+
+def _ensure_events_schema() -> None:
+    pool = _get_pool()
+    if pool is None:
+        return
+    conn = pool.getconn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(_EVENTS_SCHEMA_SQL)
+    finally:
+        pool.putconn(conn)
+
+
+def _parse_event_time(raw: Any) -> datetime:
+    if raw is None:
+        return datetime.now(timezone.utc)
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    s = str(raw).strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        pass
+    try:
+        ms = float(s)
+        ts = ms / 1000.0 if ms > 1e12 else ms
+        return datetime.fromtimestamp(ts, tz=timezone.utc)
+    except Exception:
+        return datetime.now(timezone.utc)
+
+
+def log_event(
+    event_type: str,
+    origin: str,
+    event_time: datetime,
+    payload: Dict[str, Any],
+    *,
+    event_id: Optional[str] = None,
+    trade_id: Optional[str] = None,
+    instrument: Optional[str] = None,
+    timeframe: Optional[str] = None,
+    destination: Optional[str] = None,
+    strategy_version: Optional[str] = None,
+    model_version: Optional[str] = None,
+    status: Optional[str] = None,
+    environment: str = "production",
+    related_experiment_id: Optional[str] = None,
+    related_deployment_id: Optional[str] = None,
+) -> str:
+    pool = _get_pool()
+    if pool is None:
+        raise RuntimeError("DATABASE_URL not configured or Postgres pool unavailable")
+
+    if event_id is None:
+        basis = f"{event_type}:{origin}:{instrument}:{timeframe}:{trade_id}:{event_time.isoformat()}"
+        event_id = hashlib.sha256(basis.encode("utf-8")).hexdigest()
+
+    conn = pool.getconn()
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO events (
+                    event_id, event_type, origin, destination, trade_id,
+                    instrument, timeframe, event_time, schema_version,
+                    strategy_version, model_version, environment, status,
+                    related_experiment_id, related_deployment_id, payload
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (event_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    status = EXCLUDED.status,
+                    received_at = now(),
+                    retry_count = events.retry_count + 1
+                """,
+                (
+                    event_id, event_type, origin, destination, trade_id,
+                    instrument, timeframe, event_time, EVENTS_SCHEMA_VERSION,
+                    strategy_version, model_version, environment, status,
+                    related_experiment_id, related_deployment_id, _PgJson(payload),
+                ),
+            )
+    finally:
+        pool.putconn(conn)
+    return event_id
+
+
+def _normalize_tv_ticker(raw: Any) -> str:
+    s = str(raw or "").upper().strip()
+    if ":" in s:
+        s = s.split(":")[-1]
+    return s.replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
+
+
+def _normalize_tv_interval(raw: Any) -> str:
+    s = str(raw or "").strip().lower()
+    return f"{s}m" if s.isdigit() else s
 
 
 class EvaluateRequest(BaseModel):
@@ -721,6 +895,44 @@ engine = TradingSignalEvaluationEngine()
 app = FastAPI(title="St Ludaetuc Manus Engine", version=ENGINE_VERSION)
 
 
+class MarketDataTick(BaseModel):
+    # TradingView's own placeholders ({{ticker}}, {{interval}}, {{time}},
+    # {{open}}/{{high}}/{{low}}/{{close}}/{{volume}}) populate these - see
+    # the shared alert message template. `extra: allow` so the same endpoint
+    # tolerates minor template tweaks without a deploy.
+    ticker: Optional[str] = None
+    symbol: Optional[str] = None
+    interval: Optional[str] = None
+    time: Optional[Any] = None
+    open: Optional[Any] = None
+    high: Optional[Any] = None
+    low: Optional[Any] = None
+    close: Optional[Any] = None
+    volume: Optional[Any] = None
+    model_config = {"extra": "allow"}
+
+
+class TradeOutcome(BaseModel):
+    trade_id: Optional[str] = None
+    instrument: Optional[str] = None
+    timeframe: Optional[str] = None
+    closed_at: Optional[Any] = None
+    outcome: Optional[str] = None  # "win" | "loss" | "breakeven" | "cancelled"
+    realized_r: Optional[float] = None
+    realized_pnl: Optional[float] = None
+    exit_price: Optional[float] = None
+    exit_reason: Optional[str] = None
+    model_config = {"extra": "allow"}
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    try:
+        _ensure_events_schema()
+    except Exception:
+        logging.exception("Failed to ensure events schema on startup (non-fatal)")
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
     return {
@@ -731,7 +943,65 @@ def health() -> Dict[str, Any]:
         "supported_instruments": sorted(INSTRUMENTS.keys()),
         "supported_entry_models": sorted(MODEL_POLICIES.keys()),
         "probability_is_calibrated": False,
+        "events_db_configured": bool(DATABASE_URL),
     }
+
+
+@app.post("/market-data")
+def market_data(tick: MarketDataTick):
+    """Direct TradingView -> Render ingestion for the Market Data Centre.
+    Deliberately never touches Make - see the explicit 'I don't want the
+    market data going through make' decision. Must respond well inside
+    TradingView's 3s webhook timeout, so this does exactly one insert."""
+    body = tick.model_dump()
+    ticker_raw = body.get("ticker") or body.get("symbol")
+    instrument = _normalize_tv_ticker(ticker_raw) or None
+    timeframe = _normalize_tv_interval(body.get("interval")) or None
+    event_time = _parse_event_time(body.get("time"))
+    try:
+        event_id = log_event(
+            event_type="market_data",
+            origin="tradingview",
+            event_time=event_time,
+            payload=body,
+            instrument=instrument,
+            timeframe=timeframe,
+            status="recorded",
+        )
+    except Exception as exc:
+        logging.exception("market-data insert failed")
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
+    return {"status": "ok", "event_id": event_id, "instrument": instrument, "timeframe": timeframe}
+
+
+@app.post("/trade-outcome")
+def trade_outcome(outcome: TradeOutcome):
+    """Actual closed-trade result, keyed by trade_id (the same
+    meta.signal_id a 'prediction' event was logged under at evaluation
+    time), so the two can be joined to check calibration. Not yet wired to
+    the Closed Trade Data Sync Make scenario - that's a separate, deliberate
+    follow-up step, since it means touching a live trading scenario."""
+    body = outcome.model_dump()
+    trade_id = body.get("trade_id")
+    if not trade_id:
+        return JSONResponse(status_code=400, content={"status": "error", "error": "trade_id is required"})
+    event_time = _parse_event_time(body.get("closed_at"))
+    try:
+        event_id = log_event(
+            event_type="trade_outcome",
+            origin="oanda_via_make",
+            event_time=event_time,
+            payload=body,
+            event_id=hashlib.sha256(f"trade_outcome:{trade_id}".encode("utf-8")).hexdigest(),
+            trade_id=str(trade_id),
+            instrument=body.get("instrument"),
+            timeframe=body.get("timeframe"),
+            status=body.get("outcome"),
+        )
+    except Exception as exc:
+        logging.exception("trade-outcome insert failed")
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
+    return {"status": "ok", "event_id": event_id}
 
 
 @app.post("/evaluate")
@@ -746,4 +1016,44 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
     result["shadow_score_v0"] = shadow_score
     if isinstance(result.get("manus"), dict):
         result["manus"]["shadow_score_v0"] = shadow_score
+
+    # Best-effort prediction logging for calibration tracking. Must NEVER
+    # block or break a trade evaluation - a Postgres hiccup should be
+    # invisible to the trading path, just an unlogged data point.
+    try:
+        payload_in = req.payload if isinstance(req.payload, dict) else {}
+        trade_id = get_path(payload_in, "meta.signal_id")
+        if trade_id:
+            manus = result.get("manus") if isinstance(result.get("manus"), dict) else {}
+            event_time = _parse_event_time(get_path(payload_in, "market.bar_time_utc"))
+            log_event(
+                event_type="prediction",
+                origin="manus_engine",
+                event_time=event_time,
+                payload={
+                    "signal_id": trade_id,
+                    "instrument": result.get("instrument"),
+                    "entry_model": result.get("entry_model"),
+                    "approval_status": result.get("approval_status"),
+                    "rejection_stage": result.get("rejection_stage"),
+                    "rejection_reason_code": result.get("rejection_reason_code"),
+                    "predicted_win_probability": manus.get("predicted_win_probability"),
+                    "predicted_tp_before_sl_probability": manus.get("predicted_tp_before_sl_probability"),
+                    "expected_gross_r": manus.get("expected_gross_r"),
+                    "expected_cost_r": manus.get("expected_cost_r"),
+                    "expected_net_r": manus.get("expected_net_r"),
+                    "final_trade_plan": manus.get("final_trade_plan"),
+                    "shadow_score_v0": shadow_score,
+                },
+                event_id=hashlib.sha256(f"prediction:{trade_id}".encode("utf-8")).hexdigest(),
+                trade_id=str(trade_id),
+                instrument=result.get("instrument"),
+                timeframe=get_path(payload_in, "market.timeframe"),
+                strategy_version=result.get("ruleset_version"),
+                model_version=result.get("engine_version"),
+                status=result.get("approval_status"),
+            )
+    except Exception:
+        logging.exception("prediction event logging failed (non-fatal, trade unaffected)")
+
     return result
