@@ -35,7 +35,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgJson = None
 
 
-ENGINE_VERSION = "3.5.0"
+ENGINE_VERSION = "3.6.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -48,23 +48,48 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 # 100" multiplier manually added to the USD/JPY Make scenario's math
 # module as a stopgap - that static multiplier should be removed now that
 # the engine applies the correct, live-price-based conversion itself.
+#
+# v3.6.0: Google Sheets ("St Ludaetuc Master Trading Log") retired as a
+# data store. Two changes replace it with Postgres, via Make, as planned:
+#   1. /evaluate's existing "prediction" event logging now also archives
+#      the OANDA account snapshot each call already receives (equity,
+#      margin, open trade count, etc.) - previously only written to
+#      Sheets, never persisted anywhere queryable.
+#   2. New POST /trade-opened endpoint, called by each pair's Make
+#      scenario immediately after an approved signal's order is placed.
+#      This is the open-time bridge between a Pine signal_id and the
+#      OANDA trade ID that signal produced - documented below as missing
+#      since the Market Data Centre was first added, and something Sheets
+#      had informally the whole time via one wide spreadsheet row that
+#      Postgres never captured. master_trading_log is rewritten to use
+#      this bridge, so a closed trade's predicted_* columns now populate
+#      for real instead of coming back NULL.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
 # One generic `events` table (Cloud V1 charter, Canonical Event Ledger,
-# section 6) backs three event types so far:
+# section 6) backs four event types so far:
 #   - "market_data"   : raw OHLCV ticks pushed directly from TradingView,
 #                        never routed through Make (by explicit decision).
 #   - "prediction"    : every /evaluate call's confidence/expected-value
 #                        output, keyed by the signal's trade_id, so it can
 #                        later be joined against...
-#   - "trade_outcome" : ...the actual closed-trade result, to finally make
+#   - "trade_opened"  : ...confirmation that an approved signal's order was
+#                        actually placed on OANDA, keyed by the same
+#                        trade_id, carrying the resulting OANDA trade ID -
+#                        the bridge to...
+#   - "trade_outcome" : ...the actual closed-trade result, keyed by that
+#                        OANDA trade ID, to finally make
 #                        `probability_is_calibrated` mean something.
 #
 # All DB access is best-effort from the trading path's point of view: a
 # Postgres hiccup must never block or fail a /evaluate call. It's only
-# allowed to be loud (500) on /market-data and /trade-outcome, since there
-# logging the event *is* the whole point of the request.
+# allowed to be loud (500) on /market-data, /trade-opened and
+# /trade-outcome, since there logging the event *is* the whole point of
+# the request - none of those three sit in front of an order placement
+# (that already happened by the time /trade-opened is called), so a loud
+# failure there only means the HTTP caller sees an honest error, never a
+# blocked or duplicated trade.
 EVENTS_SCHEMA_VERSION = "v1"
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
@@ -107,27 +132,39 @@ CREATE INDEX IF NOT EXISTS idx_events_type_time ON events (event_type, event_tim
 CREATE INDEX IF NOT EXISTS idx_events_instrument_tf_time ON events (instrument, timeframe, event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_events_trade_id ON events (trade_id);
 
--- Lightweight Master Trading Log (v1): every closed-trade outcome, left-joined
--- to the /evaluate "prediction" event filed under the same trade_id, if one
--- exists. Today that join mostly comes back NULL for OANDA-side closures,
--- because the Closed Trade Data Sync (Postgres) Make scenario keys
--- trade_outcome events by OANDA's own tradeID, not by the Pine-side
--- meta.signal_id a prediction event is filed under - there is currently no
--- open-time bridge recording which signal_id produced which OANDA tradeID.
--- Wiring that bridge (so predicted_* columns populate automatically here,
--- with no further change to this view) is a deliberate later step, since it
--- means touching the live per-pair trading scenarios. This view is still the
--- real, current trade ledger - exit price, P&L, exit reason - and is
--- forward-compatible with that bridge once it exists.
+-- Lets master_trading_log below find the "trade_opened" row for a given
+-- OANDA trade ID in one index lookup instead of a payload scan - this is
+-- the bridge join's hot path, so it gets its own partial expression index
+-- rather than relying on idx_events_type_time alone.
+CREATE INDEX IF NOT EXISTS idx_events_trade_opened_oanda_id
+    ON events ((payload->>'oanda_trade_id'))
+    WHERE event_type = 'trade_opened';
+
+-- Master Trading Log (v2): every closed-trade outcome, bridged back to the
+-- signal that opened it, and from there to the /evaluate "prediction" that
+-- signal produced. v1 joined trade_outcome -> prediction directly on
+-- trade_id, which came back NULL for every OANDA-side closure, because
+-- trade_outcome is keyed by OANDA's own tradeID while prediction is keyed
+-- by the Pine-side meta.signal_id - there was no open-time record of which
+-- signal_id produced which OANDA tradeID. The new "trade_opened" event
+-- (logged by /trade-opened at order-placement time, keyed by signal_id,
+-- carrying the resulting OANDA tradeID in its payload) is exactly that
+-- bridge, so the three-way join below now resolves for real instead of
+-- coming back NULL. A trade_outcome row with no matching trade_opened row
+-- (e.g. a trade that closed before this version shipped) still appears,
+-- just without predicted_* - LEFT JOINs throughout, not INNER.
 CREATE OR REPLACE VIEW master_trading_log AS
 SELECT
-    o.trade_id,
+    o.trade_id AS oanda_trade_id,
+    COALESCE(topen.trade_id, o.trade_id) AS signal_id,
     o.instrument,
     o.event_time AS closed_at,
     o.status AS outcome,
     o.payload->>'exit_reason' AS exit_reason,
     NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl,
     NULLIF(o.payload->>'exit_price', '')::numeric AS exit_price,
+    topen.event_time AS opened_at,
+    topen.payload->>'fill_status' AS fill_status,
     p.event_time AS predicted_at,
     p.strategy_version,
     p.model_version,
@@ -136,9 +173,45 @@ SELECT
     NULLIF(p.payload->>'expected_net_r', '')::numeric AS expected_net_r,
     o.received_at
 FROM events o
-LEFT JOIN events p ON p.trade_id = o.trade_id AND p.event_type = 'prediction'
+LEFT JOIN events topen
+    ON topen.event_type = 'trade_opened'
+    AND topen.payload->>'oanda_trade_id' = o.trade_id
+LEFT JOIN events p
+    ON p.event_type = 'prediction'
+    AND p.trade_id = topen.trade_id
 WHERE o.event_type = 'trade_outcome'
 ORDER BY o.event_time DESC;
+
+-- Master Decision Log: every /evaluate decision, approved or rejected -
+-- the funnel view Doc 1's spec calls for, left-joined forward to whether
+-- (and how) an approved decision actually got placed and closed. A
+-- rejected signal simply has no trade_opened/trade_outcome row, which is
+-- the point: rejections are retained here for funnel analysis, not
+-- dropped the way a trades-only table would.
+CREATE OR REPLACE VIEW master_decision_log AS
+SELECT
+    p.trade_id AS signal_id,
+    p.instrument,
+    p.event_time AS decided_at,
+    p.payload->>'approval_status' AS approval_status,
+    p.payload->>'rejection_reason_code' AS rejection_reason_code,
+    NULLIF(p.payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
+    NULLIF(p.payload->>'expected_net_r', '')::numeric AS expected_net_r,
+    topen.event_time AS opened_at,
+    topen.payload->>'fill_status' AS fill_status,
+    topen.payload->>'oanda_trade_id' AS oanda_trade_id,
+    o.event_time AS closed_at,
+    o.status AS outcome,
+    NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl
+FROM events p
+LEFT JOIN events topen
+    ON topen.event_type = 'trade_opened'
+    AND topen.trade_id = p.trade_id
+LEFT JOIN events o
+    ON o.event_type = 'trade_outcome'
+    AND o.trade_id = topen.payload->>'oanda_trade_id'
+WHERE p.event_type = 'prediction'
+ORDER BY p.event_time DESC;
 """
 
 
@@ -254,7 +327,8 @@ ON CONFLICT (provider_code) DO NOTHING;
 INSERT INTO reference.event_types (code, description) VALUES
     ('market_data',   'Raw market tick/candle data received from TradingView'),
     ('prediction',    'Intelligence evaluation output logged at /evaluate time, keyed by meta.signal_id'),
-    ('trade_outcome', 'Closed-trade result reconciled from OANDA, keyed by trade_id')
+    ('trade_opened',  'OANDA order-placement confirmation for an approved signal, keyed by meta.signal_id, carrying the resulting OANDA trade ID'),
+    ('trade_outcome', 'Closed-trade result reconciled from OANDA, keyed by the OANDA trade ID')
 ON CONFLICT (code) DO NOTHING;
 """
 
@@ -1138,6 +1212,76 @@ class TradeOutcome(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class TradeOpened(BaseModel):
+    # trade_id here is the Pine-side meta.signal_id, matching "prediction" -
+    # NOT the OANDA trade ID (that's derived from oanda_order_response
+    # below and stored inside the payload as the open-time bridge).
+    trade_id: Optional[str] = None
+    instrument: Optional[str] = None
+    direction: Optional[str] = None  # "long" | "short"
+    opened_at: Optional[Any] = None
+    # The units/SL/TP actually submitted to OANDA, after the Make
+    # scenario's own rounding (floor/ceil to whole units, tick rounding on
+    # price) - i.e. module 107/110/115-118's results in the old blueprint,
+    # not the engine's pre-rounding final_* figures already in "prediction".
+    final_trade_plan: Optional[Dict[str, Any]] = None
+    # Same OANDA account snapshot /evaluate receives, taken fresh at
+    # order-placement time rather than at decision time - the two can
+    # differ by the few seconds/requests in between.
+    account_snapshot: Optional[Dict[str, Any]] = None
+    # The raw, complete JSON body OANDA's POST /orders returned. Forwarded
+    # wholesale rather than hand-picked field-by-field (as the old Sheets
+    # mapper did with ~15 separate IML expressions per pair) so nothing
+    # from OANDA's response can be silently missed; _derive_oanda_fill()
+    # below extracts the handful of facts that need their own columns.
+    oanda_order_response: Optional[Dict[str, Any]] = None
+    model_config = {"extra": "allow"}
+
+
+def _derive_oanda_fill(order_response: Dict[str, Any]) -> Dict[str, Any]:
+    """Extracts the same fill-status/trade-ID facts the old Sheets mapper
+    computed field-by-field with inline IML (columns 400-444 of the old
+    blueprint), from OANDA's raw POST /orders response. Centralising this
+    here - rather than in five separately hand-maintained Make scenarios -
+    is itself part of the fix: logic that decides what a trade's outcome
+    *means* belongs in the engine, not duplicated per pair in Make math."""
+    order_response = order_response or {}
+    create_tx = order_response.get("orderCreateTransaction") or {}
+    fill_tx = order_response.get("orderFillTransaction") or {}
+    cancel_tx = order_response.get("orderCancelTransaction") or {}
+    reject_tx = order_response.get("orderRejectTransaction") or {}
+    trade_opened_tx = fill_tx.get("tradeOpened") or {}
+
+    if fill_tx.get("id"):
+        fill_status = "FILLED"
+    elif cancel_tx.get("id"):
+        fill_status = "CANCELLED"
+    elif reject_tx.get("id"):
+        fill_status = "REJECTED"
+    else:
+        fill_status = "UNKNOWN"
+
+    return {
+        "fill_status": fill_status,
+        "oanda_trade_id": trade_opened_tx.get("tradeID"),
+        "order_create_transaction_id": create_tx.get("id"),
+        "order_cancel_transaction_id": cancel_tx.get("id"),
+        "order_reject_transaction_id": reject_tx.get("id"),
+        "last_transaction_id": order_response.get("lastTransactionID"),
+        "order_batch_id": create_tx.get("batchID"),
+        "order_request_id": create_tx.get("requestID"),
+        "related_transaction_ids": order_response.get("relatedTransactionIDs"),
+        "cancel_or_reject_reason": cancel_tx.get("reason") or reject_tx.get("rejectReason"),
+        "order_created_at": create_tx.get("time"),
+        "filled_at": fill_tx.get("time"),
+        "cancelled_at": cancel_tx.get("time"),
+        "rejected_at": reject_tx.get("time"),
+        "submitted_units": create_tx.get("units"),
+        "submitted_stop_loss": (create_tx.get("stopLossOnFill") or {}).get("price"),
+        "submitted_take_profit": (create_tx.get("takeProfitOnFill") or {}).get("price"),
+    }
+
+
 @app.on_event("startup")
 def _on_startup() -> None:
     try:
@@ -1239,6 +1383,59 @@ def trade_outcome(outcome: TradeOutcome):
     return {"status": "ok", "event_id": event_id}
 
 
+@app.post("/trade-opened")
+def trade_opened(req: TradeOpened):
+    """Logged by each pair's Make scenario immediately after an approved
+    signal's order is placed on OANDA (the BUY/SELL branches only - never
+    for a rejected signal, since /evaluate's own 'prediction' event, now
+    enriched with account_snapshot, already covers that case with no
+    order ever having been placed). This is the open-time bridge between
+    a Pine signal_id and the OANDA trade ID that signal produced -
+    replaces the Google Sheets row that used to be the only place this
+    link existed. See master_trading_log / master_decision_log for how
+    it's used.
+
+    Called strictly after the order already exists on OANDA, so - like
+    /trade-outcome - a failure here is safe to report loudly (500): it
+    can only ever mean an unlogged data point, never a blocked or
+    duplicated trade."""
+    body = req.model_dump()
+    trade_id = body.get("trade_id")
+    if not trade_id:
+        return JSONResponse(status_code=400, content={"status": "error", "error": "trade_id is required"})
+
+    fill_facts = _derive_oanda_fill(body.get("oanda_order_response") or {})
+    event_time = _parse_event_time(body.get("opened_at"))
+    try:
+        event_id = log_event(
+            event_type="trade_opened",
+            origin="oanda_via_make",
+            event_time=event_time,
+            payload={
+                "trade_id": trade_id,
+                "instrument": body.get("instrument"),
+                "direction": body.get("direction"),
+                "final_trade_plan": body.get("final_trade_plan"),
+                "account_snapshot": body.get("account_snapshot"),
+                "oanda_order_response": body.get("oanda_order_response"),
+                **fill_facts,
+            },
+            event_id=hashlib.sha256(f"trade_opened:{trade_id}".encode("utf-8")).hexdigest(),
+            trade_id=str(trade_id),
+            instrument=body.get("instrument"),
+            status=fill_facts["fill_status"],
+        )
+    except Exception as exc:
+        logging.exception("trade-opened insert failed")
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
+    return {
+        "status": "ok",
+        "event_id": event_id,
+        "fill_status": fill_facts["fill_status"],
+        "oanda_trade_id": fill_facts["oanda_trade_id"],
+    }
+
+
 @app.post("/evaluate")
 def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
     result = engine.evaluate(req.model_dump())
@@ -1292,6 +1489,15 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
                     # the underlying inputs archived alongside the decision,
                     # not just the decision itself.
                     "raw_signal_payload": payload_in,
+                    # v3.6.0: the OANDA account snapshot Make already sends
+                    # with every /evaluate call (plan_trade() reads it for
+                    # equity/risk sizing) - previously only ever reached
+                    # Google Sheets, never persisted here, so a rejected
+                    # signal's account context was lost the moment the
+                    # Sheets row was the only copy of it. Replaces that
+                    # Sheets row with no change needed on the Make side,
+                    # since this payload was already being sent to us.
+                    "account_snapshot": req.account if isinstance(req.account, dict) else None,
                 },
                 event_id=hashlib.sha256(f"prediction:{trade_id}".encode("utf-8")).hexdigest(),
                 trade_id=str(trade_id),
