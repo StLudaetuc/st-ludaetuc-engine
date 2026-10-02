@@ -35,9 +35,19 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgJson = None
 
 
-ENGINE_VERSION = "3.4.0"
+ENGINE_VERSION = "3.5.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
+
+# v3.5.0: fixed a position-sizing bug in plan_trade() that undersized every
+# USD/JPY and USD/CAD trade because the account-currency conversion was
+# missing entirely (risk_cash/stop_dist assumed quote currency == account
+# currency, true only for the XXX/USD pairs). See InstrumentConfig.
+# quote_ccy_is_account_ccy and the account_ccy_conversion_rate comment in
+# plan_trade() below for the full explanation. This also obsoletes the "*
+# 100" multiplier manually added to the USD/JPY Make scenario's math
+# module as a stopgap - that static multiplier should be removed now that
+# the engine applies the correct, live-price-based conversion itself.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
@@ -379,6 +389,13 @@ class InstrumentConfig:
     structure_buffer_pips: float
     preferred_sessions: Tuple[str, ...]
     blocked_sessions: Tuple[str, ...]
+    # True when this pair's quote currency is the same as the account
+    # currency (USD, for this practice account) - GBP/USD, EUR/USD,
+    # AUD/USD, XAU/USD, XAG/USD are all quoted in USD. False for USD/CAD
+    # and USD/JPY, whose quote currency is CAD/JPY, not USD. See the
+    # account_ccy_conversion_rate comment in plan_trade() for why this
+    # matters for position sizing.
+    quote_ccy_is_account_ccy: bool
 
 
 @dataclass(frozen=True)
@@ -400,14 +417,18 @@ class ModelPolicy:
 # pre-rebuild Pine scripts, so 0.6 is used here as the same base-template
 # default for now - re-verify this value against each pair's script once it
 # is rebuilt from the GBPUSD v5.0.0 template.
+#
+# Trailing bool on each line below is quote_ccy_is_account_ccy: True for the
+# three XXX/USD pairs and both metals (quote currency USD == account
+# currency), False for USD/CAD and USD/JPY (quote currency CAD/JPY).
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown")),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown")),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("overnight", "unknown")),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown")),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown"), True),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown"), True),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("overnight", "unknown"), True),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), False),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), False),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), True),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), True),
 }
 
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
@@ -718,7 +739,7 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         source = "manus_authoritative_atr_structure" if engine_authoritative_sl_tp else "manus_atr_structure_fallback"
 
     if sl is None or tp is None or entry <= 0:
-        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "source": source, "stop_basis": stop_basis}
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis}
 
     entry, sl, tp = round_to_tick(entry, cfg.tick_size), round_to_tick(sl, cfg.tick_size), round_to_tick(tp, cfg.tick_size)
     stop_dist = abs(entry - sl)
@@ -728,7 +749,36 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     equity = as_float(account.get("balance")) or as_float(account.get("margin_available")) or 10000.0
     risk_pct = min(as_float(get_path(payload, "risk.risk_percent"), cfg.max_risk_percent) or cfg.max_risk_percent, cfg.max_risk_percent)
     risk_cash = equity * risk_pct / 100.0
-    units = round_to_step(risk_cash / stop_dist, cfg.unit_step) if stop_dist > 0 else 0.0
+
+    # Account-currency conversion (added v3.5.0 - see the comment above
+    # ENGINE_VERSION for the full writeup). risk_cash is in account currency
+    # (USD). stop_dist is a raw price distance in the PAIR'S QUOTE currency.
+    # units = risk_cash / stop_dist is only dimensionally correct when quote
+    # currency == account currency, i.e. cfg.quote_ccy_is_account_ccy is
+    # True (GBP/USD, EUR/USD, AUD/USD, XAU/USD, XAG/USD).
+    #
+    # For USD/CAD and USD/JPY, the quote currency is CAD/JPY: a price move
+    # of stop_dist produces a loss denominated in CAD/JPY, not USD, and that
+    # has to be converted back to USD at the live rate before it can be
+    # compared to a USD risk budget. Because these are USD/XXX pairs (base
+    # currency == account currency == USD), that live conversion rate is
+    # just the pair's own current price - by definition, "1 XXX per 1 USD"
+    # - so multiplying risk_cash by entry before dividing by stop_dist does
+    # the conversion correctly, using today's actual rate rather than a
+    # fixed guess.
+    #
+    # Before this fix, USD/JPY units came out ~100-150x too small (every
+    # JPY of notional loss was being treated as if it were a dollar), which
+    # is what the "* 100" multiplier manually added to the USD/JPY Make
+    # scenario's math module was compensating for - a static approximation
+    # of this same conversion that drifts as USD/JPY's price moves. USD/CAD
+    # had the identical bug, just quieter (~30-40% undersized, since
+    # USD/CAD trades much closer to 1.0 than USD/JPY does). That Make-side
+    # multiplier should be removed now that the engine applies the correct,
+    # live-price-based conversion itself - leaving it in place would double
+    # -apply the correction.
+    account_ccy_conversion_rate = 1.0 if cfg.quote_ccy_is_account_ccy else entry
+    units = round_to_step(risk_cash * account_ccy_conversion_rate / stop_dist, cfg.unit_step) if stop_dist > 0 else 0.0
     units = clamp(units, cfg.min_units, cfg.max_units)
     units = -abs(units) if direction == "short" else abs(units)
 
@@ -742,6 +792,7 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         "stop_distance": stop_dist,
         "risk_percent": risk_pct,
         "risk_cash": risk_cash,
+        "account_ccy_conversion_rate": account_ccy_conversion_rate,
         "source": source,
         "stop_basis": stop_basis,
     }
@@ -961,6 +1012,7 @@ class TradingSignalEvaluationEngine:
                     "rr_ratio": plan["rr"],
                     "risk_percent": plan["risk_percent"],
                     "risk_cash": plan["risk_cash"],
+                    "account_ccy_conversion_rate": plan.get("account_ccy_conversion_rate"),
                     "planning_source": plan["source"],
                     "stop_basis": plan.get("stop_basis"),
                     "no_mid_trade_adjustment": True,
