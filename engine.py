@@ -35,7 +35,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgJson = None
 
 
-ENGINE_VERSION = "3.6.1"
+ENGINE_VERSION = "3.6.2"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -64,6 +64,27 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 #      Postgres never captured. master_trading_log is rewritten to use
 #      this bridge, so a closed trade's predicted_* columns now populate
 #      for real instead of coming back NULL.
+#
+# v3.6.1: /trade-opened's account_snapshot and oanda_order_response now
+#   accept a JSON-encoded string (the Make side was switched from an
+#   unquoted toString() object-splice, which corrupted the outer JSON body
+#   on every real call, to a quoted escapeJSON(toString(...)) string) as
+#   well as the original raw dict, decoded server-side by _parse_json_field.
+#
+# v3.6.2: fixed _ensure_events_schema() silently failing on every startup
+#   since v3.6.0 shipped. The v3.6.0 master_trading_log rewrite renamed its
+#   first output column from trade_id to oanda_trade_id, but the live view
+#   (created by an earlier version of this code) still had a column
+#   literally named trade_id - Postgres refuses CREATE OR REPLACE VIEW
+#   whenever it would rename an existing output column ("cannot change name
+#   of view column ... to ..."). That error aborted the whole multi-statement
+#   execute() (both CREATE OR REPLACE VIEW statements plus every IF NOT
+#   EXISTS table/index in _EVENTS_SCHEMA_SQL and all of _REFERENCE_SCHEMA_SQL
+#   live in one implicit transaction), so none of it ever committed - the
+#   startup log swallowed this as "non-fatal" and moved on, but the schema
+#   was silently stuck exactly where it was before v3.6.0. Switched both
+#   master_trading_log and master_decision_log to DROP VIEW IF EXISTS +
+#   CREATE VIEW, which isn't subject to the column-identity restriction.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
@@ -153,7 +174,21 @@ CREATE INDEX IF NOT EXISTS idx_events_trade_opened_oanda_id
 -- coming back NULL. A trade_outcome row with no matching trade_opened row
 -- (e.g. a trade that closed before this version shipped) still appears,
 -- just without predicted_* - LEFT JOINs throughout, not INNER.
-CREATE OR REPLACE VIEW master_trading_log AS
+--
+-- DROP + CREATE instead of CREATE OR REPLACE: the live view predating this
+-- v2 rewrite has its first column literally named trade_id, and Postgres
+-- refuses CREATE OR REPLACE VIEW whenever it would rename/reorder/drop an
+-- existing output column (the new v2 select aliases that column to
+-- oanda_trade_id) - "cannot change name of view column ... to ...". That
+-- made every startup since the v2 rewrite throw inside this same
+-- multi-statement execute() / implicit transaction, aborting it before any
+-- of the IF NOT EXISTS DDL above or the reference.* schema below ever
+-- committed (startup logged it as non-fatal and carried on, but the schema
+-- was never actually brought up to date). DROP VIEW IF EXISTS sidesteps the
+-- column-identity check entirely; these are plain read-only derived views
+-- with no grants to re-apply, so drop-and-recreate is safe.
+DROP VIEW IF EXISTS master_trading_log;
+CREATE VIEW master_trading_log AS
 SELECT
     o.trade_id AS oanda_trade_id,
     COALESCE(topen.trade_id, o.trade_id) AS signal_id,
@@ -188,7 +223,12 @@ ORDER BY o.event_time DESC;
 -- rejected signal simply has no trade_opened/trade_outcome row, which is
 -- the point: rejections are retained here for funnel analysis, not
 -- dropped the way a trades-only table would.
-CREATE OR REPLACE VIEW master_decision_log AS
+--
+-- DROP + CREATE for the same column-identity reason as master_trading_log
+-- above - applied defensively here too since the aborted transaction never
+-- let this statement run far enough to prove whether it also conflicted.
+DROP VIEW IF EXISTS master_decision_log;
+CREATE VIEW master_decision_log AS
 SELECT
     p.trade_id AS signal_id,
     p.instrument,
