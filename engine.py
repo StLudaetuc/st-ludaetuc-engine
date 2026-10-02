@@ -96,6 +96,156 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_type_time ON events (event_type, event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_events_instrument_tf_time ON events (instrument, timeframe, event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_events_trade_id ON events (trade_id);
+
+-- Lightweight Master Trading Log (v1): every closed-trade outcome, left-joined
+-- to the /evaluate "prediction" event filed under the same trade_id, if one
+-- exists. Today that join mostly comes back NULL for OANDA-side closures,
+-- because the Closed Trade Data Sync (Postgres) Make scenario keys
+-- trade_outcome events by OANDA's own tradeID, not by the Pine-side
+-- meta.signal_id a prediction event is filed under - there is currently no
+-- open-time bridge recording which signal_id produced which OANDA tradeID.
+-- Wiring that bridge (so predicted_* columns populate automatically here,
+-- with no further change to this view) is a deliberate later step, since it
+-- means touching the live per-pair trading scenarios. This view is still the
+-- real, current trade ledger - exit price, P&L, exit reason - and is
+-- forward-compatible with that bridge once it exists.
+CREATE OR REPLACE VIEW master_trading_log AS
+SELECT
+    o.trade_id,
+    o.instrument,
+    o.event_time AS closed_at,
+    o.status AS outcome,
+    o.payload->>'exit_reason' AS exit_reason,
+    NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl,
+    NULLIF(o.payload->>'exit_price', '')::numeric AS exit_price,
+    p.event_time AS predicted_at,
+    p.strategy_version,
+    p.model_version,
+    p.payload->>'approval_status' AS approval_status,
+    NULLIF(p.payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
+    NULLIF(p.payload->>'expected_net_r', '')::numeric AS expected_net_r,
+    o.received_at
+FROM events o
+LEFT JOIN events p ON p.trade_id = o.trade_id AND p.event_type = 'prediction'
+WHERE o.event_type = 'trade_outcome'
+ORDER BY o.event_time DESC;
+"""
+
+
+# Reference schema (St Ludaetuc PostgreSQL Data Architecture spec, sections
+# 6-10): canonical naming/identifiers so values like "GBP/USD" vs "GBPUSD"
+# vs "GBP_USD" can't silently drift into different internal entities. This
+# is purely additive - no existing table, column or live ingestion path is
+# touched. The events.instrument / events.timeframe / events.environment
+# free-text columns are NOT yet foreign-keyed to these tables; that's a
+# deliberate later step (it means reconciling existing row values first,
+# e.g. events.environment is currently lowercase 'production' while the
+# spec's convention is uppercase 'PRODUCTION').
+#
+# Seed values below are read directly from this codebase's own live
+# behaviour, not guessed from the spec's illustrative examples:
+#   - instruments: the 7 pairs in INSTRUMENTS (canonical_code = OANDA style).
+#   - timeframes: the actual codes _normalize_tv_interval() produces
+#     ("{digits}m" for intraday, "d"/"w" passthrough for daily/weekly) -
+#     note this is a different notation than the spec's "M5"/"D1" style
+#     example, which is exactly the kind of drift section 49 warns about;
+#     recording the real one here is more useful than inventing a parallel
+#     one nothing actually emits.
+#   - providers: the real origin values already written by log_event()
+#     (tradingview, oanda_via_make -> OANDA + MAKE, manus_engine -> MANUS).
+#   - environments: only PRODUCTION. Per section 3.3, a non-production
+#     database would get its own separate reference.environments seeded
+#     with DEVELOPMENT/VALIDATION/DEMO/SHADOW/REPLAY - until that database
+#     exists (physical separation was deliberately deferred), keeping only
+#     PRODUCTION here means a row can't be mislabelled as DEMO even by
+#     accident, since DEMO doesn't exist as a valid value in this database.
+_REFERENCE_SCHEMA_SQL = """
+CREATE SCHEMA IF NOT EXISTS reference;
+
+CREATE TABLE IF NOT EXISTS reference.environments (
+    environment_id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS reference.instruments (
+    instrument_id SERIAL PRIMARY KEY,
+    canonical_code TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    asset_class TEXT,
+    base_currency TEXT,
+    quote_currency TEXT,
+    oanda_code TEXT,
+    tradingview_code TEXT,
+    price_precision INTEGER,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS reference.timeframes (
+    timeframe_id SERIAL PRIMARY KEY,
+    canonical_code TEXT UNIQUE NOT NULL,
+    seconds INTEGER,
+    display_name TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS reference.providers (
+    provider_id SERIAL PRIMARY KEY,
+    provider_code TEXT UNIQUE NOT NULL,
+    provider_type TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS reference.event_types (
+    event_type_id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    description TEXT
+);
+
+INSERT INTO reference.environments (code, display_name) VALUES
+    ('PRODUCTION', 'Production')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO reference.instruments
+    (canonical_code, display_name, asset_class, base_currency, quote_currency, oanda_code, tradingview_code, price_precision)
+VALUES
+    ('GBP_USD', 'GBP/USD', 'fx',    'GBP', 'USD', 'GBP_USD', 'GBPUSD', 5),
+    ('EUR_USD', 'EUR/USD', 'fx',    'EUR', 'USD', 'EUR_USD', 'EURUSD', 5),
+    ('AUD_USD', 'AUD/USD', 'fx',    'AUD', 'USD', 'AUD_USD', 'AUDUSD', 5),
+    ('USD_CAD', 'USD/CAD', 'fx',    'USD', 'CAD', 'USD_CAD', 'USDCAD', 5),
+    ('USD_JPY', 'USD/JPY', 'fx',    'USD', 'JPY', 'USD_JPY', 'USDJPY', 3),
+    ('XAU_USD', 'XAU/USD', 'metal', 'XAU', 'USD', 'XAU_USD', 'XAUUSD', 2),
+    ('XAG_USD', 'XAG/USD', 'metal', 'XAG', 'USD', 'XAG_USD', 'XAGUSD', 3)
+ON CONFLICT (canonical_code) DO NOTHING;
+
+INSERT INTO reference.timeframes (canonical_code, seconds, display_name) VALUES
+    ('1m',   60,     '1 minute'),
+    ('2m',   120,    '2 minutes'),
+    ('3m',   180,    '3 minutes'),
+    ('5m',   300,    '5 minutes'),
+    ('15m',  900,    '15 minutes'),
+    ('30m',  1800,   '30 minutes'),
+    ('60m',  3600,   '1 hour'),
+    ('240m', 14400,  '4 hours'),
+    ('d',    86400,  '1 day'),
+    ('w',    604800, '1 week')
+ON CONFLICT (canonical_code) DO NOTHING;
+
+INSERT INTO reference.providers (provider_code, provider_type) VALUES
+    ('TRADINGVIEW', 'market_data'),
+    ('OANDA',       'broker'),
+    ('MAKE',        'automation'),
+    ('MANUS',       'agent_runtime')
+ON CONFLICT (provider_code) DO NOTHING;
+
+INSERT INTO reference.event_types (code, description) VALUES
+    ('market_data',   'Raw market tick/candle data received from TradingView'),
+    ('prediction',    'Intelligence evaluation output logged at /evaluate time, keyed by meta.signal_id'),
+    ('trade_outcome', 'Closed-trade result reconciled from OANDA, keyed by trade_id')
+ON CONFLICT (code) DO NOTHING;
 """
 
 
@@ -107,6 +257,7 @@ def _ensure_events_schema() -> None:
     try:
         with conn, conn.cursor() as cur:
             cur.execute(_EVENTS_SCHEMA_SQL)
+            cur.execute(_REFERENCE_SCHEMA_SQL)
     finally:
         pool.putconn(conn)
 
