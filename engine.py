@@ -9,7 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import floor, isfinite
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -35,7 +35,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgJson = None
 
 
-ENGINE_VERSION = "3.6.0"
+ENGINE_VERSION = "3.6.1"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -1228,14 +1228,51 @@ class TradeOpened(BaseModel):
     # Same OANDA account snapshot /evaluate receives, taken fresh at
     # order-placement time rather than at decision time - the two can
     # differ by the few seconds/requests in between.
-    account_snapshot: Optional[Dict[str, Any]] = None
+    #
+    # account_snapshot / oanda_order_response accept EITHER a JSON-encoded
+    # string OR an already-parsed object. They arrive as strings in
+    # practice: the Make side builds this request body as hand-written raw
+    # JSON text, and embedding a whole nested object into that text
+    # unquoted (relying on toString() to produce something splice-safe)
+    # turned out not to be reliable - on 2026-10-02 it broke EVERY single
+    # /trade-opened call (100% 422 rate across all 5 pairs) because the
+    # unquoted embed corrupted the outer JSON body before our code ever
+    # ran. escapeJSON(toString(...)), quoted like any other string field,
+    # is the one embedding technique Make documents as safe - so that's
+    # what the Make side now sends, and _parse_json_field() below decodes
+    # it here instead of trusting FastAPI's own body parser with it.
+    account_snapshot: Optional[Union[str, Dict[str, Any]]] = None
     # The raw, complete JSON body OANDA's POST /orders returned. Forwarded
     # wholesale rather than hand-picked field-by-field (as the old Sheets
     # mapper did with ~15 separate IML expressions per pair) so nothing
     # from OANDA's response can be silently missed; _derive_oanda_fill()
     # below extracts the handful of facts that need their own columns.
-    oanda_order_response: Optional[Dict[str, Any]] = None
+    oanda_order_response: Optional[Union[str, Dict[str, Any]]] = None
     model_config = {"extra": "allow"}
+
+
+def _parse_json_field(value: Any, field_name: str) -> Dict[str, Any]:
+    """Decodes account_snapshot / oanda_order_response, which now arrive as
+    escapeJSON(toString(...))-encoded JSON TEXT (a quoted string field),
+    not a bare nested object - see the comment on TradeOpened above for
+    why. Never raises: a value that isn't valid JSON gets recorded under
+    "_unparsed" rather than dropped or rejected, so a future encoding
+    mismatch degrades to a visible, queryable gap instead of silently
+    losing the whole trade-opened event the way the 2026-10-02 incident
+    did. A dict passed straight through (e.g. a future non-Make caller
+    posting real JSON) is accepted as-is."""
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            logging.error("trade-opened: %s was not valid JSON text: %r", field_name, value[:1000])
+            return {"_unparsed": value[:2000]}
+        return parsed if isinstance(parsed, dict) else {"_unparsed": value[:2000]}
+    return {}
 
 
 def _derive_oanda_fill(order_response: Dict[str, Any]) -> Dict[str, Any]:
@@ -1404,7 +1441,10 @@ def trade_opened(req: TradeOpened):
     if not trade_id:
         return JSONResponse(status_code=400, content={"status": "error", "error": "trade_id is required"})
 
-    fill_facts = _derive_oanda_fill(body.get("oanda_order_response") or {})
+    account_snapshot = _parse_json_field(body.get("account_snapshot"), "account_snapshot")
+    oanda_order_response = _parse_json_field(body.get("oanda_order_response"), "oanda_order_response")
+
+    fill_facts = _derive_oanda_fill(oanda_order_response)
     event_time = _parse_event_time(body.get("opened_at"))
     try:
         event_id = log_event(
@@ -1416,8 +1456,8 @@ def trade_opened(req: TradeOpened):
                 "instrument": body.get("instrument"),
                 "direction": body.get("direction"),
                 "final_trade_plan": body.get("final_trade_plan"),
-                "account_snapshot": body.get("account_snapshot"),
-                "oanda_order_response": body.get("oanda_order_response"),
+                "account_snapshot": account_snapshot,
+                "oanda_order_response": oanda_order_response,
                 **fill_facts,
             },
             event_id=hashlib.sha256(f"trade_opened:{trade_id}".encode("utf-8")).hexdigest(),
