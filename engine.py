@@ -37,7 +37,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "3.7.0"
+ENGINE_VERSION = "3.8.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -101,6 +101,26 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 #   is still thin (trade_opened bridging has only been reliable since
 #   today, v3.6.1), so partial results are expected and far more useful
 #   than an all-or-nothing 500.
+#
+# v3.8.0: signal_score() now also reads signal.conviction_score, alongside
+#   the existing extensions.candidate_strength. This follows directly from
+#   the v3.7.0 /analytics/strategy-report diagnostic and the matching Pine
+#   v5.1.0 rebuild (all 5 pairs): confidence_raw, confidence_pct and
+#   conviction_score were previously all the same duplicated value on the
+#   Pine side, so reading just one of them (candidate_strength, which maps
+#   to confidence_pct) lost nothing. Now that conviction_score is a
+#   genuinely independent breadth-of-confirmation measure (percentage of 6
+#   confirming conditions met - trend/HTF/DI/MACD alignment, volatility
+#   sweet-spot, session quality - as opposed to candidate_strength's
+#   point-weighted magnitude score), it is scored as its own input rather
+#   than left unread. Weighted slightly lighter than candidate_strength
+#   (+/-6 vs +/-8 max swing) since it is a brand-new, not-yet-validated
+#   signal - revisit the relative weighting once live data shows whether it
+#   actually separates approved-and-won from approved-and-lost candidates.
+#   confidence_raw (the unclamped score) is deliberately NOT read yet - it
+#   only adds information in the rare case candidate_strength saturated at
+#   0 or 100, and there isn't yet a live sample to show that's worth a
+#   separate scoring term; revisit alongside the next diagnostic pass.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
@@ -542,11 +562,9 @@ class ModelPolicy:
 
 # structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
 # input (candidate generator, section "12. PROPOSED STOP AND TARGET").
-# Confirmed at 0.6 pips / 12-bar lookback for GBPUSD in
-# STL_GBPUSD_2m_CandidateGenerator_v5.pine. The other pairs still run their
-# pre-rebuild Pine scripts, so 0.6 is used here as the same base-template
-# default for now - re-verify this value against each pair's script once it
-# is rebuilt from the GBPUSD v5.0.0 template.
+# Confirmed at 0.6 pips / 12-bar lookback across all 5 pairs as of the
+# v5.1.0 rebuild (STL_{PAIR}_2m_CandidateGenerator_v5.pine, 2026-10-03) -
+# re-verify this value if any pair's script changes it going forward.
 #
 # Trailing bool on each line below is quote_ccy_is_account_ccy: True for the
 # three XXX/USD pairs and both metals (quote currency USD == account
@@ -739,6 +757,7 @@ def signal_score(payload: Dict[str, Any], model: str) -> float:
     vol = as_str(get_path(payload, "structure.volatility_regime"), "unknown").lower()
     adx = as_float(get_path(payload, "indicators.adx"))
     candidate_strength = as_float(get_path(payload, "extensions.candidate_strength"), 50.0) or 50.0
+    conviction_score = as_float(get_path(payload, "signal.conviction_score"), 50.0) or 50.0
 
     score = 45.0
     if direction == "long":
@@ -771,6 +790,7 @@ def signal_score(payload: Dict[str, Any], model: str) -> float:
             score += 5
 
     score += clamp((candidate_strength - 50.0) * 0.20, -8.0, 8.0)
+    score += clamp((conviction_score - 50.0) * 0.12, -6.0, 6.0)
     return clamp(score, 0.0, 100.0)
 
 
