@@ -28,14 +28,16 @@ try:
     import psycopg2
     from psycopg2 import pool as _pg_pool
     from psycopg2.extras import Json as _PgJson
+    from psycopg2.extras import RealDictCursor as _PgRealDictCursor
 except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     # the events pipeline is best-effort and must never take trading down.
     psycopg2 = None
     _pg_pool = None
     _PgJson = None
+    _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "3.6.2"
+ENGINE_VERSION = "3.7.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -85,6 +87,20 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 #   was silently stuck exactly where it was before v3.6.0. Switched both
 #   master_trading_log and master_decision_log to DROP VIEW IF EXISTS +
 #   CREATE VIEW, which isn't subject to the column-identity restriction.
+#
+# v3.7.0: added GET /analytics/strategy-report - a single read-only endpoint
+#   that rolls up everything needed for the first strategy-performance
+#   diagnostic (closed-trade win/loss/PnL by instrument, the /evaluate
+#   approval funnel and rejection-reason breakdown, approved-vs-rejected
+#   score distributions, Pine setup_class/entry_model breakdowns pulled from
+#   every prediction's archived raw_signal_payload, and the full rows of
+#   whatever trades already have a complete prediction->trade_opened->
+#   trade_outcome bridge). Every section is independently try/excepted so
+#   one bad query can't blank out the rest of the report - this endpoint is
+#   read-only and exploratory by nature, used while the events data itself
+#   is still thin (trade_opened bridging has only been reliable since
+#   today, v3.6.1), so partial results are expected and far more useful
+#   than an all-or-nothing 500.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
@@ -1591,3 +1607,188 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
         logging.exception("prediction event logging failed (non-fatal, trade unaffected)")
 
     return result
+
+
+def _jsonable(value: Any) -> Any:
+    """Recursively converts a raw psycopg2 row value (Decimal, datetime,
+    etc.) into something the default JSON encoder can handle, since this
+    endpoint hand-builds its response from RealDictCursor rows rather than
+    going through a Pydantic response model."""
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if hasattr(value, "__float__") and not isinstance(value, (int, float, bool)):
+        # Decimal and similar numeric types from numeric/::numeric columns.
+        try:
+            return float(value)
+        except Exception:
+            return str(value)
+    return value
+
+
+def _analytics_query(cur, sql: str, params: Optional[Tuple[Any, ...]] = None) -> list:
+    cur.execute(sql, params or ())
+    return [_jsonable(dict(row)) for row in cur.fetchall()]
+
+
+@app.get("/analytics/strategy-report")
+def strategy_report() -> Dict[str, Any]:
+    """Read-only diagnostic rollup for the Pine-strategy improvement effort
+    kicked off 2026-10-02. Pulls everything needed for a first performance
+    report in one call, since direct Postgres access from outside Render's
+    network is blocked by this database's (deliberately empty) IP allowlist -
+    this endpoint is the only way anything outside the engine itself can see
+    aggregate numbers.
+
+    Each section below is independent and wrapped in its own try/except:
+    the events data is still thin in places (trade_opened bridging has only
+    been reliable since today), so a query that returns zero rows or hits an
+    edge case in one section must never blank out every other section. A
+    failed section shows up under "errors" with its name and the exception
+    text rather than 500ing the whole report."""
+    pool = _get_pool()
+    if pool is None:
+        return JSONResponse(status_code=503, content={"status": "error", "error": "DATABASE_URL not configured or Postgres pool unavailable"})
+
+    report: Dict[str, Any] = {"generated_at": datetime.now(timezone.utc).isoformat(), "engine_version": ENGINE_VERSION}
+    errors: Dict[str, str] = {}
+
+    def run(name: str, sql: str, params: Optional[Tuple[Any, ...]] = None) -> None:
+        try:
+            with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
+                report[name] = _analytics_query(cur, sql, params)
+        except Exception as exc:
+            conn.rollback()  # clear the aborted-transaction state so later sections can still run
+            errors[name] = str(exc)
+            logging.exception("strategy-report section %s failed", name)
+
+    conn = pool.getconn()
+    try:
+        run(
+            "events_overview",
+            """
+            SELECT event_type, COUNT(*) AS n, MIN(event_time) AS first_event, MAX(event_time) AS last_event
+            FROM events GROUP BY event_type ORDER BY event_type
+            """,
+        )
+        run(
+            "trade_outcomes_overall",
+            """
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status = 'win') AS wins,
+                COUNT(*) FILTER (WHERE status = 'loss') AS losses,
+                COUNT(*) FILTER (WHERE status NOT IN ('win', 'loss')) AS other,
+                ROUND(SUM((payload->>'realized_pnl')::numeric), 4) AS total_pnl,
+                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'win'), 4) AS avg_win_pnl,
+                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'loss'), 4) AS avg_loss_pnl,
+                MIN(event_time) AS first_trade,
+                MAX(event_time) AS last_trade
+            FROM events WHERE event_type = 'trade_outcome'
+            """,
+        )
+        run(
+            "trade_outcomes_by_instrument",
+            """
+            SELECT
+                instrument,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status = 'win') AS wins,
+                COUNT(*) FILTER (WHERE status = 'loss') AS losses,
+                COUNT(*) FILTER (WHERE status NOT IN ('win', 'loss')) AS other,
+                ROUND(SUM((payload->>'realized_pnl')::numeric), 4) AS total_pnl,
+                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'win'), 4) AS avg_win_pnl,
+                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'loss'), 4) AS avg_loss_pnl,
+                MIN(event_time) AS first_trade,
+                MAX(event_time) AS last_trade
+            FROM events
+            WHERE event_type = 'trade_outcome'
+            GROUP BY instrument
+            ORDER BY total_pnl ASC NULLS LAST
+            """,
+        )
+        run(
+            "trade_outcomes_by_hour_utc",
+            """
+            SELECT
+                instrument,
+                EXTRACT(HOUR FROM event_time)::int AS hour_utc,
+                COUNT(*) AS n,
+                COUNT(*) FILTER (WHERE status = 'win') AS wins,
+                ROUND(SUM((payload->>'realized_pnl')::numeric), 4) AS total_pnl
+            FROM events
+            WHERE event_type = 'trade_outcome'
+            GROUP BY instrument, hour_utc
+            ORDER BY instrument, hour_utc
+            """,
+        )
+        run(
+            "prediction_approval_funnel",
+            """
+            SELECT instrument, payload->>'approval_status' AS approval_status, COUNT(*) AS n
+            FROM events
+            WHERE event_type = 'prediction'
+            GROUP BY instrument, approval_status
+            ORDER BY instrument, n DESC
+            """,
+        )
+        run(
+            "rejection_reasons",
+            """
+            SELECT instrument, payload->>'rejection_reason_code' AS rejection_reason_code, COUNT(*) AS n
+            FROM events
+            WHERE event_type = 'prediction' AND payload->>'approval_status' = 'rejected'
+            GROUP BY instrument, rejection_reason_code
+            ORDER BY n DESC
+            LIMIT 50
+            """,
+        )
+        run(
+            "score_distributions_by_approval_status",
+            """
+            SELECT
+                payload->>'approval_status' AS approval_status,
+                COUNT(*) AS n,
+                ROUND(AVG((payload->>'signal_quality_score')::numeric), 3) AS avg_signal_quality_score,
+                ROUND(AVG((payload->>'risk_score')::numeric), 3) AS avg_risk_score,
+                ROUND(AVG((payload->>'context_score')::numeric), 3) AS avg_context_score,
+                ROUND(AVG((payload->>'strategy_fit_score')::numeric), 3) AS avg_strategy_fit_score,
+                ROUND(AVG((payload->>'predicted_win_probability')::numeric), 4) AS avg_predicted_win_probability,
+                ROUND(AVG((payload->>'expected_net_r')::numeric), 4) AS avg_expected_net_r,
+                ROUND(AVG((payload->>'shadow_score_v0')::numeric), 3) AS avg_shadow_score_v0
+            FROM events
+            WHERE event_type = 'prediction'
+            GROUP BY approval_status
+            """,
+        )
+        run(
+            "setup_breakdown",
+            """
+            SELECT
+                instrument,
+                payload->>'approval_status' AS approval_status,
+                payload->'raw_signal_payload'->'signal'->>'setup_class' AS setup_class,
+                payload->'raw_signal_payload'->'signal'->>'entry_model' AS entry_model,
+                COUNT(*) AS n
+            FROM events
+            WHERE event_type = 'prediction'
+            GROUP BY instrument, approval_status, setup_class, entry_model
+            ORDER BY instrument, n DESC
+            LIMIT 200
+            """,
+        )
+        run(
+            "bridged_trades",
+            """
+            SELECT * FROM master_trading_log WHERE opened_at IS NOT NULL
+            ORDER BY closed_at DESC LIMIT 100
+            """,
+        )
+    finally:
+        pool.putconn(conn)
+
+    report["errors"] = errors
+    return report
