@@ -7,7 +7,7 @@ import os
 import re
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from math import floor, isfinite
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -37,7 +37,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "3.8.0"
+ENGINE_VERSION = "3.9.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -121,6 +121,26 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 #   only adds information in the rare case candidate_strength saturated at
 #   0 or 100, and there isn't yet a live sample to show that's worth a
 #   separate scoring term; revisit alongside the next diagnostic pass.
+#
+# v3.9.0: two additions, both in support of the gold/silver strategy-
+#   improvement work:
+#   1. reference.timeframes was missing a '10m' row (it jumped straight from
+#      5m to 15m) - added. Harmless gap in practice (events.timeframe is
+#      still free-text, not yet FK'd to this table - see the comment on
+#      _REFERENCE_SCHEMA_SQL below), but this table is meant to become the
+#      canonical enum once FK enforcement is added, so it's worth closing
+#      now while it's a one-line, ON CONFLICT DO NOTHING change rather than
+#      a gap someone has to debug into later.
+#   2. added GET /analytics/export - a read-only bulk export, complementing
+#      /analytics/strategy-report (which only returns aggregate rollups).
+#      This is the endpoint Claude uses to actually pull the underlying
+#      1m/2m/3m/5m/10m market-data candles plus the matching trade_outcome/
+#      prediction/trade_opened rows for a given instrument and date window,
+#      to cross-reference entry/exit quality against the raw price action
+#      and work on improving profit factor - direct Postgres access is
+#      blocked by this database's deliberately empty IP allowlist (same
+#      reason /analytics/strategy-report exists), so this is the only way
+#      to get the raw rows rather than just aggregates.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
@@ -385,6 +405,7 @@ INSERT INTO reference.timeframes (canonical_code, seconds, display_name) VALUES
     ('2m',   120,    '2 minutes'),
     ('3m',   180,    '3 minutes'),
     ('5m',   300,    '5 minutes'),
+    ('10m',  600,    '10 minutes'),
     ('15m',  900,    '15 minutes'),
     ('30m',  1800,   '30 minutes'),
     ('60m',  3600,   '1 hour'),
@@ -1806,6 +1827,160 @@ def strategy_report() -> Dict[str, Any]:
             SELECT * FROM master_trading_log WHERE opened_at IS NOT NULL
             ORDER BY closed_at DESC LIMIT 100
             """,
+        )
+    finally:
+        pool.putconn(conn)
+
+    report["errors"] = errors
+    return report
+
+
+@app.get("/analytics/export")
+def analytics_export(
+    instrument: Optional[str] = None,
+    timeframe: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    limit: int = 20000,
+) -> Dict[str, Any]:
+    """Read-only bulk export, complementing /analytics/strategy-report above
+    (which only ever returns aggregates/rollups, never the underlying rows).
+    Added v3.9.0 so the raw 1m/2m/3m/5m/10m market-data candles from the
+    Market Data Loggers can actually be pulled and cross-referenced against
+    real trade outcomes - direct Postgres access from outside Render's
+    network is blocked by this database's deliberately empty IP allowlist,
+    same reason strategy_report() exists, so this is the only way an
+    external caller (this includes Claude, doing the profit-factor
+    improvement work) gets the raw rows rather than just aggregate numbers.
+
+    instrument: canonical TradingView ticker (XAUUSD, GBPUSD, ...). Required
+    to get the market_data_candles section - that series is large enough (a
+    week of 1m bars alone is on the order of several thousand rows per
+    instrument) that returning it for every instrument by default would make
+    one call unwieldy. Omit it to get only the smaller trade_outcomes /
+    predictions / trade_opened sections, across all instruments, instead.
+    timeframe: one canonical code (1m/2m/3m/5m/10m/...). Omitted -> every
+    timeframe currently logged for the given instrument.
+    start/end: ISO8601 timestamps (date or datetime; anything
+    _parse_event_time() already accepts for the rest of the engine).
+    Defaults to the 7 days ending now.
+    limit: per-section row cap (applied independently to each of the four
+    sections below) so one call can't return an unbounded payload; raise it
+    explicitly for a wider pull once you know how much a given window
+    actually returns.
+    """
+    pool = _get_pool()
+    if pool is None:
+        return JSONResponse(status_code=503, content={"status": "error", "error": "DATABASE_URL not configured or Postgres pool unavailable"})
+
+    end_dt = _parse_event_time(end) if end else datetime.now(timezone.utc)
+    start_dt = _parse_event_time(start) if start else (end_dt - timedelta(days=7))
+
+    report: Dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "engine_version": ENGINE_VERSION,
+        "window": {"start": start_dt.isoformat(), "end": end_dt.isoformat()},
+        "instrument": instrument,
+        "timeframe": timeframe,
+        "limit": limit,
+    }
+    errors: Dict[str, str] = {}
+
+    def run(name: str, sql: str, params: Tuple[Any, ...]) -> None:
+        try:
+            with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
+                report[name] = _analytics_query(cur, sql, params)
+        except Exception as exc:
+            conn.rollback()  # clear the aborted-transaction state so later sections can still run
+            errors[name] = str(exc)
+            logging.exception("analytics-export section %s failed", name)
+
+    conn = pool.getconn()
+    try:
+        if instrument:
+            tf_clause = "AND timeframe = %s" if timeframe else ""
+            params = [instrument, start_dt, end_dt] + ([timeframe] if timeframe else []) + [limit]
+            run(
+                "market_data_candles",
+                f"""
+                SELECT
+                    instrument, timeframe, event_time,
+                    (payload->>'open')::numeric   AS open,
+                    (payload->>'high')::numeric   AS high,
+                    (payload->>'low')::numeric    AS low,
+                    (payload->>'close')::numeric  AS close,
+                    (payload->>'volume')::numeric AS volume
+                FROM events
+                WHERE event_type = 'market_data'
+                  AND instrument = %s
+                  AND event_time >= %s AND event_time < %s
+                  {tf_clause}
+                ORDER BY timeframe, event_time ASC
+                LIMIT %s
+                """,
+                tuple(params),
+            )
+        else:
+            report["market_data_candles"] = []
+            report["note"] = "Pass instrument= to also pull raw candles; without it only the trade/prediction sections below are returned."
+
+        instrument_clause = "AND instrument = %s" if instrument else ""
+        instrument_params = [instrument] if instrument else []
+
+        run(
+            "trade_outcomes",
+            f"""
+            SELECT
+                instrument, event_time, trade_id, status AS outcome,
+                payload->>'exit_reason' AS exit_reason,
+                (payload->>'realized_pnl')::numeric AS realized_pnl,
+                (payload->>'realized_r')::numeric AS realized_r,
+                (payload->>'exit_price')::numeric AS exit_price
+            FROM events
+            WHERE event_type = 'trade_outcome'
+              AND event_time >= %s AND event_time < %s
+              {instrument_clause}
+            ORDER BY event_time ASC
+            LIMIT %s
+            """,
+            tuple([start_dt, end_dt] + instrument_params + [limit]),
+        )
+        run(
+            "predictions",
+            f"""
+            SELECT
+                instrument, event_time, trade_id,
+                payload->>'approval_status' AS approval_status,
+                payload->>'rejection_reason_code' AS rejection_reason_code,
+                (payload->>'predicted_win_probability')::numeric AS predicted_win_probability,
+                (payload->>'expected_net_r')::numeric AS expected_net_r,
+                payload->'raw_signal_payload'->'signal'->>'entry_model' AS entry_model,
+                payload->'raw_signal_payload'->'signal'->>'setup_class' AS setup_class
+            FROM events
+            WHERE event_type = 'prediction'
+              AND event_time >= %s AND event_time < %s
+              {instrument_clause}
+            ORDER BY event_time ASC
+            LIMIT %s
+            """,
+            tuple([start_dt, end_dt] + instrument_params + [limit]),
+        )
+        run(
+            "trade_opened",
+            f"""
+            SELECT
+                instrument, event_time, trade_id,
+                payload->>'direction' AS direction,
+                status AS fill_status,
+                payload->'final_trade_plan' AS final_trade_plan
+            FROM events
+            WHERE event_type = 'trade_opened'
+              AND event_time >= %s AND event_time < %s
+              {instrument_clause}
+            ORDER BY event_time ASC
+            LIMIT %s
+            """,
+            tuple([start_dt, end_dt] + instrument_params + [limit]),
         )
     finally:
         pool.putconn(conn)
