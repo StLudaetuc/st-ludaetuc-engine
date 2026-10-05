@@ -37,7 +37,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "3.9.0"
+ENGINE_VERSION = "3.10.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -141,6 +141,27 @@ CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 #      blocked by this database's deliberately empty IP allowlist (same
 #      reason /analytics/strategy-report exists), so this is the only way
 #      to get the raw rows rather than just aggregates.
+#
+# v3.10.0: prediction-accuracy project (Andy, 2026-10-05) - the goal is to
+#   check every signal Manus ever saw against what the market's own 1m
+#   candles actually did afterwards, not just the handful that became real
+#   OANDA trades, so the model can start learning from "no trade" decisions
+#   too. Two changes:
+#   1. /evaluate's "prediction" event now also logs
+#      "hypothetical_trade_plan" (the same entry/stop_loss/take_profit
+#      plan_trade() already computes for every signal, previously kept
+#      only when approved, under final_trade_plan). This is going-forward
+#      only: a prediction logged before this version still has no plan to
+#      score.
+#   2. New GET /analytics/prediction-accuracy - for every prediction with a
+#      usable plan (final_trade_plan when approved, hypothetical_trade_plan
+#      otherwise), walks the 1m market_data candles forward from the
+#      signal's bar time and checks whether price reached the predicted
+#      take-profit or stop-loss level first, within a configurable
+#      lookahead. That gives a real win/loss label for rejected signals
+#      too, not just approved ones, which is a much denser dataset to
+#      recalibrate predicted_win_probability / shadow_score_v0 against
+#      than waiting on live trade closures alone.
 
 # --- St Ludaetuc Market Data Centre / canonical events ledger -------------
 #
@@ -1595,6 +1616,28 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
         if trade_id:
             manus = result.get("manus") if isinstance(result.get("manus"), dict) else {}
             event_time = _parse_event_time(get_path(payload_in, "market.bar_time_utc"))
+            # v3.10.0: diagnostics.trade_plan_preview is plan_trade()'s own
+            # raw dict, which uses "sl"/"tp" (see plan_trade() above) - NOT
+            # the "stop_loss"/"take_profit" naming final_trade_plan uses a
+            # few lines below. Renamed here so hypothetical_trade_plan and
+            # final_trade_plan share one consistent shape downstream
+            # (notably /analytics/prediction-accuracy, which reads
+            # whichever of the two is present and must not care which).
+            _plan_preview = manus.get("diagnostics", {}).get("trade_plan_preview") or {}
+            hypothetical_trade_plan = (
+                {
+                    "entry": _plan_preview.get("entry"),
+                    "stop_loss": _plan_preview.get("sl"),
+                    "take_profit": _plan_preview.get("tp"),
+                    "rr_ratio": _plan_preview.get("rr"),
+                    "position_size_units": _plan_preview.get("units"),
+                    "position_size_lots": _plan_preview.get("lots"),
+                    "planning_source": _plan_preview.get("source"),
+                    "stop_basis": _plan_preview.get("stop_basis"),
+                }
+                if _plan_preview.get("sl") is not None and _plan_preview.get("tp") is not None
+                else None
+            )
             log_event(
                 event_type="prediction",
                 origin="manus_engine",
@@ -1618,6 +1661,27 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
                     "expected_cost_r": manus.get("expected_cost_r"),
                     "expected_net_r": manus.get("expected_net_r"),
                     "final_trade_plan": manus.get("final_trade_plan"),
+                    # v3.10.0: plan_trade() already computes an entry/stop
+                    # loss/take profit for every signal that resolves to a
+                    # valid instrument + direction, regardless of whether
+                    # Manus approves it - diagnostics.trade_plan_preview is
+                    # that same dict, set unconditionally in _result().
+                    # Previously, only an APPROVED signal's plan survived
+                    # into this logged prediction event (final_trade_plan
+                    # above is None for every rejection), so a rejected
+                    # signal's hypothetical trade was lost the moment this
+                    # event was written - there was no way to later ask
+                    # "would this have won if we'd taken it?" for anything
+                    # Manus didn't approve. Logging the same plan here,
+                    # unconditionally, is what makes that question
+                    # answerable later by walking 1m market_data candles
+                    # forward from market.bar_time_utc against this plan's
+                    # stop_loss/take_profit - see GET
+                    # /analytics/prediction-accuracy. None whenever
+                    # plan_trade() itself couldn't produce a usable plan
+                    # (e.g. direction wasn't long/short, or entry<=0) -
+                    # that's a real "can't be scored" case, not a bug.
+                    "hypothetical_trade_plan": hypothetical_trade_plan,
                     "shadow_score_v0": shadow_score,
                     # The full raw signal payload (every indicator/structure/
                     # context field the candidate generator sent), not just
@@ -1984,6 +2048,302 @@ def analytics_export(
         )
     finally:
         pool.putconn(conn)
+
+    report["errors"] = errors
+    return report
+
+
+# --- GET /analytics/prediction-accuracy ------------------------------------
+#
+# See the v3.10.0 changelog entry above ENGINE_VERSION for the full
+# rationale. This is the read side of that change; the write side (every
+# /evaluate "prediction" event now also logs hypothetical_trade_plan for
+# rejected signals, not just approved ones) lives just above in evaluate().
+#
+# Checks every /evaluate "prediction" - approved or rejected - against what
+# the market's own 1m candles (the Market Data Centre's "market_data"
+# events, pushed straight from TradingView, timeframe "1m") actually did
+# afterwards: did price reach the predicted take-profit before the
+# predicted stop-loss, or the other way round? This is independent of
+# whether a trade was ever actually placed - that's the whole point. It
+# lets a "no trade" decision get a real win/loss label too, instead of the
+# model only ever learning from the handful of signals that became real
+# OANDA trades.
+#
+# _extract_ohlc() has to guess at the OHLC field names inside a
+# market_data event's payload, because that payload is stored exactly as
+# TradingView's alert body arrived (see POST /market-data above) - this
+# engine has never enforced a schema on it, by design, since the alert
+# JSON is authored on the Pine side and can change without a matching
+# engine deploy. It tries the common Pine alert spellings
+# (open/high/low/close, and the single-letter o/h/l/c some templates use)
+# case-insensitively, matching the lowercase field names /analytics/export
+# above already assumes. A row it can't parse is counted under
+# "unparseable_market_data_rows" in the report rather than silently
+# dropped, so a real field-name mismatch shows up as a visible number
+# instead of a quietly-thin one.
+def _extract_ohlc(payload: Any) -> Optional[Dict[str, float]]:
+    if not isinstance(payload, dict):
+        return None
+    lower = {str(k).lower(): v for k, v in payload.items()}
+    o = as_float(lower.get("open", lower.get("o")))
+    h = as_float(lower.get("high", lower.get("h")))
+    l = as_float(lower.get("low", lower.get("l")))
+    c = as_float(lower.get("close", lower.get("c")))
+    if o is None or h is None or l is None or c is None:
+        return None
+    return {"open": o, "high": h, "low": l, "close": c}
+
+
+def _score_prediction_against_candles(
+    direction: str,
+    stop_loss: float,
+    take_profit: float,
+    candles: list,
+) -> Tuple[str, Optional[str]]:
+    """Walks candles (ascending by time, each a dict from _extract_ohlc plus
+    an injected "_event_time") and returns (outcome, hit_at_iso).
+
+    outcome is "win" (take-profit reached first), "loss" (stop-loss reached
+    first), or "undetermined" (ran out of candles within the lookahead
+    window without either level being touched).
+
+    A single 1m candle whose range spans BOTH levels can't be resolved from
+    OHLC alone - there's no tick data here, no guaranteed intrabar
+    sequencing. Scored conservatively as a loss in that case: a stop-loss
+    is a standing order that's already live in the market the instant
+    price reaches it, while the take-profit only matters once price gets
+    there first. Assuming the best case (take-profit) for an ambiguous bar
+    would make this report flatter the strategy exactly in the scenario -
+    a fast, violent bar - where that matters most."""
+    for candle in candles:
+        high, low = candle["high"], candle["low"]
+        if direction == "long":
+            sl_hit = low <= stop_loss
+            tp_hit = high >= take_profit
+        else:
+            sl_hit = high >= stop_loss
+            tp_hit = low <= take_profit
+        if sl_hit:
+            return "loss", candle.get("_event_time")
+        if tp_hit:
+            return "win", candle.get("_event_time")
+    return "undetermined", None
+
+
+@app.get("/analytics/prediction-accuracy")
+def prediction_accuracy(lookahead_minutes: int = 240, since_hours: int = 720, max_predictions: int = 300) -> Dict[str, Any]:
+    """Read-only diagnostic: scores every /evaluate prediction (approved or
+    rejected) that has a usable entry/stop_loss/take_profit plan against
+    the instrument's own 1m market_data candles, to see whether price
+    would have reached the predicted take-profit before the predicted
+    stop-loss. See the v3.10.0 changelog entry above ENGINE_VERSION for the
+    full rationale; this is the read side of that change.
+
+    lookahead_minutes: how far forward (in 1m candles) to walk before
+        giving up and calling a prediction "undetermined" rather than
+        win/loss. Default 240 (4h).
+    since_hours: only scores predictions decided within this many hours of
+        now. Default 720 (30 days) - this tracks accuracy going forward,
+        it isn't meant to re-walk ancient history on every call.
+    max_predictions: hard cap on how many predictions get walked in one
+        call (each issues its own market_data query), so a bare call can't
+        accidentally scan the whole table.
+
+    Like /analytics/strategy-report, every section is independently
+    try/excepted - thin or malformed data in one place must never blank
+    out the rest of the report."""
+    pool = _get_pool()
+    if pool is None:
+        return JSONResponse(status_code=503, content={"status": "error", "error": "DATABASE_URL not configured or Postgres pool unavailable"})
+
+    report: Dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "engine_version": ENGINE_VERSION,
+        "lookahead_minutes": lookahead_minutes,
+        "since_hours": since_hours,
+    }
+    errors: Dict[str, str] = {}
+    scored: list = []
+    skipped = {"no_usable_plan": 0, "insufficient_market_data": 0, "unparseable_market_data_rows": 0}
+
+    conn = pool.getconn()
+    try:
+        try:
+            with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        trade_id AS signal_id,
+                        instrument,
+                        event_time AS predicted_at,
+                        payload->>'approval_status' AS approval_status,
+                        payload->>'rejection_reason_code' AS rejection_reason_code,
+                        NULLIF(payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
+                        NULLIF(payload->>'predicted_tp_before_sl_probability', '')::numeric AS predicted_tp_before_sl_probability,
+                        NULLIF(payload->>'shadow_score_v0', '')::numeric AS shadow_score_v0,
+                        COALESCE(payload->'final_trade_plan', payload->'hypothetical_trade_plan') AS trade_plan
+                    FROM events
+                    WHERE event_type = 'prediction'
+                      AND event_time >= now() - (%s || ' hours')::interval
+                      AND COALESCE(payload->'final_trade_plan', payload->'hypothetical_trade_plan') IS NOT NULL
+                    ORDER BY event_time ASC
+                    LIMIT %s
+                    """,
+                    (since_hours, max_predictions),
+                )
+                predictions = [dict(row) for row in cur.fetchall()]
+        except Exception as exc:
+            conn.rollback()
+            return JSONResponse(status_code=500, content={"status": "error", "error": f"failed to load predictions: {exc}"})
+
+        for pred in predictions:
+            plan = pred.get("trade_plan") or {}
+            entry = as_float(plan.get("entry"))
+            stop_loss = as_float(plan.get("stop_loss"))
+            take_profit = as_float(plan.get("take_profit"))
+            if entry is None or stop_loss is None or take_profit is None or entry <= 0:
+                skipped["no_usable_plan"] += 1
+                continue
+            direction = "long" if take_profit > entry else "short"
+
+            try:
+                with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT event_time, payload
+                        FROM events
+                        WHERE event_type = 'market_data'
+                          AND instrument = %s
+                          AND timeframe = '1m'
+                          AND event_time >= %s
+                          AND event_time <= %s + (%s || ' minutes')::interval
+                        ORDER BY event_time ASC
+                        """,
+                        (pred["instrument"], pred["predicted_at"], pred["predicted_at"], lookahead_minutes),
+                    )
+                    candle_rows = cur.fetchall()
+            except Exception:
+                conn.rollback()
+                skipped["insufficient_market_data"] += 1
+                continue
+
+            candles = []
+            unparseable = 0
+            for row in candle_rows:
+                ohlc = _extract_ohlc(row["payload"])
+                if ohlc is None:
+                    unparseable += 1
+                    continue
+                ohlc["_event_time"] = row["event_time"].isoformat()
+                candles.append(ohlc)
+            skipped["unparseable_market_data_rows"] += unparseable
+
+            if not candles:
+                skipped["insufficient_market_data"] += 1
+                continue
+
+            outcome, hit_at = _score_prediction_against_candles(direction, stop_loss, take_profit, candles)
+
+            candles_span_minutes = None
+            try:
+                last_candle_time = datetime.fromisoformat(candles[-1]["_event_time"])
+                candles_span_minutes = round((last_candle_time - pred["predicted_at"]).total_seconds() / 60.0, 1)
+            except Exception:
+                pass
+
+            if outcome == "undetermined" and (candles_span_minutes or 0) < lookahead_minutes * 0.9:
+                # Ran out of logged candles well short of the lookahead
+                # window - market_data just hasn't caught up yet (likely
+                # for anything decided recently), not a genuine case of
+                # price sitting between the two levels for the full
+                # window. Keep this distinct from a real timeout.
+                skipped["insufficient_market_data"] += 1
+                continue
+
+            scored.append({
+                "signal_id": pred["signal_id"],
+                "instrument": pred["instrument"],
+                "predicted_at": _jsonable(pred["predicted_at"]),
+                "approval_status": pred["approval_status"],
+                "rejection_reason_code": pred["rejection_reason_code"],
+                "direction": direction,
+                "entry": entry,
+                "stop_loss": stop_loss,
+                "take_profit": take_profit,
+                "predicted_win_probability": _jsonable(pred["predicted_win_probability"]),
+                "predicted_tp_before_sl_probability": _jsonable(pred["predicted_tp_before_sl_probability"]),
+                "shadow_score_v0": _jsonable(pred["shadow_score_v0"]),
+                "actual_outcome": outcome,
+                "actual_outcome_at": hit_at,
+                "candles_checked": len(candles),
+                "candles_span_minutes": candles_span_minutes,
+            })
+    finally:
+        pool.putconn(conn)
+
+    report["skipped"] = skipped
+    report["scored_predictions"] = scored
+    report["scored_count"] = len(scored)
+
+    # --- Aggregations (Python-side; `scored` is small enough per call,
+    # since max_predictions caps it, that this is simpler and safer than
+    # another round-trip of ad hoc SQL over a JSON blob we just built
+    # ourselves). ---
+    try:
+        determined = [s for s in scored if s["actual_outcome"] in ("win", "loss")]
+        report["determined_count"] = len(determined)
+        report["undetermined_count"] = len(scored) - len(determined)
+
+        def _bucket_stats(rows: list) -> Dict[str, Any]:
+            n = len(rows)
+            wins = sum(1 for r in rows if r["actual_outcome"] == "win")
+            probs = [r["predicted_win_probability"] for r in rows if r["predicted_win_probability"] is not None]
+            return {
+                "n": n,
+                "wins": wins,
+                "actual_win_rate": round(wins / n, 4) if n else None,
+                "avg_predicted_win_probability": round(sum(probs) / len(probs), 4) if probs else None,
+            }
+
+        report["accuracy_overall"] = _bucket_stats(determined)
+        report["accuracy_by_approval_status"] = {
+            status: _bucket_stats([r for r in determined if r["approval_status"] == status])
+            for status in sorted({r["approval_status"] for r in determined if r["approval_status"]})
+        }
+        report["accuracy_by_instrument"] = {
+            instr: _bucket_stats([r for r in determined if r["instrument"] == instr])
+            for instr in sorted({r["instrument"] for r in determined if r["instrument"]})
+        }
+        report["would_have_won_by_rejection_reason"] = {
+            reason: _bucket_stats([
+                r for r in determined
+                if r["approval_status"] == "rejected" and r["rejection_reason_code"] == reason
+            ])
+            for reason in sorted({
+                r["rejection_reason_code"] for r in determined
+                if r["approval_status"] == "rejected" and r["rejection_reason_code"]
+            })
+        }
+
+        # Calibration: bucket by predicted_win_probability decile and
+        # compare to the realized win rate in that bucket - this is the
+        # number that actually answers "how accurate are the predictions,
+        # and are they getting better" as this report is re-run over time.
+        deciles: Dict[str, list] = {}
+        for r in determined:
+            p = r["predicted_win_probability"]
+            if p is None:
+                continue
+            lo = min(int(p * 10) * 10, 90)
+            bucket = f"{lo}-{lo + 10}%"
+            deciles.setdefault(bucket, []).append(r)
+        report["calibration_by_predicted_probability_decile"] = {
+            bucket: _bucket_stats(rows) for bucket, rows in sorted(deciles.items())
+        }
+    except Exception as exc:
+        errors["aggregations"] = str(exc)
+        logging.exception("prediction-accuracy aggregation failed")
 
     report["errors"] = errors
     return report
