@@ -37,7 +37,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "3.10.0"
+ENGINE_VERSION = "3.11.0"
 RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
 CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
 
@@ -611,14 +611,32 @@ class ModelPolicy:
 # Trailing bool on each line below is quote_ccy_is_account_ccy: True for the
 # three XXX/USD pairs and both metals (quote currency USD == account
 # currency), False for USD/CAD and USD/JPY (quote currency CAD/JPY).
+#
+# v3.11.0 (2026-10-06): blocked_sessions narrowed to just ("unknown",) for
+# every pair, at Andy's request - previously "overnight" (all pairs) and
+# "asia" (every pair except AUD/USD) were hard-vetoed in _hard_rejection()
+# (BLOCKED_SESSION), so those sessions produced zero trades regardless of
+# signal quality - there was no way to learn whether the strategy actually
+# works outside the London/NY window because it was never allowed to try.
+# "unknown" stays blocked - that value means the Pine payload's own session
+# classification failed/was missing, a data-quality problem, not a real
+# session, so it's still treated as a hard-reject rather than something to
+# learn from. preferred_sessions is unchanged (still only the previously-
+# proven-good sessions get the +15 bonus in context_score() - everything
+# else, including the newly-unblocked ones, gets the neutral -5 "other"
+# treatment instead of the old -25 "blocked" penalty) so the model isn't
+# pre-biased toward or against asia/overnight before any real data exists on
+# them. Every other gate (spread/slippage limits, extreme-volatility block,
+# RR/probability/expected-value floors) is untouched and still applies in
+# every session - this change only removes the blanket time-of-day veto.
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown"), True),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("overnight", "unknown"), True),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("overnight", "unknown"), True),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), False),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), False),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), True),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("asia", "overnight", "unknown"), True),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
 }
 
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
@@ -2019,7 +2037,18 @@ def analytics_export(
                 (payload->>'predicted_win_probability')::numeric AS predicted_win_probability,
                 (payload->>'expected_net_r')::numeric AS expected_net_r,
                 payload->'raw_signal_payload'->'signal'->>'entry_model' AS entry_model,
-                payload->'raw_signal_payload'->'signal'->>'setup_class' AS setup_class
+                payload->'raw_signal_payload'->'signal'->>'setup_class' AS setup_class,
+                -- v3.11.0: surfaced alongside the session hard-block being
+                -- relaxed in INSTRUMENTS (see that changelog comment) - the
+                -- Pine payload already carried market.session_name/
+                -- session_phase on every signal, it was just buried inside
+                -- raw_signal_payload. Pulled to top-level columns here so a
+                -- per-session win-rate/expectancy breakdown (join this to
+                -- trade_outcomes on trade_id) doesn't need a JSON drill-down
+                -- every time someone wants to check how asia/overnight are
+                -- actually performing now that they're no longer vetoed.
+                payload->'raw_signal_payload'->'market'->>'session_name' AS session_name,
+                payload->'raw_signal_payload'->'market'->>'session_phase' AS session_phase
             FROM events
             WHERE event_type = 'prediction'
               AND event_time >= %s AND event_time < %s
