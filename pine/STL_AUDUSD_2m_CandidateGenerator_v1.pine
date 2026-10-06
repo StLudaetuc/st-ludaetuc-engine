@@ -1,0 +1,3237 @@
+//@version=6
+strategy(
+     title                   = "St Ludaetuc AUDUSD 2m Candidate Generator v5.0",
+     shorttitle              = "STLAUCG50",
+     overlay                 = true,
+     pyramiding              = 0,
+     initial_capital         = 10000,
+     currency                = currency.AUD,
+     default_qty_type        = strategy.percent_of_equity,
+     default_qty_value       = 0.50,
+     commission_type         = strategy.commission.cash_per_order,
+     commission_value        = 0.0,
+     slippage                = 1,
+     process_orders_on_close = true,
+     calc_on_order_fills     = true,
+     calc_on_every_tick      = false
+)
+
+// ============================================================================
+// ST LUDAETUC AUD/USD 2-MINUTE CANDIDATE GENERATOR v5.2.0
+//
+// TradingView proposes candidates.
+// Manus (the FastAPI scoring engine) approves or rejects.
+// Make.com routes approved decisions.
+// Oanda executes approved trades.
+//
+// Alert configuration:
+// Condition: Any alert() function call
+// Frequency: Once Per Bar Close
+//
+// ----------------------------------------------------------------------------
+// CHANGE LOG v5.2.0 ("trade every session" fix, 2026-10-06)
+// ----------------------------------------------------------------------------
+// Companion to the engine.py v3.11.0 change that narrowed every pair's
+// blocked_sessions down to just ("unknown",). That alone was not enough:
+// cross-checking live Make.com execution history showed essentially zero
+// trading activity of any kind (approved or rejected) outside roughly
+// 06:00/07:00-15:00 UTC on any pair, because validSession below had real,
+// unconditional gaps that could never produce a candidate regardless of any
+// input setting. For AUD/USD (session timezone Europe/London) those gaps
+// were identical in structure to the other FX scripts using this template:
+//   - 1600-2100 London time: nothing covered the New York afternoon once
+//     the London/NY overlap window (1300-1600) ended. Fixed by adding a
+//     dedicated newYorkSession window (default 1600-2100), always active
+//     like london/overlap. This also lets Pine finally emit the
+//     "new_york" session name engine.py's INSTRUMENTS['AUDUSD'] config
+//     already lists as preferred.
+//   - 2100-0000, 0600-0700, and 1200-1300 London time: three short
+//     transition windows between the named sessions with no coverage at
+//     all. Fixed by adding a single offpeakSession input (comma-separated
+//     multi-window, default "2100-0000,0600-0700,1200-1300") classified as
+//     a new "offpeak" session name, gated by a new allowOffpeak toggle
+//     (default true).
+// allowAsia was already true by default here (the 2026-09-27 port notice
+// set it deliberately, since engine.py lists "asia" as preferred for
+// AUD/USD and Asia/Sydney is this pair's native liquid session per the
+// 2026-10-03 diagnostic note) -- left unchanged, it was already correct
+// for the "trade every session" goal.
+// Untouched: london/overlap session window boundaries, every entry-model
+// condition (trend_pullback / momentum_continuation / range_reversal), all
+// risk/stop/target math, spread/slippage/volatility gates.
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// CHANGE LOG v5.1.0 (Pine performance-diagnostic follow-up, 2026-10-03)
+// ----------------------------------------------------------------------------
+// Prompted by a live-trade performance diagnostic covering all 5 pairs
+// (2026-10-01/02 data) that found: (a) confidence_raw, confidence_pct and
+// conviction_score were all wired to the exact same value, giving the
+// engine no independent breadth-of-confirmation signal; (b)
+// momentum_continuation (Model B) was approved by the engine far less
+// often than trend_pullback (Model A) despite an identical Pine-side ADX
+// gate, i.e. Pine was not pre-filtering it as tightly as the engine's own
+// approval policy effectively requires; (c) the volatility "sweet spot"
+// used in scoring and in getVolatilityRegime() was hardcoded in absolute
+// pips (2.7/4.5 and 1.8/2.7/4.5/6.5), tuned for GBP/USD and not meaningful
+// once each pair gets its own ATR band; and (d) all 5 pairs shared the
+// identical minimumAdx/ATR-band literals despite materially different
+// live win rates (9.1% to 83.3%) and documented differences in each
+// pair's native trading session.
+//
+// Universal fixes (identical across all 5 scripts):
+//   1. confidence_raw / confidence_pct / conviction_score are now genuinely
+//      differentiated: confidence_raw is the unclamped strength score,
+//      confidence_pct is the existing clamped 0-100 score (unchanged
+//      meaning), and conviction_score is a new breadth-of-confirmation
+//      measure (% of 6 independent conditions met) from the new
+//      calculateConviction() function.
+//   2. momentum_continuation now requires adx >= minimumAdx +
+//      momentumAdxBuffer (new input, default 4.0), and both strength
+//      functions apply a new -5 score penalty for model ==
+//      "momentum_continuation" (mirroring the existing -8 for
+//      range_reversal) -- reflecting that the engine already holds Model B
+//      to a stricter approval bar than Model A.
+//   3. The volatility sweet-spot (scoring bonus + conviction check) and the
+//      getVolatilityRegime() label breakpoints now scale with each pair's
+//      own [minimumAtrPips, maximumAtrPips] band via new atrBandWidth /
+//      atrSweetSpotLow / atrSweetSpotHigh variables, instead of the
+//      hardcoded GBP/USD-tuned literals.
+//
+// Per-pair calibration (reasoned, not backtested -- no historical data was
+// available for 4 of the 5 pairs; grounded in each pair's live diagnostic
+// results plus known FX market-structure differences):
+//   AUD/USD-specific calibration: minimumAdx 14.0 -> 16.0; ATR band
+//   left unchanged (1.8-6.5 pips). AUD/USD was a moderate performer
+//   (33.3% win rate) in the 2026-10-01/02 diagnostic. Its native liquid
+//   session is Asia/Sydney rather than London -- consider enabling an
+//   Asian session window as a future follow-up once more live data
+//   accumulates under this calibration; not implemented as a code
+//   change in this pass.
+//
+// Left unchanged in this pass for all 5 pairs: stopAtrMultiplier and
+// targetRiskMultiplier. The diagnostic found the engine's expected-value
+// gate -- not Pine's reward:risk -- is the binding approval constraint, so
+// changing stop/target math here would have conflated variables.
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// CHANGE LOG vs v4.2 (rebuilt following a full pine -> make.com -> engine audit)
+// ----------------------------------------------------------------------------
+// This rebuild was driven by tracing every field the payload builder emits
+// against (a) what the Make.com "call engine" HTTP module actually forwards,
+// and (b) what engine_final.py (the FastAPI scoring service) actually reads.
+// Three concrete gaps were found and fixed here on the Pine side:
+//
+//   1. extensions.candidate_strength - the engine's signal_score() function
+//      reads this exact path and gives it a real scoring weight. v4.2 never
+//      sent it (the Make template's `extensions` block used a different set
+//      of key names entirely), so it silently defaulted to 50 every time,
+//      contributing nothing. Fixed by aligning key names end to end.
+//
+//   2. indicators.adx / plus_di / minus_di - Pine already computed these
+//      internally for its own regime classification but never put them in
+//      the outgoing payload. The engine has a real ADX-based scoring term
+//      that has never been able to fire. Fixed by including them.
+//
+//   3. Several extensions.* keys the Make template already had placeholders
+//      for (htf_timeframe, atr_ratio, bb_width_ratio, engine_expected_version,
+//      strategy_revision_date, allow_manus_override_sl_tp, pine_proposal_only,
+//      candidate_policy) were never populated by v4.2 at all. Populated here.
+//
+//   4. allow_manus_override_sl_tp / pine_proposal_only are now both sent as
+//      true. This is a genuine behaviour change happening on the engine side
+//      (not in this file): the engine will be updated to actually recompute
+//      its own ATR/structure-based stop and target when pine_proposal_only
+//      is true, rather than blindly adopting whatever Pine proposes, making
+//      "Manus is the execution authority" (see header above) literally true
+//      rather than aspirational. This value (stopAtrMultiplier=1.45x ATR,
+//      targetRiskMultiplier=1.55R) was set to match engine.py's
+//      INSTRUMENTS['AUDUSD'] config (sl_atr_mult / default_rr) at the time
+//      this file was ported from the GBP/USD v5.0.0 template, so it is a no-op
+//      here too today - re-verify if either side's config changes going forward.
+//
+//   A number of smaller gaps were also closed: several already-computed local
+//   values (distance to VWAP, range high/low/mid, candle body/wick prices,
+//   %B) were never sent despite costing nothing extra to include; several
+//   signal.* metadata fields (family, side, is_short, is_trend_following,
+//   is_intraday, regime_ok, a short human-readable notes string) were added;
+//   the hardcoded max-spread/max-slippage literals are now real inputs.
+//
+//   Nothing about the entry-model logic, session filtering, cooldown/daily
+//   cap governance, or the core risk math changed - those were sound in v4.2
+//   and are carried over unchanged.
+// ============================================================================
+
+
+// ----------------------------------------------------------------------------
+// PORT NOTICE (AUDUSD, ported from the verified GBP/USD v5.0.0
+// template on 2026-09-27):
+//   - Section 0 constants and strategy() header below were substituted from
+//     engine.py's INSTRUMENTS['AUDUSD'] config (pip/tick/contract
+//     sizes, sl_atr_mult, default_rr, max_spread/slippage, structure buffer).
+//   - JUDGMENT CALL: allowAsia defaults to true here (unlike the GBP/USD
+//     template, which defaults it false), because engine.py lists "asia" as
+//     a preferred session for AUDUSD specifically. This was NOT in the
+//     original template and has not been tested live - please review before
+//     relying on it, and disable it in the input panel if undesired.
+//   - minimumAtrPips / maximumAtrPips (groupVolatility, below) are UNCHANGED
+//     from the GBP/USD template and have not been independently verified for
+//     AUDUSD. See the recheck note under Section 0 below.
+// ----------------------------------------------------------------------------
+
+// ============================================================================
+// 0. PAIR-SPECIFIC CONFIGURATION
+//
+// To adapt this script to a different currency pair:
+//   1. Edit every value in this section.
+//   2. Also edit the strategy() declaration above (title, shorttitle, and
+//      currency=currency.XXX) - Pine requires those to be compile-time
+//      literals, so they cannot be driven from variables here.
+//   3. Re-check groupRisk / groupVolatility defaults below (ATR pip
+//      thresholds, spread/slippage allowances) - these were tuned for
+//      GBP/USD's typical pip behaviour in the original template and have
+//      been carried over UNVERIFIED for AUDUSD (minimumAtrPips /
+//      maximumAtrPips specifically). Monitor live candidate frequency for
+//      this pair and retune those two inputs from the input panel if
+//      candidates are consistently too rare or too frequent.
+// ============================================================================
+
+string pairSymbol            = "AUDUSD"
+string pairDisplayName       = "AUD/USD"
+string pairBrokerSymbol      = "AUD_USD"
+string pairBaseCurrency      = "AUD"
+string pairQuoteCurrency     = "USD"
+float  pairPipSize           = 0.0001
+int    pairPriceDecimals     = 5
+float  pairContractSize      = 100000
+float  pairUnitStep          = 1
+float  pairMinUnits          = 1
+float  pairMaxUnits          = 200000
+string strategyIdSlug        = "stl_audusd_2m_candidate_generator_v5"
+string strategyVersionString = "5.2.0"
+string strategyDisplayName   = "St Ludaetuc AUD/USD 2-Minute Candidate Generator"
+string signalIdPrefix        = "STL-AUDUSD-2M-V5"
+string tickerMatchString     = "AUDUSD"
+string schemaVersionString   = "1.1.0"
+string engineExpectedVersion = "3.11.0"
+string strategyRevisionDate  = "2026-10-06"
+
+
+// ============================================================================
+// 1. INPUTS
+// ============================================================================
+
+string groupGeneral = "General"
+
+bool enableAlerts = input.bool(
+     true,
+     "Enable canonical JSON alerts",
+     group = groupGeneral
+)
+
+bool simulateCandidates = input.bool(
+     true,
+     "Simulate candidates as strategy trades",
+     tooltip = "Displays candidate entries in Strategy Tester. Manus remains the execution authority.",
+     group = groupGeneral
+)
+
+bool enableLongs = input.bool(
+     true,
+     "Enable long candidates",
+     group = groupGeneral
+)
+
+bool enableShorts = input.bool(
+     true,
+     "Enable short candidates",
+     group = groupGeneral
+)
+
+int cooldownBars = input.int(
+     5,
+     "Minimum bars between candidates",
+     minval = 0,
+     maxval = 100,
+     tooltip = "Five bars equals ten minutes on a two-minute chart.",
+     group = groupGeneral
+)
+
+int maximumCandidatesPerDay = input.int(
+     18,
+     "Maximum candidates per day",
+     minval = 1,
+     maxval = 100,
+     group = groupGeneral
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupTrend = "Trend features"
+
+int emaFastLength = input.int(
+     20,
+     "Fast EMA",
+     minval = 2,
+     group = groupTrend
+)
+
+int emaSlowLength = input.int(
+     50,
+     "Slow EMA",
+     minval = 5,
+     group = groupTrend
+)
+
+int emaRegimeLength = input.int(
+     200,
+     "Regime EMA",
+     minval = 20,
+     group = groupTrend
+)
+
+int htfEmaLength = input.int(
+     50,
+     "Higher-timeframe EMA",
+     minval = 5,
+     group = groupTrend
+)
+
+string higherTimeframe = input.timeframe(
+     "10",
+     "Higher timeframe",
+     group = groupTrend
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupMomentum = "Momentum features"
+
+int rsiLength = input.int(
+     14,
+     "RSI length",
+     minval = 2,
+     group = groupMomentum
+)
+
+int macdFastLength = input.int(
+     12,
+     "MACD fast",
+     minval = 2,
+     group = groupMomentum
+)
+
+int macdSlowLength = input.int(
+     26,
+     "MACD slow",
+     minval = 3,
+     group = groupMomentum
+)
+
+int macdSignalLength = input.int(
+     9,
+     "MACD signal",
+     minval = 2,
+     group = groupMomentum
+)
+
+int adxLength = input.int(
+     14,
+     "ADX length",
+     minval = 2,
+     group = groupMomentum
+)
+
+float minimumAdx = input.float(
+     16.0,
+     "Minimum ADX",
+     minval = 0.0,
+     step = 0.5,
+     group = groupMomentum
+)
+
+float momentumAdxBuffer = input.float(
+     4.0,
+     "Momentum continuation ADX buffer (added to Minimum ADX)",
+     minval = 0.0,
+     step = 0.5,
+     tooltip = "momentum_continuation candidates require ADX >= Minimum ADX + this buffer, on top of the shared trend-market threshold, since Model B needs a clearly established trend to be selective.",
+     group = groupMomentum
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupVolatility = "Volatility features"
+
+int atrLength = input.int(
+     14,
+     "ATR length",
+     minval = 2,
+     group = groupVolatility
+)
+
+float minimumAtrPips = input.float(
+     1.8,
+     "Minimum ATR, pips",
+     minval = 0.1,
+     step = 0.1,
+     group = groupVolatility
+)
+
+float maximumAtrPips = input.float(
+     6.5,
+     "Maximum ATR, pips",
+     minval = 0.2,
+     step = 0.1,
+     group = groupVolatility
+)
+
+int bollingerLength = input.int(
+     20,
+     "Bollinger length",
+     minval = 5,
+     group = groupVolatility
+)
+
+float bollingerDeviation = input.float(
+     2.0,
+     "Bollinger deviation",
+     minval = 0.5,
+     step = 0.1,
+     group = groupVolatility
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupRisk = "Candidate risk proposal"
+
+float stopAtrMultiplier = input.float(
+     1.45,
+     "Stop ATR multiplier",
+     minval = 0.5,
+     step = 0.05,
+     group = groupRisk
+)
+
+float targetRiskMultiplier = input.float(
+     1.55,
+     "Target reward-to-risk",
+     minval = 1.0,
+     step = 0.05,
+     group = groupRisk
+)
+
+int structureLookback = input.int(
+     12,
+     "Structure lookback",
+     minval = 2,
+     maxval = 100,
+     group = groupRisk
+)
+
+float structureBufferPips = input.float(
+     0.6,
+     "Structure buffer, pips",
+     minval = 0.0,
+     step = 0.1,
+     group = groupRisk
+)
+
+int simulatedMaximumHoldingBars = input.int(
+     30,
+     "Maximum simulated holding bars",
+     minval = 2,
+     tooltip = "Thirty two-minute bars equals sixty minutes.",
+     group = groupRisk
+)
+
+float accountRiskPercentInput = input.float(
+     0.50,
+     "Proposed account risk, percent",
+     minval = 0.01,
+     step = 0.01,
+     tooltip = "Proposed only. The engine applies its own configured ceiling regardless of this value.",
+     group = groupRisk
+)
+
+float maxSpreadAllowedPriceInput = input.float(
+     0.00025,
+     "Max spread allowed, price units",
+     minval = 0.0,
+     step = 0.00001,
+     tooltip = "Informational only until Make/the engine sources live spread data for this pair.",
+     group = groupRisk
+)
+
+float maxSlippageAllowedPriceInput = input.float(
+     0.00012,
+     "Max slippage allowed, price units",
+     minval = 0.0,
+     step = 0.00001,
+     group = groupRisk
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupSessions = "Sessions"
+
+string tradingTimezone = input.string(
+     "Europe/London",
+     "Session timezone",
+     group = groupSessions
+)
+
+string londonSession = input.session(
+     "0700-1200",
+     "London session",
+     group = groupSessions
+)
+
+string overlapSession = input.session(
+     "1300-1600",
+     "London/New York overlap",
+     group = groupSessions
+)
+
+bool allowAsia = input.bool(
+     true,
+     "Allow Asian-session candidates",
+     tooltip = "Already enabled by default (set 2026-09-27): engine.py lists 'asia' as a preferred session for AUD/USD, and Asia/Sydney is this pair's native liquid session.",
+     group = groupSessions
+)
+
+string asiaSession = input.session(
+     "0000-0600",
+     "Asian session",
+     group = groupSessions
+)
+
+string newYorkSession = input.session(
+     "1600-2100",
+     "New York session (after the London/NY overlap)",
+     tooltip = "Added 2026-10-06. engine.py's own AUDUSD configuration already lists 'new_york' as a preferred session, but this script never emitted it -- the overlap window stopped at 1600 and nothing covered the New York afternoon separately. Always active, like London and the overlap window.",
+     group = groupSessions
+)
+
+bool allowOffpeak = input.bool(
+     true,
+     "Allow off-peak / transition candidates",
+     tooltip = "Covers the three short windows that previously had no session coverage at all and so could never produce a candidate, regardless of any other setting: 2100-0000 (New York close to Asia open), 0600-0700 (Asia close to London open), and 1200-1300 (London close to overlap open). Enabled by default so every hour of the day maps to a named, learnable session; disable here if live results say these transition windows aren't worth taking.",
+     group = groupSessions
+)
+
+string offpeakSession = input.session(
+     "2100-0000,0600-0700,1200-1300",
+     "Off-peak / transition windows",
+     tooltip = "Three comma-separated windows filling the remaining gaps between the named sessions above.",
+     group = groupSessions
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupModels = "Candidate models"
+
+bool enableTrendPullback = input.bool(
+     true,
+     "Enable trend-pullback candidates",
+     group = groupModels
+)
+
+bool enableMomentumContinuation = input.bool(
+     true,
+     "Enable momentum-continuation candidates",
+     group = groupModels
+)
+
+bool enableRangeReversal = input.bool(
+     true,
+     "Enable range-reversal candidates",
+     tooltip = "Research-only candidate type. Manus should initially score it conservatively.",
+     group = groupModels
+)
+
+
+// ============================================================================
+// 2. CHART VALIDATION
+// ============================================================================
+
+bool isTwoMinute =
+     timeframe.isminutes and
+     timeframe.multiplier == 2
+
+bool symbolCurrenciesMatch =
+     syminfo.basecurrency == pairBaseCurrency and
+     syminfo.currency == pairQuoteCurrency
+
+bool tickerNameMatches =
+     str.contains(
+         str.upper(syminfo.ticker),
+         tickerMatchString
+     )
+
+bool isCorrectPair =
+     symbolCurrenciesMatch or
+     tickerNameMatches
+
+bool validChart =
+     isTwoMinute and
+     isCorrectPair and
+     chart.is_standard
+
+
+// ============================================================================
+// 3. CORE MARKET FEATURES
+// ============================================================================
+
+float pipSize = pairPipSize
+
+float emaFast =
+     ta.ema(close, emaFastLength)
+
+float emaSlow =
+     ta.ema(close, emaSlowLength)
+
+float emaRegime =
+     ta.ema(close, emaRegimeLength)
+
+float htfClose = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     close,
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+float htfEma = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     ta.ema(close, htfEmaLength),
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+float rsi =
+     ta.rsi(close, rsiLength)
+
+float atr =
+     ta.atr(atrLength)
+
+float atrPips =
+     atr / pipSize
+
+float atrBandWidth =
+     maximumAtrPips - minimumAtrPips
+
+float atrSweetSpotLow =
+     minimumAtrPips + atrBandWidth / 3.0
+
+float atrSweetSpotHigh =
+     minimumAtrPips + atrBandWidth * 2.0 / 3.0
+
+float atrAverage50 =
+     ta.sma(atr, 50)
+
+float atrRatio = na
+
+if atrAverage50 > 0.0
+    atrRatio :=
+         atr / atrAverage50
+
+float atrPercent = na
+
+if close != 0.0
+    atrPercent :=
+         atr / close * 100.0
+
+[macdLine, macdSignal, macdHistogram] =
+     ta.macd(
+         close,
+         macdFastLength,
+         macdSlowLength,
+         macdSignalLength
+     )
+
+[plusDi, minusDi, adx] =
+     ta.dmi(
+         adxLength,
+         adxLength
+     )
+
+float adxDiSpread =
+     plusDi - minusDi
+
+float vwapValue =
+     ta.vwap(hlc3)
+
+float distanceToVwap =
+     close - vwapValue
+
+float bbBasis =
+     ta.sma(
+         close,
+         bollingerLength
+     )
+
+float bbDeviationValue =
+     ta.stdev(
+         close,
+         bollingerLength
+     ) * bollingerDeviation
+
+float bbUpper =
+     bbBasis + bbDeviationValue
+
+float bbLower =
+     bbBasis - bbDeviationValue
+
+float bbWidth = na
+
+if bbBasis != 0.0
+    bbWidth :=
+         (bbUpper - bbLower) / bbBasis
+
+float bbWidthAverage50 =
+     ta.sma(bbWidth, 50)
+
+float bbWidthRatio = na
+
+if bbWidthAverage50 > 0.0
+    bbWidthRatio :=
+         bbWidth / bbWidthAverage50
+
+float bbPercentB = na
+
+if (bbUpper - bbLower) != 0.0
+    bbPercentB :=
+         (close - bbLower) / (bbUpper - bbLower)
+
+float recentHigh =
+     ta.highest(
+         high,
+         structureLookback
+     )
+
+float recentLow =
+     ta.lowest(
+         low,
+         structureLookback
+     )
+
+float distanceToRecentHigh =
+     recentHigh - close
+
+float distanceToRecentLow =
+     close - recentLow
+
+float candleBody =
+     math.abs(close - open)
+
+float candleRange =
+     high - low
+
+float bodyToRange = 0.0
+float upperWickRatio = 0.0
+float lowerWickRatio = 0.0
+
+float upperWick =
+     high - math.max(open, close)
+
+float lowerWick =
+     math.min(open, close) - low
+
+if candleRange > 0.0
+    bodyToRange :=
+         candleBody / candleRange
+
+    upperWickRatio :=
+         upperWick / candleRange
+
+    lowerWickRatio :=
+         lowerWick / candleRange
+
+float typicalPrice =
+     (high + low + close) / 3.0
+
+float weightedClosePrice =
+     (high + low + 2.0 * close) / 4.0
+
+float emaSeparation =
+     math.abs(emaFast - emaSlow)
+
+float emaSeparationAtr = na
+float distanceFromVwapAtr = na
+float distanceFromFastEmaAtr = na
+
+if atr > 0.0
+    emaSeparationAtr :=
+         emaSeparation / atr
+
+    distanceFromVwapAtr :=
+         (close - vwapValue) / atr
+
+    distanceFromFastEmaAtr :=
+         (close - emaFast) / atr
+
+float rollingHigh =
+     ta.highest(high, 30)
+
+float rollingLow =
+     ta.lowest(low, 30)
+
+float rollingRange =
+     rollingHigh - rollingLow
+
+float rollingMid =
+     (rollingHigh + rollingLow) / 2.0
+
+float rollingRangeAtr = na
+
+if atr > 0.0
+    rollingRangeAtr :=
+         rollingRange / atr
+
+
+// ============================================================================
+// 4. MARKET CLASSIFICATION
+// ============================================================================
+
+bool bullishTrend =
+     emaFast > emaSlow and
+     close > emaRegime
+
+bool bearishTrend =
+     emaFast < emaSlow and
+     close < emaRegime
+
+bool htfBullish =
+     htfClose > htfEma
+
+bool htfBearish =
+     htfClose < htfEma
+
+bool volatilityPass =
+     atrPips >= minimumAtrPips and
+     atrPips <= maximumAtrPips
+
+bool momentumMarket =
+     adx >= minimumAdx and
+     emaSeparationAtr >= 0.12
+
+bool rangeMarket =
+     adx < 19.0 and
+     emaSeparationAtr < 0.40
+
+
+// ============================================================================
+// 5. CLASSIFICATION FUNCTIONS
+// ============================================================================
+
+getTrendBias() =>
+    string result = "sideways"
+
+    if bullishTrend
+        result := "bullish"
+    else if bearishTrend
+        result := "bearish"
+
+    result
+
+
+getHigherTimeframeBias() =>
+    string result = "sideways"
+
+    if htfBullish
+        result := "bullish"
+    else if htfBearish
+        result := "bearish"
+
+    result
+
+
+getVolatilityRegime() =>
+    string result = "extreme"
+
+    if atrPips < minimumAtrPips
+        result := "very_low"
+    else if atrPips < atrSweetSpotLow
+        result := "low"
+    else if atrPips <= atrSweetSpotHigh
+        result := "normal"
+    else if atrPips <= maximumAtrPips
+        result := "high"
+
+    result
+
+
+getMarketRegime() =>
+    string result = "mixed"
+
+    if rangeMarket
+        result := "range"
+    else if momentumMarket and bullishTrend
+        result := "trend"
+    else if momentumMarket and bearishTrend
+        result := "trend"
+
+    result
+
+
+string trendBias =
+     getTrendBias()
+
+string higherTimeframeBias =
+     getHigherTimeframeBias()
+
+string volatilityRegime =
+     getVolatilityRegime()
+
+string marketRegime =
+     getMarketRegime()
+
+
+// ============================================================================
+// 6. SESSION CLASSIFICATION
+// ============================================================================
+
+bool inLondon =
+     not na(
+         time(
+             timeframe.period,
+             londonSession,
+             tradingTimezone
+         )
+     )
+
+bool inOverlap =
+     not na(
+         time(
+             timeframe.period,
+             overlapSession,
+             tradingTimezone
+         )
+     )
+
+bool inAsia =
+     not na(
+         time(
+             timeframe.period,
+             asiaSession,
+             tradingTimezone
+         )
+     )
+
+bool inNewYork =
+     not na(
+         time(
+             timeframe.period,
+             newYorkSession,
+             tradingTimezone
+         )
+     )
+
+bool inOffpeak =
+     not na(
+         time(
+             timeframe.period,
+             offpeakSession,
+             tradingTimezone
+         )
+     )
+
+bool validSession =
+     inLondon or
+     inOverlap or
+     (allowAsia and inAsia) or
+     inNewYork or
+     (allowOffpeak and inOffpeak)
+
+
+getSessionName() =>
+    string result = "unknown"
+
+    if inOverlap
+        result := "overlap_london_new_york"
+    else if inNewYork
+        result := "new_york"
+    else if inLondon
+        result := "london"
+    else if inAsia
+        result := "asia"
+    else if inOffpeak
+        result := "offpeak"
+
+    result
+
+
+string sessionName =
+     getSessionName()
+
+
+// ============================================================================
+// 7. MODEL A — TREND PULLBACK
+// ============================================================================
+
+bool longPullbackLocation =
+     low <= emaFast or
+     low[1] <= emaFast[1] or
+     close < emaFast + atr * 0.45
+
+bool shortPullbackLocation =
+     high >= emaFast or
+     high[1] >= emaFast[1] or
+     close > emaFast - atr * 0.45
+
+bool longPullbackRecovery =
+     close > emaFast and
+     rsi > rsi[1] and
+     macdHistogram > macdHistogram[1]
+
+bool shortPullbackRecovery =
+     close < emaFast and
+     rsi < rsi[1] and
+     macdHistogram < macdHistogram[1]
+
+bool longTrendPullback =
+     enableTrendPullback and
+     bullishTrend and
+     htfBullish and
+     longPullbackLocation and
+     longPullbackRecovery and
+     rsi >= 39.0 and
+     rsi <= 59.0
+
+bool shortTrendPullback =
+     enableTrendPullback and
+     bearishTrend and
+     htfBearish and
+     shortPullbackLocation and
+     shortPullbackRecovery and
+     rsi >= 41.0 and
+     rsi <= 61.0
+
+
+// ============================================================================
+// 8. MODEL B — MOMENTUM CONTINUATION
+// ============================================================================
+
+bool bullishExpansion =
+     close > high[1] and
+     close > open and
+     bodyToRange >= 0.50 and
+     macdHistogram > 0.0 and
+     macdHistogram > macdHistogram[1] and
+     plusDi > minusDi
+
+bool bearishExpansion =
+     close < low[1] and
+     close < open and
+     bodyToRange >= 0.50 and
+     macdHistogram < 0.0 and
+     macdHistogram < macdHistogram[1] and
+     minusDi > plusDi
+
+bool longMomentumContinuation =
+     enableMomentumContinuation and
+     bullishTrend and
+     htfBullish and
+     bullishExpansion and
+     rsi >= 51.0 and
+     rsi <= 68.0 and
+     adx >= minimumAdx + momentumAdxBuffer
+
+bool shortMomentumContinuation =
+     enableMomentumContinuation and
+     bearishTrend and
+     htfBearish and
+     bearishExpansion and
+     rsi >= 32.0 and
+     rsi <= 49.0 and
+     adx >= minimumAdx + momentumAdxBuffer
+
+
+// ============================================================================
+// 9. MODEL C — RANGE REVERSAL
+// ============================================================================
+
+bool bullishRangeRejection =
+     rangeMarket and
+     low <= bbLower and
+     lowerWickRatio >= 0.40 and
+     close > open and
+     rsi <= 36.0 and
+     rsi > rsi[1]
+
+bool bearishRangeRejection =
+     rangeMarket and
+     high >= bbUpper and
+     upperWickRatio >= 0.40 and
+     close < open and
+     rsi >= 64.0 and
+     rsi < rsi[1]
+
+bool longRangeReversal =
+     enableRangeReversal and
+     bullishRangeRejection
+
+bool shortRangeReversal =
+     enableRangeReversal and
+     bearishRangeRejection
+
+
+// ============================================================================
+// 10. MODEL SELECTION
+// ============================================================================
+
+bool rawLongCandidate =
+     longTrendPullback or
+     longMomentumContinuation or
+     longRangeReversal
+
+bool rawShortCandidate =
+     shortTrendPullback or
+     shortMomentumContinuation or
+     shortRangeReversal
+
+
+getLongModel() =>
+    string result = "none"
+
+    if longTrendPullback
+        result := "trend_pullback"
+    else if longMomentumContinuation
+        result := "momentum_continuation"
+    else if longRangeReversal
+        result := "range_reversal"
+
+    result
+
+
+getShortModel() =>
+    string result = "none"
+
+    if shortTrendPullback
+        result := "trend_pullback"
+    else if shortMomentumContinuation
+        result := "momentum_continuation"
+    else if shortRangeReversal
+        result := "range_reversal"
+
+    result
+
+
+string longModel =
+     getLongModel()
+
+string shortModel =
+     getShortModel()
+
+
+// ============================================================================
+// 11. FREQUENCY GOVERNANCE
+// ============================================================================
+
+bool newDay =
+     ta.change(time("D")) != 0
+
+var int candidatesToday = 0
+var int lastCandidateBar = na
+
+if newDay
+    candidatesToday := 0
+
+bool cooldownPass =
+     na(lastCandidateBar) or
+     bar_index - lastCandidateBar >= cooldownBars
+
+bool dailyCandidateLimitPass =
+     candidatesToday < maximumCandidatesPerDay
+
+bool commonCandidatePass =
+     barstate.isconfirmed and
+     validChart and
+     validSession and
+     volatilityPass and
+     cooldownPass and
+     dailyCandidateLimitPass
+
+bool longCandidate =
+     commonCandidatePass and
+     enableLongs and
+     rawLongCandidate
+
+bool shortCandidate =
+     commonCandidatePass and
+     enableShorts and
+     rawShortCandidate
+
+bool finalLongCandidate =
+     longCandidate and
+     not shortCandidate
+
+bool finalShortCandidate =
+     shortCandidate and
+     not longCandidate
+
+
+// ============================================================================
+// 12. PROPOSED STOP AND TARGET
+// ============================================================================
+
+float structureBuffer =
+     structureBufferPips * pipSize
+
+float longAtrStop =
+     close - atr * stopAtrMultiplier
+
+float longStructureStop =
+     recentLow - structureBuffer
+
+float proposedLongStop =
+     math.min(
+         longAtrStop,
+         longStructureStop
+     )
+
+float shortAtrStop =
+     close + atr * stopAtrMultiplier
+
+float shortStructureStop =
+     recentHigh + structureBuffer
+
+float proposedShortStop =
+     math.max(
+         shortAtrStop,
+         shortStructureStop
+     )
+
+float longStopDistance =
+     close - proposedLongStop
+
+float shortStopDistance =
+     proposedShortStop - close
+
+float proposedLongTarget =
+     close +
+     longStopDistance *
+     targetRiskMultiplier
+
+float proposedShortTarget =
+     close -
+     shortStopDistance *
+     targetRiskMultiplier
+
+float longTargetDistance =
+     proposedLongTarget - close
+
+float shortTargetDistance =
+     close - proposedShortTarget
+
+float longRewardRisk = na
+float shortRewardRisk = na
+
+if longStopDistance > 0.0
+    longRewardRisk :=
+         longTargetDistance /
+         longStopDistance
+
+if shortStopDistance > 0.0
+    shortRewardRisk :=
+         shortTargetDistance /
+         shortStopDistance
+
+bool longRiskValid =
+     longStopDistance > syminfo.mintick and
+     longRewardRisk >= 1.0
+
+bool shortRiskValid =
+     shortStopDistance > syminfo.mintick and
+     shortRewardRisk >= 1.0
+
+
+// ============================================================================
+// 13. SIGNAL-STRENGTH FUNCTIONS
+// ============================================================================
+
+calculateLongStrength(string model) =>
+    float score = 50.0
+
+    if bullishTrend
+        score += 8.0
+
+    if htfBullish
+        score += 8.0
+
+    if plusDi > minusDi
+        score += 5.0
+
+    if macdHistogram > macdHistogram[1]
+        score += 5.0
+
+    if atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+        score += 6.0
+
+    if inOverlap
+        score += 5.0
+
+    if inLondon
+        score += 3.0
+
+    if model == "range_reversal"
+        score -= 8.0
+
+    if model == "momentum_continuation"
+        score -= 5.0
+
+    float rawScore = score
+
+    score := math.max(score, 0.0)
+    score := math.min(score, 100.0)
+
+    [score, rawScore]
+
+
+calculateShortStrength(string model) =>
+    float score = 50.0
+
+    if bearishTrend
+        score += 8.0
+
+    if htfBearish
+        score += 8.0
+
+    if minusDi > plusDi
+        score += 5.0
+
+    if macdHistogram < macdHistogram[1]
+        score += 5.0
+
+    if atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+        score += 6.0
+
+    if inOverlap
+        score += 5.0
+
+    if inLondon
+        score += 3.0
+
+    if model == "range_reversal"
+        score -= 8.0
+
+    if model == "momentum_continuation"
+        score -= 5.0
+
+    float rawScore = score
+
+    score := math.max(score, 0.0)
+    score := math.min(score, 100.0)
+
+    [score, rawScore]
+
+
+// ----------------------------------------------------------------------------
+// Conviction: a breadth-of-confirmation measure, independent of the
+// magnitude-weighted strength score above. Counts how many of 6 independent
+// confirming conditions are true and expresses it as a percentage, so a
+// candidate can score high on magnitude but low on breadth (or vice versa) --
+// signal the engine did not have access to while confidence_raw,
+// confidence_pct and conviction_score all carried the same value. Added
+// 2026-10-03 as part of the Pine performance-diagnostic follow-up.
+// ----------------------------------------------------------------------------
+
+calculateConviction(string direction) =>
+    bool isLong = direction == "long"
+
+    bool trendAligned = isLong ? bullishTrend : bearishTrend
+    bool htfAligned = isLong ? htfBullish : htfBearish
+    bool diAligned = isLong ? (plusDi > minusDi) : (minusDi > plusDi)
+    bool macdAligned = isLong ? (macdHistogram > macdHistogram[1]) : (macdHistogram < macdHistogram[1])
+    bool volatilitySweetSpot = atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+    bool sessionQuality = inOverlap or inLondon
+
+    int metConditions = 0
+
+    if trendAligned
+        metConditions += 1
+
+    if htfAligned
+        metConditions += 1
+
+    if diAligned
+        metConditions += 1
+
+    if macdAligned
+        metConditions += 1
+
+    if volatilitySweetSpot
+        metConditions += 1
+
+    if sessionQuality
+        metConditions += 1
+
+    100.0 * metConditions / 6.0
+
+
+// ============================================================================
+// 14. JSON HELPERS
+// ============================================================================
+
+boolToJson(bool value) =>
+    string result = "false"
+
+    if value
+        result := "true"
+
+    result
+
+
+nullableFloat(float value, string numberFormat) =>
+    string result = "null"
+
+    if not na(value)
+        result := str.tostring(
+             value,
+             numberFormat
+         )
+
+    result
+
+
+nullableVolume(float value) =>
+    string result = "null"
+
+    if not na(value)
+        result := str.tostring(
+             value,
+             "#.####"
+         )
+
+    result
+
+
+// ============================================================================
+// 15. ACTIVE CANDIDATE VALUES
+// ============================================================================
+
+getCandidateDirection() =>
+    string result = "neutral"
+
+    if finalLongCandidate
+        result := "long"
+    else if finalShortCandidate
+        result := "short"
+
+    result
+
+
+getCandidateModel() =>
+    string result = "none"
+
+    if finalLongCandidate
+        result := longModel
+    else if finalShortCandidate
+        result := shortModel
+
+    result
+
+
+getSignalFamily(string model) =>
+    string result = "unknown"
+
+    if model == "trend_pullback"
+        result := "trend"
+    else if model == "momentum_continuation"
+        result := "momentum"
+    else if model == "range_reversal"
+        result := "reversal"
+
+    result
+
+
+string candidateDirection =
+     getCandidateDirection()
+
+string candidateModel =
+     getCandidateModel()
+
+string candidateFamily =
+     getSignalFamily(candidateModel)
+
+float candidateEntry =
+     close
+
+float candidateStop = na
+float candidateTarget = na
+float candidateStopDistance = na
+float candidateTargetDistance = na
+float candidateRewardRisk = na
+float candidateStrength = 0.0
+float candidateStrengthRaw = 0.0
+float candidateConviction = 0.0
+
+if finalLongCandidate
+    candidateStop :=
+         proposedLongStop
+
+    candidateTarget :=
+         proposedLongTarget
+
+    candidateStopDistance :=
+         longStopDistance
+
+    candidateTargetDistance :=
+         longTargetDistance
+
+    candidateRewardRisk :=
+         longRewardRisk
+
+    [longStrengthValue, longStrengthRawValue] =
+         calculateLongStrength(
+             candidateModel
+         )
+
+    candidateStrength := longStrengthValue
+    candidateStrengthRaw := longStrengthRawValue
+
+    candidateConviction :=
+         calculateConviction("long")
+
+else if finalShortCandidate
+    candidateStop :=
+         proposedShortStop
+
+    candidateTarget :=
+         proposedShortTarget
+
+    candidateStopDistance :=
+         shortStopDistance
+
+    candidateTargetDistance :=
+         shortTargetDistance
+
+    candidateRewardRisk :=
+         shortRewardRisk
+
+    [shortStrengthValue, shortStrengthRawValue] =
+         calculateShortStrength(
+             candidateModel
+         )
+
+    candidateStrength := shortStrengthValue
+    candidateStrengthRaw := shortStrengthRawValue
+
+    candidateConviction :=
+         calculateConviction("short")
+
+
+getStrengthLabel(float score) =>
+    string result = "very_weak"
+
+    if score >= 80.0
+        result := "very_strong"
+    else if score >= 70.0
+        result := "strong"
+    else if score >= 60.0
+        result := "moderate"
+    else if score >= 50.0
+        result := "weak"
+
+    result
+
+
+string strengthLabel =
+     getStrengthLabel(
+         candidateStrength
+     )
+
+string candidateSide =
+     candidateDirection == "long" ? "buy" : candidateDirection == "short" ? "sell" : "none"
+
+string candidatePriority =
+     candidateStrength >= 70.0 ? "high" : "normal"
+
+bool candidateIsShort =
+     candidateDirection == "short"
+
+bool candidateIsTrendFollowing =
+     candidateModel == "trend_pullback" or
+     candidateModel == "momentum_continuation"
+
+string candidateNotes =
+     candidateModel + " " + candidateDirection +
+     " candidate; RSI=" + str.tostring(rsi, "#.#") +
+     ", ADX=" + str.tostring(adx, "#.#") +
+     ", ATRpips=" + str.tostring(atrPips, "#.#")
+
+string signalId =
+     signalIdPrefix + "-" +
+     str.tostring(time) +
+     "-" +
+     candidateDirection +
+     "-" +
+     candidateModel
+
+
+// ============================================================================
+// 16. CANONICAL PAYLOAD BUILDER
+// ============================================================================
+
+buildCanonicalPayload() =>
+    string generatedUtc =
+         str.format_time(
+             time,
+             "yyyy-MM-dd'T'HH:mm:ss'Z'",
+             "UTC"
+         )
+
+    string payload = "{"
+
+    payload := payload +
+         "\"schema_name\":\"st_ludaetuc_canonical_payload\","
+
+    payload := payload +
+         "\"schema_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"event_type\":\"signal\","
+
+    payload := payload + "\"meta\":{"
+
+    payload := payload +
+         "\"signal_id\":\"" +
+         signalId +
+         "\","
+
+    payload := payload +
+         "\"event_id\":\"" +
+         signalId +
+         "\","
+
+    payload := payload +
+         "\"parent_signal_id\":null,"
+
+    payload := payload +
+         "\"generated_at_utc\":\"" +
+         generatedUtc +
+         "\","
+
+    payload := payload +
+         "\"sequence_no\":1"
+
+    payload := payload + "},"
+
+    payload := payload + "\"system\":{"
+
+    payload := payload +
+         "\"name\":\"St Ludaetuc\","
+
+    payload := payload +
+         "\"environment\":\"paper\","
+
+    payload := payload +
+         "\"source\":\"tradingview\","
+
+    payload := payload +
+         "\"source_platform\":\"tradingview\","
+
+    payload := payload +
+         "\"strategy_id\":\"" +
+         strategyIdSlug +
+         "\","
+
+    payload := payload +
+         "\"strategy_name\":\"" +
+         strategyDisplayName +
+         "\","
+
+    payload := payload +
+         "\"strategy_version\":\"" +
+         strategyVersionString +
+         "\","
+
+    payload := payload +
+         "\"alert_version\":\"tv_alert_v1\","
+
+    payload := payload +
+         "\"payload_schema_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"payload_spec_version\":\"1.0\","
+
+    payload := payload +
+         "\"canonical_payload_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"model_family\":\"rule_based_pine_strategy\","
+
+    payload := payload +
+         "\"model_version\":\"" +
+         strategyVersionString +
+         "\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"instrument\":{"
+
+    payload := payload +
+         "\"symbol\":\"" +
+         pairSymbol +
+         "\","
+
+    payload := payload +
+         "\"display_name\":\"" +
+         pairDisplayName +
+         "\","
+
+    payload := payload +
+         "\"asset_class\":\"forex\","
+
+    payload := payload +
+         "\"subtype\":\"major_fx\","
+
+    payload := payload +
+         "\"market_type\":\"spot_fx\","
+
+    payload := payload +
+         "\"broker_symbol\":\"" +
+         pairBrokerSymbol +
+         "\","
+
+    payload := payload +
+         "\"broker_instrument_name\":\"" +
+         pairDisplayName +
+         "\","
+
+    payload := payload +
+         "\"exchange_timezone\":\"UTC\","
+
+    payload := payload +
+         "\"base_currency\":\"" +
+         pairBaseCurrency +
+         "\","
+
+    payload := payload +
+         "\"quote_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"settlement_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"margin_currency\":\"" +
+         pairBaseCurrency +
+         "\","
+
+    payload := payload +
+         "\"tick_size\":" +
+         str.tostring(
+             syminfo.mintick,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"pip_size\":" +
+         str.tostring(
+             pipSize,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"contract_size\":" +
+         str.tostring(pairContractSize, "#") +
+         ","
+
+    payload := payload +
+         "\"unit_step\":" +
+         str.tostring(pairUnitStep, "#") +
+         ","
+
+    payload := payload +
+         "\"min_units\":" +
+         str.tostring(pairMinUnits, "#") +
+         ","
+
+    payload := payload +
+         "\"max_units\":" +
+         str.tostring(pairMaxUnits, "#") +
+         ","
+
+    payload := payload +
+         "\"quantity_decimals\":0,"
+
+    payload := payload +
+         "\"price_decimals\":" +
+         str.tostring(pairPriceDecimals, "#") +
+         ","
+
+    payload := payload +
+         "\"fee_model\":\"spread_only\","
+
+    payload := payload +
+         "\"swap_model\":\"oanda_daily_financing\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"market\":{"
+
+    payload := payload +
+         "\"timeframe\":\"2m\","
+
+    payload := payload +
+         "\"timeframe_seconds\":120,"
+
+    payload := payload +
+         "\"session_name\":\"" +
+         sessionName +
+         "\","
+
+    payload := payload +
+         "\"session_phase\":\"active\","
+
+    payload := payload +
+         "\"market_state\":\"open\","
+
+    payload := payload +
+         "\"bar_time_utc\":\"" +
+         generatedUtc +
+         "\","
+
+    payload := payload +
+         "\"bar_index\":" +
+         str.tostring(bar_index) +
+         ","
+
+    payload := payload +
+         "\"is_realtime\":" +
+         boolToJson(
+             barstate.isrealtime
+         ) +
+         ","
+
+    payload := payload +
+         "\"is_confirmed_bar\":" +
+         boolToJson(
+             barstate.isconfirmed
+         ) +
+         ","
+
+    payload := payload +
+         "\"weekday\":" +
+         str.tostring(dayofweek(time, "UTC")) +
+         ","
+
+    payload := payload +
+         "\"hour_utc\":" +
+         str.tostring(hour(time, "UTC")) +
+         ","
+
+    payload := payload +
+         "\"minute_utc\":" +
+         str.tostring(minute(time, "UTC"))
+
+    payload := payload + "},"
+
+    payload := payload + "\"signal\":{"
+
+    payload := payload +
+         "\"signal_type\":\"entry\","
+
+    payload := payload +
+         "\"family\":\"" +
+         candidateFamily +
+         "\","
+
+    payload := payload +
+         "\"direction\":\"" +
+         candidateDirection +
+         "\","
+
+    payload := payload +
+         "\"side\":\"" +
+         candidateSide +
+         "\","
+
+    payload := payload +
+         "\"strength_label\":\"" +
+         strengthLabel +
+         "\","
+
+    payload := payload +
+         "\"entry_model\":\"" +
+         candidateModel +
+         "\","
+
+    payload := payload +
+         "\"exit_model\":\"fixed_stop_take_profit\","
+
+    payload := payload +
+         "\"trigger_reason\":\"AUDUSD 2m candidate generator v5.0 conditions passed\","
+
+    payload := payload +
+         "\"setup_class\":\"" +
+         candidateFamily +
+         "\","
+
+    payload := payload +
+         "\"setup_subclass\":\"" +
+         candidateModel +
+         "\","
+
+    payload := payload +
+         "\"confidence_raw\":" +
+         nullableFloat(
+             candidateStrengthRaw,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"confidence_pct\":" +
+         nullableFloat(
+             candidateStrength,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"conviction_score\":" +
+         nullableFloat(
+             candidateConviction,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"quality_label\":\"" +
+         strengthLabel +
+         "\","
+
+    payload := payload +
+         "\"priority\":\"" +
+         candidatePriority +
+         "\","
+
+    payload := payload +
+         "\"is_short\":" +
+         boolToJson(candidateIsShort) +
+         ","
+
+    payload := payload +
+         "\"is_trend_following\":" +
+         boolToJson(candidateIsTrendFollowing) +
+         ","
+
+    payload := payload +
+         "\"is_scalp\":false,"
+
+    payload := payload +
+         "\"is_intraday\":true,"
+
+    payload := payload +
+         "\"regime_ok\":" +
+         boolToJson(commonCandidatePass) +
+         ","
+
+    payload := payload +
+         "\"confirmation_count\":1,"
+
+    payload := payload +
+         "\"notes\":\"" +
+         candidateNotes +
+         "\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"price\":{"
+
+    payload := payload +
+         "\"open\":" +
+         nullableFloat(
+             open,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"high\":" +
+         nullableFloat(
+             high,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"low\":" +
+         nullableFloat(
+             low,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"close\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"last\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"mark\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bid\":null,"
+
+    payload := payload +
+         "\"ask\":null,"
+
+    payload := payload +
+         "\"mid\":null,"
+
+    payload := payload +
+         "\"spread_points\":null,"
+
+    payload := payload +
+         "\"spread_price\":null,"
+
+    payload := payload +
+         "\"volume\":" +
+         nullableVolume(volume) +
+         ","
+
+    payload := payload +
+         "\"tick_volume\":" +
+         nullableVolume(volume) +
+         ","
+
+    payload := payload +
+         "\"vwap\":" +
+         nullableFloat(
+             vwapValue,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"typical\":" +
+         nullableFloat(
+             typicalPrice,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"weighted_close\":" +
+         nullableFloat(
+             weightedClosePrice,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_price\":" +
+         nullableFloat(
+             candleRange,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"body_price\":" +
+         nullableFloat(
+             candleBody,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"lower_wick_price\":" +
+         nullableFloat(
+             lowerWick,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload + "\"indicators\":{"
+
+    payload := payload +
+         "\"rsi\":" +
+         nullableFloat(
+             rsi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr\":" +
+         nullableFloat(
+             atr,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_percent_of_price\":" +
+         nullableFloat(
+             atrPercent,
+             "#.######"
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_fast\":" +
+         nullableFloat(
+             emaFast,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_slow\":" +
+         nullableFloat(
+             emaSlow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_regime\":" +
+         nullableFloat(
+             emaRegime,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"higher_timeframe_ema\":" +
+         nullableFloat(
+             htfEma,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_line\":" +
+         nullableFloat(
+             macdLine,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_signal\":" +
+         nullableFloat(
+             macdSignal,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_histogram\":" +
+         nullableFloat(
+             macdHistogram,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"adx\":" +
+         nullableFloat(
+             adx,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"plus_di\":" +
+         nullableFloat(
+             plusDi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"minus_di\":" +
+         nullableFloat(
+             minusDi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_basis\":" +
+         nullableFloat(
+             bbBasis,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_upper\":" +
+         nullableFloat(
+             bbUpper,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_lower\":" +
+         nullableFloat(
+             bbLower,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_width\":" +
+         nullableFloat(
+             bbWidth,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_percent_b\":" +
+         nullableFloat(
+             bbPercentB,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"vwap_session\":" +
+         nullableFloat(
+             vwapValue,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload + "\"structure\":{"
+
+    payload := payload +
+         "\"trend_bias\":\"" +
+         trendBias +
+         "\","
+
+    payload := payload +
+         "\"volatility_regime\":\"" +
+         volatilityRegime +
+         "\","
+
+    payload := payload +
+         "\"market_regime\":\"" +
+         marketRegime +
+         "\","
+
+    payload := payload +
+         "\"market_phase\":\"" +
+         marketRegime +
+         "\","
+
+    payload := payload +
+         "\"higher_timeframe_bias\":\"" +
+         higherTimeframeBias +
+         "\","
+
+    payload := payload +
+         "\"distance_to_recent_high\":" +
+         nullableFloat(
+             distanceToRecentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_to_recent_low\":" +
+         nullableFloat(
+             distanceToRecentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_to_vwap\":" +
+         nullableFloat(
+             distanceToVwap,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"nearest_support\":" +
+         nullableFloat(
+             recentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"nearest_resistance\":" +
+         nullableFloat(
+             recentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"swing_high_1\":" +
+         nullableFloat(
+             recentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"swing_low_1\":" +
+         nullableFloat(
+             recentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_high\":" +
+         nullableFloat(
+             rollingHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_low\":" +
+         nullableFloat(
+             rollingLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_mid\":" +
+         nullableFloat(
+             rollingMid,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_width\":" +
+         nullableFloat(
+             rollingRange,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"candle_pattern\":null"
+
+    payload := payload + "},"
+
+    payload := payload + "\"risk\":{"
+
+    payload := payload +
+         "\"risk_model\":\"atr_structure_hybrid_v1\","
+
+    payload := payload +
+         "\"account_risk_percent\":" +
+         str.tostring(accountRiskPercentInput, "#.##") +
+         ","
+
+    payload := payload +
+         "\"proposed_entry\":" +
+         nullableFloat(
+             candidateEntry,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_loss\":" +
+         nullableFloat(
+             candidateStop,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_take_profit\":" +
+         nullableFloat(
+             candidateTarget,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_distance_price\":" +
+         nullableFloat(
+             candidateStopDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_distance_pips\":" +
+         nullableFloat(
+             candidateStopDistance / pipSize,
+             "#.##"
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_target_distance_price\":" +
+         nullableFloat(
+             candidateTargetDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_target_distance_pips\":" +
+         nullableFloat(
+             candidateTargetDistance / pipSize,
+             "#.##"
+         ) +
+         ","
+
+    payload := payload +
+         "\"stop_distance_price\":" +
+         nullableFloat(
+             candidateStopDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"target_distance_price\":" +
+         nullableFloat(
+             candidateTargetDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"rr_ratio\":" +
+         nullableFloat(
+             candidateRewardRisk,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"reward_risk_multiple\":" +
+         nullableFloat(
+             candidateRewardRisk,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"risk_percent\":" +
+         str.tostring(accountRiskPercentInput, "#.##") +
+         ","
+
+    payload := payload +
+         "\"position_size_units\":null,"
+
+    payload := payload +
+         "\"position_size_units_abs\":null,"
+
+    payload := payload +
+         "\"position_size_lots\":null,"
+
+    payload := payload +
+         "\"max_spread_allowed\":" +
+         str.tostring(maxSpreadAllowedPriceInput, "#.#####") +
+         ","
+
+    payload := payload +
+         "\"max_spread_allowed_pips\":" +
+         str.tostring(maxSpreadAllowedPriceInput / pipSize, "#.##") +
+         ","
+
+    payload := payload +
+         "\"max_slippage_allowed\":" +
+         str.tostring(maxSlippageAllowedPriceInput, "#.#####") +
+         ","
+
+    payload := payload +
+         "\"max_slippage_allowed_pips\":" +
+         str.tostring(maxSlippageAllowedPriceInput / pipSize, "#.##") +
+         ","
+
+    payload := payload +
+         "\"drawdown_guard_status\":\"pass\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"costs\":{"
+
+    payload := payload +
+         "\"spread_cost_estimate\":null,"
+
+    payload := payload +
+         "\"commission_estimate\":null,"
+
+    payload := payload +
+         "\"financing_model\":\"oanda_cfd\","
+
+    payload := payload +
+         "\"financing_long_annualized\":null,"
+
+    payload := payload +
+         "\"financing_short_annualized\":null,"
+
+    payload := payload +
+         "\"estimated_overnight_cost_per_day\":null,"
+
+    payload := payload +
+         "\"triple_swap_day_flag\":null,"
+
+    payload := payload +
+         "\"rollover_basis_rate\":null,"
+
+    payload := payload +
+         "\"currency_conversion_impact\":null"
+
+    payload := payload + "},"
+
+    payload := payload + "\"context\":{"
+
+    payload := payload +
+         "\"high_impact_event_nearby\":null,"
+
+    payload := payload +
+         "\"minutes_to_next_high_impact_event\":null,"
+
+    payload := payload +
+         "\"news_risk_level\":null,"
+
+    payload := payload +
+         "\"macro_bias\":null,"
+
+    payload := payload +
+         "\"sentiment_bias\":null,"
+
+    payload := payload +
+         "\"context_status\":\"unchecked\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"asset_specific\":{"
+
+    payload := payload + "\"fx\":{"
+
+    payload := payload +
+         "\"base_currency\":\"" +
+         pairBaseCurrency +
+         "\","
+
+    payload := payload +
+         "\"quote_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"pip_value_per_standard_lot\":" +
+         str.tostring(pairPipSize * pairContractSize, "#.####") +
+         ","
+
+    payload := payload +
+         "\"tom_next_bias\":null"
+
+    payload := payload + "},"
+
+    payload := payload +
+         "\"metals\":{},"
+
+    payload := payload +
+         "\"commodities\":{},"
+
+    payload := payload +
+         "\"indices\":{},"
+
+    payload := payload +
+         "\"equities\":{},"
+
+    payload := payload +
+         "\"crypto\":{}"
+
+    payload := payload + "},"
+
+    payload := payload + "\"manus\":{"
+
+    payload := payload +
+         "\"signal_quality_score\":null,"
+
+    payload := payload +
+         "\"risk_score\":null,"
+
+    payload := payload +
+         "\"context_score\":null,"
+
+    payload := payload +
+         "\"strategy_fit_score\":null,"
+
+    payload := payload +
+         "\"expected_value_score\":null,"
+
+    payload := payload +
+         "\"approval_status\":\"pending\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"execution\":{"
+
+    payload := payload +
+         "\"execution_status\":\"not_sent\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"learning\":{"
+
+    payload := payload +
+         "\"trade_outcome\":\"unknown\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"extensions\":{"
+
+    payload := payload +
+         "\"candidate_generator_version\":\"" +
+         strategyVersionString +
+         "\","
+
+    payload := payload +
+         "\"candidate_strength\":" +
+         nullableFloat(
+             candidateStrength,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_pips\":" +
+         nullableFloat(
+             atrPips,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_ratio\":" +
+         nullableFloat(
+             atrRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_width_ratio\":" +
+         nullableFloat(
+             bbWidthRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_separation_atr\":" +
+         nullableFloat(
+             emaSeparationAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_from_vwap_atr\":" +
+         nullableFloat(
+             distanceFromVwapAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_from_fast_ema_atr\":" +
+         nullableFloat(
+             distanceFromFastEmaAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"rolling_range_atr\":" +
+         nullableFloat(
+             rollingRangeAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"candle_body_to_range\":" +
+         nullableFloat(
+             bodyToRange,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"upper_wick_ratio\":" +
+         nullableFloat(
+             upperWickRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"lower_wick_ratio\":" +
+         nullableFloat(
+             lowerWickRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"adx_di_spread\":" +
+         nullableFloat(
+             adxDiSpread,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"htf_timeframe\":\"" +
+         higherTimeframe +
+         "\","
+
+    payload := payload +
+         "\"engine_expected_version\":\"" +
+         engineExpectedVersion +
+         "\","
+
+    payload := payload +
+         "\"strategy_revision_date\":\"" +
+         strategyRevisionDate +
+         "\","
+
+    payload := payload +
+         "\"allow_manus_override_sl_tp\":true,"
+
+    payload := payload +
+         "\"pine_proposal_only\":true,"
+
+    payload := payload +
+         "\"candidate_policy\":\"standard_candidate_v5\","
+
+    payload := payload +
+         "\"candidates_today\":" +
+         str.tostring(candidatesToday)
+
+    payload := payload + "}"
+
+    payload := payload + "}"
+
+    payload
+
+
+// ============================================================================
+// 17. FINAL CANDIDATE VALIDATION AND ALERT EMISSION
+// ============================================================================
+
+bool validLongCandidate =
+     finalLongCandidate and
+     longRiskValid
+
+bool validShortCandidate =
+     finalShortCandidate and
+     shortRiskValid
+
+bool validFinalCandidate =
+     validLongCandidate or
+     validShortCandidate
+
+if validFinalCandidate
+    candidatesToday += 1
+    lastCandidateBar := bar_index
+
+    if enableAlerts
+        alert(
+             buildCanonicalPayload(),
+             alert.freq_once_per_bar_close
+         )
+
+
+// ============================================================================
+// 18. OPTIONAL STRATEGY-TESTER SIMULATION
+// ============================================================================
+
+var float activeStop = na
+var float activeTarget = na
+var int simulatedEntryBar = na
+
+bool flat =
+     strategy.position_size == 0
+
+if simulateCandidates and validFinalCandidate and flat
+    activeStop :=
+         candidateStop
+
+    activeTarget :=
+         candidateTarget
+
+    simulatedEntryBar :=
+         bar_index
+
+    if validLongCandidate
+        strategy.entry(
+             id = "Candidate Long",
+             direction = strategy.long,
+             comment = candidateModel
+         )
+
+        strategy.exit(
+             id = "Candidate Long Exit",
+             from_entry = "Candidate Long",
+             stop = activeStop,
+             limit = activeTarget
+         )
+
+    if validShortCandidate
+        strategy.entry(
+             id = "Candidate Short",
+             direction = strategy.short,
+             comment = candidateModel
+         )
+
+        strategy.exit(
+             id = "Candidate Short Exit",
+             from_entry = "Candidate Short",
+             stop = activeStop,
+             limit = activeTarget
+         )
+
+if simulateCandidates and strategy.position_size > 0
+    strategy.exit(
+         id = "Candidate Long Exit",
+         from_entry = "Candidate Long",
+         stop = activeStop,
+         limit = activeTarget
+     )
+
+if simulateCandidates and strategy.position_size < 0
+    strategy.exit(
+         id = "Candidate Short Exit",
+         from_entry = "Candidate Short",
+         stop = activeStop,
+         limit = activeTarget
+     )
+
+bool timeExit =
+     simulateCandidates and
+     strategy.position_size != 0 and
+     not na(simulatedEntryBar) and
+     bar_index - simulatedEntryBar >= simulatedMaximumHoldingBars
+
+if timeExit
+    strategy.close_all(
+         comment = "Candidate time exit"
+     )
+
+bool simulationJustClosed =
+     strategy.position_size == 0 and
+     strategy.position_size[1] != 0
+
+if simulationJustClosed
+    activeStop := na
+    activeTarget := na
+    simulatedEntryBar := na
+
+
+// ============================================================================
+// 19. CHART VISUALS
+// ============================================================================
+
+plot(
+     emaFast,
+     title = "EMA 20",
+     linewidth = 2
+)
+
+plot(
+     emaSlow,
+     title = "EMA 50",
+     linewidth = 2
+)
+
+plot(
+     emaRegime,
+     title = "EMA 200",
+     linewidth = 2
+)
+
+plot(
+     vwapValue,
+     title = "VWAP",
+     linewidth = 1
+)
+
+plotshape(
+     validLongCandidate,
+     title = "Long candidate",
+     style = shape.triangleup,
+     location = location.belowbar,
+     size = size.small,
+     text = "L"
+)
+
+plotshape(
+     validShortCandidate,
+     title = "Short candidate",
+     style = shape.triangledown,
+     location = location.abovebar,
+     size = size.small,
+     text = "S"
+)
+
+float displayedStop = na
+float displayedTarget = na
+
+if strategy.position_size != 0
+    displayedStop :=
+         activeStop
+
+    displayedTarget :=
+         activeTarget
+
+plot(
+     displayedStop,
+     title = "Simulated stop",
+     style = plot.style_linebr,
+     linewidth = 2
+)
+
+plot(
+     displayedTarget,
+     title = "Simulated target",
+     style = plot.style_linebr,
+     linewidth = 2
+)
+
+color backgroundColour = na
+
+if not validChart
+    backgroundColour :=
+         color.new(
+             color.red,
+             85
+         )
+else if not validSession
+    backgroundColour :=
+         color.new(
+             color.gray,
+             94
+         )
+
+bgcolor(
+     backgroundColour
+)
+
+
+// ============================================================================
+// 20. DIAGNOSTIC DASHBOARD
+// ============================================================================
+
+var table dashboard =
+     table.new(
+         position.top_right,
+         2,
+         17,
+         border_width = 1
+     )
+
+if barstate.islast
+    table.cell(
+         dashboard,
+         0,
+         0,
+         "St Ludaetuc"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         0,
+         "AUD/USD CG 5.0"
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         1,
+         "Chart valid"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         1,
+         str.tostring(validChart)
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         2,
+         "Session"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         2,
+         sessionName
+     )
+
+    string sessionPassText = "BLOCKED"
+
+    if validSession
+        sessionPassText := "PASS"
+
+    table.cell(
+         dashboard,
+         0,
+         3,
+         "Session pass"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         3,
+         sessionPassText
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         4,
+         "Market regime"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         4,
+         marketRegime
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         5,
+         "Trend"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         5,
+         trendBias
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         6,
+         "HTF bias"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         6,
+         higherTimeframeBias
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         7,
+         "ATR pips"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         7,
+         str.tostring(
+             atrPips,
+             "#.##"
+         )
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         8,
+         "Volatility"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         8,
+         volatilityRegime
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         9,
+         "RSI"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         9,
+         str.tostring(
+             rsi,
+             "#.##"
+         )
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         10,
+         "ADX / +DI / -DI"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         10,
+         str.tostring(adx, "#.#") + " / " + str.tostring(plusDi, "#.#") + " / " + str.tostring(minusDi, "#.#")
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         11,
+         "Candidates today"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         11,
+         str.tostring(
+             candidatesToday
+         )
+     )
+
+    string cooldownText = "WAIT"
+
+    if cooldownPass
+        cooldownText := "PASS"
+
+    table.cell(
+         dashboard,
+         0,
+         12,
+         "Cooldown"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         12,
+         cooldownText
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         13,
+         "Long model"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         13,
+         longModel
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         14,
+         "Short model"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         14,
+         shortModel
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         15,
+         "Candidate strength"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         15,
+         str.tostring(candidateStrength, "#.#") + " (" + strengthLabel + ")"
+     )
+
+    table.cell(
+         dashboard,
+         0,
+         16,
+         "Schema / engine ver"
+     )
+
+    table.cell(
+         dashboard,
+         1,
+         16,
+         schemaVersionString + " / " + engineExpectedVersion
+     )
+

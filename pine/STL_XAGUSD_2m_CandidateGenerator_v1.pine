@@ -1,0 +1,3573 @@
+//@version=6
+strategy(
+     title                   = "St Ludaetuc XAGUSD 2m Candidate Generator v1.0",
+     shorttitle              = "STLXAGCG1",
+     overlay                 = true,
+     pyramiding              = 0,
+     initial_capital         = 10000,
+     currency                = currency.USD,
+     default_qty_type        = strategy.percent_of_equity,
+     default_qty_value       = 0.50,
+     commission_type         = strategy.commission.cash_per_order,
+     commission_value        = 0.0,
+     slippage                = 1,
+     process_orders_on_close = true,
+     calc_on_order_fills     = true,
+     calc_on_every_tick      = false
+)
+
+// ============================================================================
+// ST LUDAETUC XAG/USD (Silver) 2-MINUTE CANDIDATE GENERATOR v1.0.0
+//
+// TradingView proposes candidates.
+// Manus (the FastAPI scoring engine) approves or rejects.
+// Make.com routes approved decisions.
+// Oanda executes approved trades.
+//
+// Alert configuration:
+// Condition: Any alert() function call
+// Frequency: Once Per Bar Close
+//
+// ----------------------------------------------------------------------------
+// NOTES (first release, 2026-10-03)
+// ----------------------------------------------------------------------------
+// This is a new build for XAG/USD (Silver), sharing the same architecture as
+// the five FX candidate generators (v5.1.0) -- pair config, inputs, chart
+// validation, core market features, classification, session handling,
+// frequency governance, ATR/structure stop-target math, JSON payload
+// builder, strategy-tester simulation, chart visuals and a diagnostic
+// dashboard -- but with a single, different entry model:
+//
+//   bb_rsi_armed_reversal ("BB/RSI armed exhaustion reversal")
+//
+// This reconstructs a strategy the user remembered running previously:
+// price closes outside the Bollinger Band (upper ~77 / lower ~37 on RSI,
+// paired with the band touch) which ARMS a setup; the script then waits
+// for a subsequent bar to push the extreme further (a lower low for the
+// long/fade side, a higher high for the short/fade side) and ENTERS
+// against that fresh extreme, i.e. fading the exhaustion move rather than
+// continuing with it. This is deliberately the REVERSAL interpretation,
+// not a continuation/breakout model -- confirmed against engine.py, which
+// already has a dedicated "bb_rsi_armed_reversal" / "bb_rsi_immediate_
+// rejection" model policy pair, plus legacy aliases
+// ("bb_rsi_exhaustion_reversal", "bb_rsi_reversal") that both resolve to
+// bb_rsi_armed_reversal -- strong evidence the original strategy this is
+// rebuilding was a reversal/fade model under that exact name.
+//
+// Only the "armed" (wait-for-extra-extension) variant is built in this
+// pass, per explicit scope decision. The engine's "bb_rsi_immediate_
+// rejection" policy (a same-bar, no-wait variant) is NOT implemented here
+// and can follow later as its own addition if wanted.
+//
+// Risk, structure-stop, ATR, session, cooldown and daily-cap governance are
+// reused from the FX template essentially unchanged. The one deliberate
+// correction made here (not carried over from the FX files, where it was
+// a known but out-of-scope gap): getSessionName() below can return
+// "new_york" as its own session label, because engine.py's INSTRUMENTS
+// entry for both metals explicitly lists "new_york" as a preferred
+// session -- the FX files never needed that label since none of their
+// pairs' preferred_sessions included it.
+//
+// Stop/target math (stopAtrMultiplier = 1.60, targetRiskMultiplier =
+// 1.70, structureBufferPips = 0.6) is set to match
+// engine.py's InstrumentConfig for XAGUSD (sl_atr_mult / default_rr /
+// structure_buffer_pips) exactly, 1:1, following the same convention used
+// for the five FX pairs -- so an eventual engine-side override is a no-op
+// until the two are jointly re-tuned.
+//
+// ATR volatility band (minimumAtrPips = 2.5, maximumAtrPips =
+// 15.0) and session windows are REASONED, NOT BACKTESTED --
+// there is no live diagnostic history for XAGUSD yet, unlike the FX
+// pairs which had a 2026-10-01/02 live diagnostic to calibrate against.
+// Treat these as sane starting points to be revisited once live candidates
+// accumulate, exactly as flagged for the FX pairs' own per-pair tuning.
+//
+// ----------------------------------------------------------------------------
+// v1.1.0 (2026-10-04) -- missing reversal stage added
+// ----------------------------------------------------------------------------
+// v1.0.0 entered immediately on the fresh lower-low/higher-high that pushed
+// the exhaustion move further (the EXTEND event), with no confirmation that
+// price had actually turned. Two problems followed directly from that: (1)
+// it was fading INTO a still-falling/rising market, not an actual reversal;
+// and (2) because the model fully disarmed on every such entry and a fresh
+// BB/RSI arm trigger very commonly re-fires on the very next bar of the same
+// selloff/rally, it could stack multiple entries chasing successive new
+// extremes on one swing.
+//
+// v1.1.0 inserts a third stage between EXTEND and ENTRY: after the fresh
+// low/high, the model now WAITS for a later confirmed bar to close back
+// through that extreme bar's high (long) / low (short) before entering --
+// an objective, price-structure confirmation that the move has actually
+// turned, not just extended. A still-deeper low/high while waiting ratchets
+// the trigger level to the new extreme and restarts the reversal-wait timer,
+// so an ongoing selloff/rally keeps pushing the goalposts instead of leaving
+// the model waiting on a stale level. Reaching ENTRY still fully disarms the
+// model (one trade per armed cycle), which combined with the reversal gate
+// is what stops repeated entries on the same swing. See section 7 for the
+// full three-stage state machine.
+//
+// ----------------------------------------------------------------------------
+// v1.1.1 (2026-10-04) -- trade-frequency tuning (testing phase)
+// ----------------------------------------------------------------------------
+// A live strategy-tester export after the v1.1.0 change (XAUUSD, 2026-09-02
+// to 2026-09-29) showed only 13 trades across 27 days (~0.5/day, median gap
+// between entries ~40 hours) -- too sparse to meaningfully evaluate while
+// testing. Two changes, both easily reversible once enough live candidates
+// have accumulated to judge properly:
+//
+//   1. The stage-3 (reversal-wait) timeout previously shared maxArmedBars
+//      (8 bars / 16 min) with stage 1 (arm-wait). Waiting for an actual
+//      confirmed reversal close realistically takes longer than waiting for
+//      one more fresh low/high, so it is now its own input,
+//      maxReversalWaitBars, defaulted to 24 bars / 48 min -- three times
+//      the stage-1 budget. maxArmedBars itself is unchanged at 8.
+//   2. allowAsia defaulted to false (London/Overlap/New York only); it now
+//      defaults to true, widening the trading window to roughly 24 hours.
+//
+// Neither change touches the core signal definition (RSI 37/77 thresholds,
+// the arm/extend/reversal conditions themselves) -- both are governance
+// knobs being loosened specifically to get more candidates flowing during
+// the evaluation period.
+//
+// ----------------------------------------------------------------------------
+// v1.1.2 (2026-10-04) -- disarm-race bug fixed (setups no longer wasted on
+// rejected candidates)
+// ----------------------------------------------------------------------------
+// Found while diagnosing a frozen, never-closing simulated trade in a live
+// XAGUSD strategy-tester export: the Section 9 state machine fully disarmed
+// the armed cycle (longArmed/longAwaitingReversal etc. all reset to
+// false/na) purely on longReversalTrigger/shortReversalTrigger being
+// geometrically true -- i.e. on the price-structure confirmation alone --
+// regardless of whether the candidate that confirmation would produce was
+// actually going to be accepted downstream. If cooldown, the daily
+// candidate cap, volatility/session validity, or risk/reward (longRiskValid
+// / shortRiskValid) rejected it that same bar, the setup was silently
+// consumed anyway: no trade, no alert, and the armed cycle was gone, so the
+// model had to wait for an entirely fresh arm trigger from the band/RSI
+// before it could try again.
+//
+// Fixed by hoisting validLongCandidate / validShortCandidate (and
+// everything they depend on: rawLongCandidate/rawShortCandidate,
+// commonCandidatePass, longRiskValid/shortRiskValid, previously Sections
+// 10-12) to directly above the Section 9 state-mutation cascade, and
+// changing the two disarm conditions from "if longReversalTrigger" / "if
+// shortReversalTrigger" to "if longReversalTrigger and validLongCandidate"
+// / "if shortReversalTrigger and validShortCandidate". A reversal
+// confirmation that gets rejected downstream now falls through the
+// existing if/else-if cascade as a no-op for that bar -- the
+// awaiting-reversal state is left exactly as it was, still bounded by its
+// own longReversalTimeout/shortReversalTimeout and
+// longAwaitingReversalRecovery/shortAwaitingReversalRecovery safety valves
+// -- so it can still go on to trigger a real entry on a later bar once the
+// gate that blocked it clears (e.g. cooldown expiring), instead of being
+// thrown away. Section 17's validLongCandidate/validShortCandidate/
+// validFinalCandidate declarations were removed (no longer redeclared --
+// they are defined once, earlier, and reused as-is).
+//
+// This is a pure governance-ordering fix: the final candidate/alert/
+// strategy-entry logic itself (Sections 17-18) is unchanged, so which
+// signals actually trade is identical to before. What changes is that a
+// signal rejected by governance no longer burns the armed cycle it arrived
+// on.
+//
+// ----------------------------------------------------------------------------
+// v1.2.0 (2026-10-06) -- closed the last session blind spot; "overnight" is
+// now a real, named session instead of falling through to "unknown"
+// ----------------------------------------------------------------------------
+// Prompted by Andy wanting the strategy to trade (and be scored/learned
+// from) in every session, not just London/Overlap/New York. Two separate
+// things were found stacking to produce the near-total overnight silence
+// actually observed live, and only one of them was in this file:
+//
+//   1. engine.py's INSTRUMENTS table hard-vetoed the "asia" and "overnight"
+//      session labels outright (BLOCKED_SESSION, in _hard_rejection()) for
+//      most pairs -- fixed separately, engine-side, in v3.11.0. Not this
+//      script's problem, but worth noting here since it was the other half
+//      of the same symptom.
+//   2. HERE, in this script: validSession was built from exactly four
+//      named windows -- london (0300-0800), overlap (0800-1100), new_york
+//      (0830-1600) and asia (1800-0300), all in New York local time. Those
+//      four leave a real, unconditional gap from 1600-1800 NY (2000-2200
+//      UTC) that NO session window covers at all -- not "blocked", just
+//      never classified as anything but the "unknown" fallback in
+//      getSessionName(), which both this script's own validSession check
+//      and engine.py's session gate have always treated as a data problem,
+//      not a real session. That gap existed regardless of allowAsia and
+//      regardless of today's engine.py fix -- it could never produce a
+//      candidate, by construction, before this change.
+//
+// Fixed by adding a fifth named window, overnightSession (default
+// "1600-1800" NY local, matching the gap exactly), a matching inOvernight
+// check, and a new allowOvernight toggle (default true, mirroring the
+// existing allowAsia pattern so either can be switched off independently
+// without touching code if live results say one session isn't worth
+// taking). getSessionName() now returns "overnight" for it instead of
+// falling through to "unknown" -- "unknown" is reserved for genuine
+// classification failures again, exactly as engine.py's gate assumes.
+// allowAsia itself was already defaulted to true as of v1.1.1, so with this
+// change validSession now covers all 24 hours of the day with every hour
+// mapped to a specific, named, independently-togglable session -- nothing
+// left that silently can't be learned from.
+//
+// Pure governance/classification change: the entry-model logic itself
+// (Sections 7-9) and the risk/stop/target math are untouched.
+// ============================================================================
+
+
+// ============================================================================
+// 0. PAIR-SPECIFIC CONFIGURATION
+//
+// To adapt this script to a different metal or instrument:
+//   1. Edit every value in this section.
+//   2. Also edit the strategy() declaration above (title, shorttitle) -
+//      Pine requires those to be compile-time literals.
+//   3. Re-check groupRisk / groupVolatility defaults below - these were
+//      reasoned for XAG/USD (Silver) specifically and are unlikely to transfer
+//      as-is to another metal, a different FX pair, or an index/equity.
+// ============================================================================
+
+string pairSymbol            = "XAGUSD"
+string pairDisplayName       = "XAG/USD (Silver)"
+string pairBrokerSymbol      = "XAG_USD"
+string pairBaseCurrency      = "XAG"
+string pairQuoteCurrency     = "USD"
+float  pairPipSize           = 0.01
+int    pairPriceDecimals     = 3
+float  pairContractSize      = 1
+float  pairUnitStep          = 1
+float  pairMinUnits          = 1
+float  pairMaxUnits          = 5000
+string metalSymbol           = "XAG"
+string strategyIdSlug        = "stl_xagusd_2m_candidate_generator_v1"
+string strategyVersionString = "1.2.0"
+string strategyDisplayName   = "St Ludaetuc XAG/USD 2-Minute Candidate Generator"
+string signalIdPrefix        = "STL-XAGUSD-2M-V1"
+string tickerMatchString     = "XAGUSD"
+string schemaVersionString   = "1.1.0"
+string engineExpectedVersion = "3.11.0"
+string strategyRevisionDate  = "2026-10-06"
+
+
+// ============================================================================
+// 1. INPUTS
+// ============================================================================
+
+string groupGeneral = "General"
+
+bool enableAlerts = input.bool(
+     true,
+     "Enable canonical JSON alerts",
+     group = groupGeneral
+)
+
+bool simulateCandidates = input.bool(
+     true,
+     "Simulate candidates as strategy trades",
+     tooltip = "Displays candidate entries in Strategy Tester. Manus remains the execution authority.",
+     group = groupGeneral
+)
+
+bool enableLongs = input.bool(
+     true,
+     "Enable long candidates",
+     group = groupGeneral
+)
+
+bool enableShorts = input.bool(
+     true,
+     "Enable short candidates",
+     group = groupGeneral
+)
+
+int cooldownBars = input.int(
+     5,
+     "Minimum bars between candidates",
+     minval = 0,
+     maxval = 100,
+     tooltip = "Five bars equals ten minutes on a two-minute chart.",
+     group = groupGeneral
+)
+
+int maximumCandidatesPerDay = input.int(
+     18,
+     "Maximum candidates per day",
+     minval = 1,
+     maxval = 100,
+     group = groupGeneral
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupTrend = "Trend features (classification/scoring only -- the entry model below does not gate on these)"
+
+int emaFastLength = input.int(
+     20,
+     "Fast EMA",
+     minval = 2,
+     group = groupTrend
+)
+
+int emaSlowLength = input.int(
+     50,
+     "Slow EMA",
+     minval = 5,
+     group = groupTrend
+)
+
+int emaRegimeLength = input.int(
+     200,
+     "Regime EMA",
+     minval = 20,
+     group = groupTrend
+)
+
+int htfEmaLength = input.int(
+     50,
+     "Higher-timeframe EMA",
+     minval = 5,
+     group = groupTrend
+)
+
+string higherTimeframe = input.timeframe(
+     "10",
+     "Higher timeframe",
+     group = groupTrend
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupMomentum = "Momentum features"
+
+int rsiLength = input.int(
+     14,
+     "RSI length",
+     minval = 2,
+     group = groupMomentum
+)
+
+int macdFastLength = input.int(
+     12,
+     "MACD fast",
+     minval = 2,
+     group = groupMomentum
+)
+
+int macdSlowLength = input.int(
+     26,
+     "MACD slow",
+     minval = 3,
+     group = groupMomentum
+)
+
+int macdSignalLength = input.int(
+     9,
+     "MACD signal",
+     minval = 2,
+     group = groupMomentum
+)
+
+int adxLength = input.int(
+     14,
+     "ADX length",
+     minval = 2,
+     group = groupMomentum
+)
+
+float minimumAdx = input.float(
+     15.0,
+     "Minimum ADX (classification only)",
+     minval = 0.0,
+     step = 0.5,
+     tooltip = "Used only for the trendBias/marketRegime classification fields in the payload and for scoring. The entry model below does not require a minimum ADX -- engine.py's bb_rsi_armed_reversal policy deliberately does not block the trend regime, since an exhaustion fade is meant to fire inside an established trend's pullback, not only in a range.",
+     group = groupMomentum
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupVolatility = "Volatility features"
+
+int atrLength = input.int(
+     14,
+     "ATR length",
+     minval = 2,
+     group = groupVolatility
+)
+
+float minimumAtrPips = input.float(
+     2.5,
+     "Minimum ATR, pips",
+     minval = 0.1,
+     step = 0.1,
+     tooltip = "Reasoned, not backtested -- no live diagnostic history exists yet for XAGUSD.",
+     group = groupVolatility
+)
+
+float maximumAtrPips = input.float(
+     15.0,
+     "Maximum ATR, pips",
+     minval = 0.2,
+     step = 0.1,
+     tooltip = "Reasoned, not backtested -- caps candidates during news-spike-style extreme ranges.",
+     group = groupVolatility
+)
+
+int bollingerLength = input.int(
+     20,
+     "Bollinger length",
+     minval = 5,
+     group = groupVolatility
+)
+
+float bollingerDeviation = input.float(
+     2.0,
+     "Bollinger deviation",
+     minval = 0.5,
+     step = 0.1,
+     group = groupVolatility
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupRisk = "Candidate risk proposal"
+
+float stopAtrMultiplier = input.float(
+     1.60,
+     "Stop ATR multiplier",
+     minval = 0.5,
+     step = 0.05,
+     tooltip = "Matches engine.py InstrumentConfig.sl_atr_mult for XAGUSD.",
+     group = groupRisk
+)
+
+float targetRiskMultiplier = input.float(
+     1.70,
+     "Target reward-to-risk",
+     minval = 1.0,
+     step = 0.05,
+     tooltip = "Matches engine.py InstrumentConfig.default_rr for XAGUSD.",
+     group = groupRisk
+)
+
+int structureLookback = input.int(
+     12,
+     "Structure lookback",
+     minval = 2,
+     maxval = 100,
+     group = groupRisk
+)
+
+float structureBufferPips = input.float(
+     0.6,
+     "Structure buffer, pips",
+     minval = 0.0,
+     step = 0.1,
+     tooltip = "Matches engine.py InstrumentConfig.structure_buffer_pips for XAGUSD.",
+     group = groupRisk
+)
+
+int simulatedMaximumHoldingBars = input.int(
+     30,
+     "Maximum simulated holding bars",
+     minval = 2,
+     tooltip = "Thirty two-minute bars equals sixty minutes.",
+     group = groupRisk
+)
+
+float accountRiskPercentInput = input.float(
+     0.35,
+     "Proposed account risk, percent",
+     minval = 0.01,
+     step = 0.01,
+     tooltip = "Proposed only; matches engine.py max_risk_percent for XAGUSD as a sensible default. The engine applies its own configured ceiling regardless of this value.",
+     group = groupRisk
+)
+
+float maxSpreadAllowedPriceInput = input.float(
+     0.030,
+     "Max spread allowed, price units",
+     minval = 0.0,
+     step = 0.001,
+     tooltip = "Matches engine.py InstrumentConfig.max_spread_price for XAGUSD. Informational only until Make/the engine sources live spread data for this instrument.",
+     group = groupRisk
+)
+
+float maxSlippageAllowedPriceInput = input.float(
+     0.015,
+     "Max slippage allowed, price units",
+     minval = 0.0,
+     step = 0.001,
+     tooltip = "Matches engine.py InstrumentConfig.max_slippage_price for XAGUSD.",
+     group = groupRisk
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupSessions = "Sessions"
+
+string tradingTimezone = input.string(
+     "America/New_York",
+     "Session timezone",
+     tooltip = "Metals are quoted against USD and trade through COMEX/NY hours as their deepest-liquidity window, so session windows here are expressed in New York local time (unlike the FX scripts, which use Europe/London).",
+     group = groupSessions
+)
+
+string londonSession = input.session(
+     "0300-0800",
+     "London session (New York local time)",
+     group = groupSessions
+)
+
+string overlapSession = input.session(
+     "0800-1100",
+     "London/New York overlap (New York local time)",
+     group = groupSessions
+)
+
+string newYorkSession = input.session(
+     "0830-1600",
+     "New York / COMEX session (New York local time)",
+     group = groupSessions
+)
+
+bool allowAsia = input.bool(
+     true,
+     "Allow Asian-session candidates",
+     tooltip = "Enabled by default while the model is still being evaluated for live trade frequency -- widens the trading window to roughly 24h. Revisit once enough live candidates have accumulated to judge Asian-session signal quality on its own.",
+     group = groupSessions
+)
+
+string asiaSession = input.session(
+     "1800-0300",
+     "Asian session (New York local time)",
+     group = groupSessions
+)
+
+// v1.2.0: closes the one gap the four windows above always left --
+// 1600-1800 NY (2000-2200 UTC) sat between New York session close and
+// Asian session open, covered by none of them, and fell through to the
+// "unknown" session label unconditionally (see validSession/
+// getSessionName() below), regardless of allowAsia or any engine.py
+// setting. Named and made independently togglable for the same reason
+// allowAsia is: so a kill-switch exists if live results say this window
+// isn't worth taking, without needing a code change.
+bool allowOvernight = input.bool(
+     true,
+     "Allow overnight (NY-close lull) candidates",
+     tooltip = "Covers the gap between the New York session closing and the Asian session opening, which previously had no session window at all and so could never produce a candidate, regardless of any other setting. Enabled by default so every hour of the day is tradeable and learnable from; disable here if live results say this window isn't worth taking.",
+     group = groupSessions
+)
+
+string overnightSession = input.session(
+     "1600-1800",
+     "Overnight / NY-close lull (New York local time)",
+     tooltip = "Fills the gap between New York session close (1600) and Asian session open (1800) so every hour of the day maps to a named, learnable session instead of silently falling through to 'unknown'.",
+     group = groupSessions
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupArmedReversal = "BB/RSI armed exhaustion reversal model"
+
+bool enableBbRsiArmedReversal = input.bool(
+     true,
+     "Enable bb_rsi_armed_reversal candidates",
+     group = groupArmedReversal
+)
+
+float rsiOversoldThreshold = input.float(
+     37.0,
+     "RSI oversold arm threshold (long/fade side)",
+     minval = 1.0,
+     maxval = 49.0,
+     step = 0.5,
+     group = groupArmedReversal
+)
+
+float rsiOverboughtThreshold = input.float(
+     77.0,
+     "RSI overbought arm threshold (short/fade side)",
+     minval = 51.0,
+     maxval = 99.0,
+     step = 0.5,
+     group = groupArmedReversal
+)
+
+int maxArmedBars = input.int(
+     8,
+     "Maximum bars to stay armed (stage 1: waiting for a fresh low/high)",
+     minval = 1,
+     maxval = 60,
+     tooltip = "Eight bars equals sixteen minutes on a two-minute chart. If no confirming extension (fresh low/high) occurs within this many bars of arming, or price recovers back through the Bollinger basis, the armed setup is invalidated.",
+     group = groupArmedReversal
+)
+
+int maxReversalWaitBars = input.int(
+     24,
+     "Maximum bars to await reversal (stage 3: waiting for confirmation)",
+     minval = 1,
+     maxval = 120,
+     tooltip = "Separate, longer budget for the reversal-confirmation stage (close back through the extend bar's high/low) -- deliberately wider than the stage-1 arm-wait budget above, since waiting for an actual confirmed turn realistically takes longer than waiting for one more fresh low/high. 24 bars equals forty-eight minutes on a two-minute chart. If no reversal closes within this many bars of the most recent extension, or price recovers back through the Bollinger basis, the setup is invalidated without entering.",
+     group = groupArmedReversal
+)
+
+
+// ============================================================================
+// 2. CHART VALIDATION
+// ============================================================================
+
+bool isTwoMinute =
+     timeframe.isminutes and
+     timeframe.multiplier == 2
+
+bool symbolCurrenciesMatch =
+     syminfo.basecurrency == pairBaseCurrency and
+     syminfo.currency == pairQuoteCurrency
+
+bool tickerNameMatches =
+     str.contains(
+         str.upper(syminfo.ticker),
+         tickerMatchString
+     )
+
+bool isCorrectPair =
+     symbolCurrenciesMatch or
+     tickerNameMatches
+
+bool validChart =
+     isTwoMinute and
+     isCorrectPair and
+     chart.is_standard
+
+
+// ============================================================================
+// 3. CORE MARKET FEATURES
+// ============================================================================
+
+float pipSize = pairPipSize
+
+float emaFast =
+     ta.ema(close, emaFastLength)
+
+float emaSlow =
+     ta.ema(close, emaSlowLength)
+
+float emaRegime =
+     ta.ema(close, emaRegimeLength)
+
+float htfClose = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     close,
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+float htfEma = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     ta.ema(close, htfEmaLength),
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+float rsi =
+     ta.rsi(close, rsiLength)
+
+float atr =
+     ta.atr(atrLength)
+
+float atrPips =
+     atr / pipSize
+
+float atrBandWidth =
+     maximumAtrPips - minimumAtrPips
+
+float atrSweetSpotLow =
+     minimumAtrPips + atrBandWidth / 3.0
+
+float atrSweetSpotHigh =
+     minimumAtrPips + atrBandWidth * 2.0 / 3.0
+
+float atrAverage50 =
+     ta.sma(atr, 50)
+
+float atrRatio = na
+
+if atrAverage50 > 0.0
+    atrRatio :=
+         atr / atrAverage50
+
+float atrPercent = na
+
+if close != 0.0
+    atrPercent :=
+         atr / close * 100.0
+
+[macdLine, macdSignal, macdHistogram] =
+     ta.macd(
+         close,
+         macdFastLength,
+         macdSlowLength,
+         macdSignalLength
+     )
+
+[plusDi, minusDi, adx] =
+     ta.dmi(
+         adxLength,
+         adxLength
+     )
+
+float adxDiSpread =
+     plusDi - minusDi
+
+float vwapValue =
+     ta.vwap(hlc3)
+
+float distanceToVwap =
+     close - vwapValue
+
+float bbBasis =
+     ta.sma(
+         close,
+         bollingerLength
+     )
+
+float bbDeviationValue =
+     ta.stdev(
+         close,
+         bollingerLength
+     ) * bollingerDeviation
+
+float bbUpper =
+     bbBasis + bbDeviationValue
+
+float bbLower =
+     bbBasis - bbDeviationValue
+
+float bbWidth = na
+
+if bbBasis != 0.0
+    bbWidth :=
+         (bbUpper - bbLower) / bbBasis
+
+float bbWidthAverage50 =
+     ta.sma(bbWidth, 50)
+
+float bbWidthRatio = na
+
+if bbWidthAverage50 > 0.0
+    bbWidthRatio :=
+         bbWidth / bbWidthAverage50
+
+float bbPercentB = na
+
+if (bbUpper - bbLower) != 0.0
+    bbPercentB :=
+         (close - bbLower) / (bbUpper - bbLower)
+
+float recentHigh =
+     ta.highest(
+         high,
+         structureLookback
+     )
+
+float recentLow =
+     ta.lowest(
+         low,
+         structureLookback
+     )
+
+float distanceToRecentHigh =
+     recentHigh - close
+
+float distanceToRecentLow =
+     close - recentLow
+
+float candleBody =
+     math.abs(close - open)
+
+float candleRange =
+     high - low
+
+float bodyToRange = 0.0
+float upperWickRatio = 0.0
+float lowerWickRatio = 0.0
+
+float upperWick =
+     high - math.max(open, close)
+
+float lowerWick =
+     math.min(open, close) - low
+
+if candleRange > 0.0
+    bodyToRange :=
+         candleBody / candleRange
+
+    upperWickRatio :=
+         upperWick / candleRange
+
+    lowerWickRatio :=
+         lowerWick / candleRange
+
+float typicalPrice =
+     (high + low + close) / 3.0
+
+float weightedClosePrice =
+     (high + low + 2.0 * close) / 4.0
+
+float emaSeparation =
+     math.abs(emaFast - emaSlow)
+
+float emaSeparationAtr = na
+float distanceFromVwapAtr = na
+float distanceFromFastEmaAtr = na
+
+if atr > 0.0
+    emaSeparationAtr :=
+         emaSeparation / atr
+
+    distanceFromVwapAtr :=
+         (close - vwapValue) / atr
+
+    distanceFromFastEmaAtr :=
+         (close - emaFast) / atr
+
+float rollingHigh =
+     ta.highest(high, 30)
+
+float rollingLow =
+     ta.lowest(low, 30)
+
+float rollingRange =
+     rollingHigh - rollingLow
+
+float rollingMid =
+     (rollingHigh + rollingLow) / 2.0
+
+float rollingRangeAtr = na
+
+if atr > 0.0
+    rollingRangeAtr :=
+         rollingRange / atr
+
+
+// ============================================================================
+// 4. MARKET CLASSIFICATION
+// ============================================================================
+
+bool bullishTrend =
+     emaFast > emaSlow and
+     close > emaRegime
+
+bool bearishTrend =
+     emaFast < emaSlow and
+     close < emaRegime
+
+bool htfBullish =
+     htfClose > htfEma
+
+bool htfBearish =
+     htfClose < htfEma
+
+bool volatilityPass =
+     atrPips >= minimumAtrPips and
+     atrPips <= maximumAtrPips
+
+bool momentumMarket =
+     adx >= minimumAdx and
+     emaSeparationAtr >= 0.12
+
+bool rangeMarket =
+     adx < 19.0 and
+     emaSeparationAtr < 0.40
+
+
+// ============================================================================
+// 5. CLASSIFICATION FUNCTIONS
+// ============================================================================
+
+getTrendBias() =>
+    string result = "sideways"
+
+    if bullishTrend
+        result := "bullish"
+    else if bearishTrend
+        result := "bearish"
+
+    result
+
+
+getHigherTimeframeBias() =>
+    string result = "sideways"
+
+    if htfBullish
+        result := "bullish"
+    else if htfBearish
+        result := "bearish"
+
+    result
+
+
+getVolatilityRegime() =>
+    string result = "extreme"
+
+    if atrPips < minimumAtrPips
+        result := "very_low"
+    else if atrPips < atrSweetSpotLow
+        result := "low"
+    else if atrPips <= atrSweetSpotHigh
+        result := "normal"
+    else if atrPips <= maximumAtrPips
+        result := "high"
+
+    result
+
+
+getMarketRegime() =>
+    string result = "mixed"
+
+    if rangeMarket
+        result := "range"
+    else if momentumMarket and bullishTrend
+        result := "trend"
+    else if momentumMarket and bearishTrend
+        result := "trend"
+
+    result
+
+
+string trendBias =
+     getTrendBias()
+
+string higherTimeframeBias =
+     getHigherTimeframeBias()
+
+string volatilityRegime =
+     getVolatilityRegime()
+
+string marketRegime =
+     getMarketRegime()
+
+
+// ============================================================================
+// 6. SESSION CLASSIFICATION
+// ============================================================================
+
+bool inLondon =
+     not na(
+         time(
+             timeframe.period,
+             londonSession,
+             tradingTimezone
+         )
+     )
+
+bool inOverlap =
+     not na(
+         time(
+             timeframe.period,
+             overlapSession,
+             tradingTimezone
+         )
+     )
+
+bool inNewYork =
+     not na(
+         time(
+             timeframe.period,
+             newYorkSession,
+             tradingTimezone
+         )
+     )
+
+bool inAsia =
+     not na(
+         time(
+             timeframe.period,
+             asiaSession,
+             tradingTimezone
+         )
+     )
+
+// v1.2.0: see the groupSessions input above -- fills the 1600-1800 NY gap
+// that london/overlap/new_york/asia never covered between them.
+bool inOvernight =
+     not na(
+         time(
+             timeframe.period,
+             overnightSession,
+             tradingTimezone
+         )
+     )
+
+bool validSession =
+     inLondon or
+     inOverlap or
+     inNewYork or
+     (allowAsia and inAsia) or
+     (allowOvernight and inOvernight)
+
+
+getSessionName() =>
+    string result = "unknown"
+
+    if inOverlap
+        result := "overlap_london_new_york"
+    else if inNewYork
+        result := "new_york"
+    else if inLondon
+        result := "london"
+    else if inAsia
+        result := "asia"
+    else if inOvernight
+        result := "overnight"
+
+    result
+
+
+string sessionName =
+     getSessionName()
+
+
+// ============================================================================
+// 7. ENTRY MODEL -- BB/RSI ARMED EXHAUSTION REVERSAL (bb_rsi_armed_reversal)
+//
+// Three-stage state machine per side (long/fade shown; short/fade mirrors it
+// exactly with bbUpper, rsiOverboughtThreshold and highs in place of lows):
+//
+//   1. ARM       A confirmed bar closes at/below the lower Bollinger Band
+//                while RSI is at/below rsiOversoldThreshold. The arming
+//                bar's low becomes the reference to beat. A fresh arm
+//                trigger while already ARMED ratchets the reference to the
+//                lower of the two lows and refreshes the arm timer, so a
+//                grinding selloff keeps requiring a deeper undercut before
+//                moving to stage 2.
+//
+//   2. EXTEND    A later confirmed bar's low undercuts the armed reference
+//                -- price pushes the exhaustion move one step further. This
+//                does NOT enter. It captures that bar's high as the
+//                reversal-trigger level, and its RSI / %B as the "peak
+//                extension" reference used for signal-strength scoring,
+//                then moves to stage 3.
+//
+//   3. REVERSAL  Waits for a later confirmed bar to close back above the
+//                EXTEND bar's high -- an objective, price-structure
+//                confirmation that the move has actually turned, not just
+//                extended. THIS is the entry trigger: ENTERS LONG here
+//                (fading the exhaustion), then fully disarms. A still-deeper
+//                low while waiting ratchets the trigger level and the
+//                extension reference to the new, more extreme bar and
+//                restarts the reversal-wait timer, so an ongoing selloff
+//                keeps pushing the goalposts instead of leaving the model
+//                waiting on a stale level.
+//
+//   Reaching ENTRY fully disarms the model -- stage 3 consumes the whole
+//   armed cycle, so a brand new ARM (stage 1) is required before another
+//   entry can fire, even later on the same swing. Combined with the
+//   reversal gate itself, this is what stops repeated entries chasing every
+//   fresh low on one selloff (the v1.0.0 behaviour this version replaces).
+//
+//   INVALIDATE (disarm/reset without entering, from stage 1 or stage 3) if
+//   price recovers back through the Bollinger basis, or the relevant timeout
+//   elapses with no progress to the next stage -- maxArmedBars for stage 1
+//   (waiting for a fresh low/high), maxReversalWaitBars for stage 3 (waiting
+//   for the reversal close), kept as separate, independently-tunable inputs
+//   since confirming an actual turn realistically takes longer than waiting
+//   for one more fresh low/high. The timer restarts at each stage
+//   transition.
+//
+// Short/fade side mirrors this exactly (upper band, RSI overbought
+// threshold, higher high, SHORT entry).
+//
+// State mutations only commit on confirmed bars (barstate.isconfirmed) to
+// avoid an intrabar fluctuation arming, extending, confirming or disarming
+// the setup before the bar actually closes.
+//
+// This model is intentionally NOT gated on trendBias/marketRegime: engine.py's
+// bb_rsi_armed_reversal policy does not block the "trend" regime (unlike
+// bb_rsi_immediate_rejection and range_reversal), since an exhaustion fade is
+// meant to work as a pullback-within-a-trend setup too, not only inside a
+// range. Session/volatility/cooldown/daily-cap governance is still applied
+// to the final candidate in section 11, same as the FX scripts.
+// ============================================================================
+
+bool longArmTrigger =
+     close <= bbLower and
+     rsi <= rsiOversoldThreshold
+
+bool shortArmTrigger =
+     close >= bbUpper and
+     rsi >= rsiOverboughtThreshold
+
+// Stage 1 -- ARMED (waiting for a fresh undercut/overshoot)
+var bool  longArmed             = false
+var float longArmedReferenceLow = na
+var int   longArmedBar          = na
+
+var bool  shortArmed              = false
+var float shortArmedReferenceHigh = na
+var int   shortArmedBar           = na
+
+// Stage 2/3 -- AWAITING REVERSAL (fresh extreme seen; waiting for a close
+// back through that extreme bar's high/low before entering)
+var bool  longAwaitingReversal     = false
+var float longReversalReferenceLow = na
+var float longReversalTriggerHigh  = na
+var int   longExtendBar            = na
+var float longExtendRsi            = na
+var float longExtendBbPercentB     = na
+
+var bool  shortAwaitingReversal      = false
+var float shortReversalReferenceHigh = na
+var float shortReversalTriggerLow    = na
+var int   shortExtendBar             = na
+var float shortExtendRsi             = na
+var float shortExtendBbPercentB      = na
+
+bool longExtendTrigger =
+     longArmed and
+     not longAwaitingReversal and
+     not na(longArmedBar) and
+     bar_index > longArmedBar and
+     low < longArmedReferenceLow
+
+bool shortExtendTrigger =
+     shortArmed and
+     not shortAwaitingReversal and
+     not na(shortArmedBar) and
+     bar_index > shortArmedBar and
+     high > shortArmedReferenceHigh
+
+bool longDeepenTrigger =
+     longAwaitingReversal and
+     not na(longExtendBar) and
+     bar_index > longExtendBar and
+     low < longReversalReferenceLow
+
+bool shortDeepenTrigger =
+     shortAwaitingReversal and
+     not na(shortExtendBar) and
+     bar_index > shortExtendBar and
+     high > shortReversalReferenceHigh
+
+bool longReversalTrigger =
+     longAwaitingReversal and
+     not na(longExtendBar) and
+     bar_index > longExtendBar and
+     close > longReversalTriggerHigh
+
+bool shortReversalTrigger =
+     shortAwaitingReversal and
+     not na(shortExtendBar) and
+     bar_index > shortExtendBar and
+     close < shortReversalTriggerLow
+
+bool longArmedTimeout =
+     longArmed and
+     not longAwaitingReversal and
+     not na(longArmedBar) and
+     (bar_index - longArmedBar) > maxArmedBars
+
+bool shortArmedTimeout =
+     shortArmed and
+     not shortAwaitingReversal and
+     not na(shortArmedBar) and
+     (bar_index - shortArmedBar) > maxArmedBars
+
+bool longReversalTimeout =
+     longAwaitingReversal and
+     not na(longExtendBar) and
+     (bar_index - longExtendBar) > maxReversalWaitBars
+
+bool shortReversalTimeout =
+     shortAwaitingReversal and
+     not na(shortExtendBar) and
+     (bar_index - shortExtendBar) > maxReversalWaitBars
+
+bool longArmedRecovery =
+     longArmed and
+     close > bbBasis
+
+bool shortArmedRecovery =
+     shortArmed and
+     close < bbBasis
+
+bool longAwaitingReversalRecovery =
+     longAwaitingReversal and
+     close > bbBasis
+
+bool shortAwaitingReversalRecovery =
+     shortAwaitingReversal and
+     close < bbBasis
+
+float longArmedBarsElapsed = na
+float shortArmedBarsElapsed = na
+
+float longEntryExtendRsi = na
+float longEntryExtendBbPercentB = na
+float shortEntryExtendRsi = na
+float shortEntryExtendBbPercentB = na
+
+if barstate.isconfirmed and longReversalTrigger
+    longArmedBarsElapsed :=
+         bar_index - longExtendBar
+
+    longEntryExtendRsi := longExtendRsi
+    longEntryExtendBbPercentB := longExtendBbPercentB
+
+if barstate.isconfirmed and shortReversalTrigger
+    shortArmedBarsElapsed :=
+         bar_index - shortExtendBar
+
+    shortEntryExtendRsi := shortExtendRsi
+    shortEntryExtendBbPercentB := shortExtendBbPercentB
+
+// ----------------------------------------------------------------------
+// Hoisted from Sections 10-12 (see their original headers further below,
+// now left as pointer comments) plus the validLongCandidate /
+// validShortCandidate / validFinalCandidate booleans normally built in
+// Section 17. They have to live here, ahead of the state-mutation cascade
+// below, so that cascade can tell a geometrically-true reversal trigger
+// apart from one the downstream risk/session/frequency gates would
+// actually reject. Without this, a valid reversal confirmation could fully
+// disarm (consume) the whole armed cycle on a bar where cooldown, the
+// daily cap, volatility, or risk/reward rejects the final candidate --
+// silently wasting the setup instead of leaving it free to try again on a
+// later bar. Section 17 reuses (does not redeclare) validLongCandidate /
+// validShortCandidate / validFinalCandidate for alerting and the daily
+// candidate counters; Section 18 reuses them for the simulated strategy
+// entries.
+// ----------------------------------------------------------------------
+
+bool longBbRsiArmedReversal =
+     enableBbRsiArmedReversal and
+     longReversalTrigger
+
+bool shortBbRsiArmedReversal =
+     enableBbRsiArmedReversal and
+     shortReversalTrigger
+
+bool rawLongCandidate =
+     longBbRsiArmedReversal
+
+bool rawShortCandidate =
+     shortBbRsiArmedReversal
+
+
+getLongModel() =>
+    string result = "none"
+
+    if longBbRsiArmedReversal
+        result := "bb_rsi_armed_reversal"
+
+    result
+
+
+getShortModel() =>
+    string result = "none"
+
+    if shortBbRsiArmedReversal
+        result := "bb_rsi_armed_reversal"
+
+    result
+
+
+string longModel =
+     getLongModel()
+
+string shortModel =
+     getShortModel()
+
+bool newDay =
+     ta.change(time("D")) != 0
+
+var int candidatesToday = 0
+var int lastCandidateBar = na
+
+if newDay
+    candidatesToday := 0
+
+bool cooldownPass =
+     na(lastCandidateBar) or
+     bar_index - lastCandidateBar >= cooldownBars
+
+bool dailyCandidateLimitPass =
+     candidatesToday < maximumCandidatesPerDay
+
+bool commonCandidatePass =
+     barstate.isconfirmed and
+     validChart and
+     validSession and
+     volatilityPass and
+     cooldownPass and
+     dailyCandidateLimitPass
+
+bool longCandidate =
+     commonCandidatePass and
+     enableLongs and
+     rawLongCandidate
+
+bool shortCandidate =
+     commonCandidatePass and
+     enableShorts and
+     rawShortCandidate
+
+bool finalLongCandidate =
+     longCandidate and
+     not shortCandidate
+
+bool finalShortCandidate =
+     shortCandidate and
+     not longCandidate
+
+float structureBuffer =
+     structureBufferPips * pipSize
+
+float longAtrStop =
+     close - atr * stopAtrMultiplier
+
+float longStructureStop =
+     recentLow - structureBuffer
+
+float proposedLongStop =
+     math.min(
+         longAtrStop,
+         longStructureStop
+     )
+
+float shortAtrStop =
+     close + atr * stopAtrMultiplier
+
+float shortStructureStop =
+     recentHigh + structureBuffer
+
+float proposedShortStop =
+     math.max(
+         shortAtrStop,
+         shortStructureStop
+     )
+
+float longStopDistance =
+     close - proposedLongStop
+
+float shortStopDistance =
+     proposedShortStop - close
+
+float proposedLongTarget =
+     close +
+     longStopDistance *
+     targetRiskMultiplier
+
+float proposedShortTarget =
+     close -
+     shortStopDistance *
+     targetRiskMultiplier
+
+float longTargetDistance =
+     proposedLongTarget - close
+
+float shortTargetDistance =
+     close - proposedShortTarget
+
+float longRewardRisk = na
+float shortRewardRisk = na
+
+if longStopDistance > 0.0
+    longRewardRisk :=
+         longTargetDistance /
+         longStopDistance
+
+if shortStopDistance > 0.0
+    shortRewardRisk :=
+         shortTargetDistance /
+         shortStopDistance
+
+bool longRiskValid =
+     longStopDistance > syminfo.mintick and
+     longRewardRisk >= 1.0
+
+bool shortRiskValid =
+     shortStopDistance > syminfo.mintick and
+     shortRewardRisk >= 1.0
+
+bool validLongCandidate =
+     finalLongCandidate and
+     longRiskValid
+
+bool validShortCandidate =
+     finalShortCandidate and
+     shortRiskValid
+
+bool validFinalCandidate =
+     validLongCandidate or
+     validShortCandidate
+
+
+if barstate.isconfirmed
+    // ---- Long/fade side ----
+    if longReversalTrigger and validLongCandidate
+        // ENTRY -- fully disarm, consuming the whole armed cycle.
+        longArmed := false
+        longArmedReferenceLow := na
+        longArmedBar := na
+        longAwaitingReversal := false
+        longReversalReferenceLow := na
+        longReversalTriggerHigh := na
+        longExtendBar := na
+        longExtendRsi := na
+        longExtendBbPercentB := na
+    else if longDeepenTrigger
+        // Still-deeper low while waiting -- ratchet the trigger level and
+        // restart the reversal-wait timer against the new, more extreme bar.
+        longReversalReferenceLow := low
+        longReversalTriggerHigh := high
+        longExtendBar := bar_index
+        longExtendRsi := rsi
+        longExtendBbPercentB := bbPercentB
+    else if longAwaitingReversal and (longReversalTimeout or longAwaitingReversalRecovery)
+        longAwaitingReversal := false
+        longReversalReferenceLow := na
+        longReversalTriggerHigh := na
+        longExtendBar := na
+        longExtendRsi := na
+        longExtendBbPercentB := na
+    else if longExtendTrigger
+        // Fresh undercut -- move from ARMED to AWAITING REVERSAL.
+        longAwaitingReversal := true
+        longReversalReferenceLow := low
+        longReversalTriggerHigh := high
+        longExtendBar := bar_index
+        longExtendRsi := rsi
+        longExtendBbPercentB := bbPercentB
+        longArmed := false
+        longArmedReferenceLow := na
+        longArmedBar := na
+    else if longArmedTimeout or longArmedRecovery
+        longArmed := false
+        longArmedReferenceLow := na
+        longArmedBar := na
+    else if longArmTrigger
+        longArmedReferenceLow := longArmed ? math.min(longArmedReferenceLow, low) : low
+        longArmedBar := bar_index
+        longArmed := true
+
+    // ---- Short/fade side ----
+    if shortReversalTrigger and validShortCandidate
+        shortArmed := false
+        shortArmedReferenceHigh := na
+        shortArmedBar := na
+        shortAwaitingReversal := false
+        shortReversalReferenceHigh := na
+        shortReversalTriggerLow := na
+        shortExtendBar := na
+        shortExtendRsi := na
+        shortExtendBbPercentB := na
+    else if shortDeepenTrigger
+        shortReversalReferenceHigh := high
+        shortReversalTriggerLow := low
+        shortExtendBar := bar_index
+        shortExtendRsi := rsi
+        shortExtendBbPercentB := bbPercentB
+    else if shortAwaitingReversal and (shortReversalTimeout or shortAwaitingReversalRecovery)
+        shortAwaitingReversal := false
+        shortReversalReferenceHigh := na
+        shortReversalTriggerLow := na
+        shortExtendBar := na
+        shortExtendRsi := na
+        shortExtendBbPercentB := na
+    else if shortExtendTrigger
+        shortAwaitingReversal := true
+        shortReversalReferenceHigh := high
+        shortReversalTriggerLow := low
+        shortExtendBar := bar_index
+        shortExtendRsi := rsi
+        shortExtendBbPercentB := bbPercentB
+        shortArmed := false
+        shortArmedReferenceHigh := na
+        shortArmedBar := na
+    else if shortArmedTimeout or shortArmedRecovery
+        shortArmed := false
+        shortArmedReferenceHigh := na
+        shortArmedBar := na
+    else if shortArmTrigger
+        shortArmedReferenceHigh := shortArmed ? math.max(shortArmedReferenceHigh, high) : high
+        shortArmedBar := bar_index
+        shortArmed := true
+
+// ============================================================================
+// 10. MODEL SELECTION / 11. FREQUENCY GOVERNANCE / 12. PROPOSED STOP AND
+// TARGET
+//
+// Relocated to immediately above the Section 9 state-mutation cascade (see
+// the long comment block right after the extend-RSI capture there) so the
+// armed-reversal disarm logic can check validLongCandidate /
+// validShortCandidate without a forward reference. longBbRsiArmedReversal,
+// shortBbRsiArmedReversal, rawLongCandidate, rawShortCandidate,
+// getLongModel/getShortModel, longModel/shortModel, the frequency-governance
+// booleans (cooldownPass, dailyCandidateLimitPass, commonCandidatePass,
+// longCandidate, shortCandidate, finalLongCandidate, finalShortCandidate),
+// and the stop/target + longRiskValid/shortRiskValid math all now live
+// there. (Section numbers 8-9 are intentionally skipped elsewhere: this
+// script carries only one entry model in this pass, bb_rsi_immediate_
+// rejection having been explicitly deferred. Numbering is kept aligned with
+// the FX template's 20-section layout for easy side-by-side comparison.)
+// ============================================================================
+
+
+// ============================================================================
+// 13. SIGNAL-STRENGTH FUNCTIONS
+// ============================================================================
+
+calculateLongStrength(string model) =>
+    float score = 50.0
+
+    if not na(longEntryExtendRsi) and longEntryExtendRsi <= rsiOversoldThreshold - 5.0
+        score += 8.0
+    else if not na(longEntryExtendRsi) and longEntryExtendRsi <= rsiOversoldThreshold
+        score += 4.0
+
+    if not na(longEntryExtendBbPercentB) and longEntryExtendBbPercentB <= 0.0
+        score += 7.0
+
+    if close > open
+        score += 6.0
+
+    if lowerWickRatio >= 0.35
+        score += 5.0
+
+    if atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+        score += 6.0
+
+    if inOverlap or inNewYork
+        score += 5.0
+
+    if inLondon
+        score += 2.0
+
+    if not na(longArmedBarsElapsed) and longArmedBarsElapsed <= 3.0
+        score += 4.0
+
+    float rawScore = score
+
+    score := math.max(score, 0.0)
+    score := math.min(score, 100.0)
+
+    [score, rawScore]
+
+
+calculateShortStrength(string model) =>
+    float score = 50.0
+
+    if not na(shortEntryExtendRsi) and shortEntryExtendRsi >= rsiOverboughtThreshold + 5.0
+        score += 8.0
+    else if not na(shortEntryExtendRsi) and shortEntryExtendRsi >= rsiOverboughtThreshold
+        score += 4.0
+
+    if not na(shortEntryExtendBbPercentB) and shortEntryExtendBbPercentB >= 1.0
+        score += 7.0
+
+    if close < open
+        score += 6.0
+
+    if upperWickRatio >= 0.35
+        score += 5.0
+
+    if atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+        score += 6.0
+
+    if inOverlap or inNewYork
+        score += 5.0
+
+    if inLondon
+        score += 2.0
+
+    if not na(shortArmedBarsElapsed) and shortArmedBarsElapsed <= 3.0
+        score += 4.0
+
+    float rawScore = score
+
+    score := math.max(score, 0.0)
+    score := math.min(score, 100.0)
+
+    [score, rawScore]
+
+
+// ----------------------------------------------------------------------------
+// Conviction: a breadth-of-confirmation measure, independent of the
+// magnitude-weighted strength score above. Counts how many of 6 independent
+// confirming conditions are true and expresses it as a percentage, mirroring
+// the equivalent function added to the FX scripts in their v5.1.0 follow-up.
+// ----------------------------------------------------------------------------
+
+calculateConviction(string direction) =>
+    bool isLong = direction == "long"
+
+    float extendRsi = isLong ? longEntryExtendRsi : shortEntryExtendRsi
+    float extendBbPercentB = isLong ? longEntryExtendBbPercentB : shortEntryExtendBbPercentB
+
+    bool deepExtension = isLong ? (not na(extendRsi) and extendRsi <= rsiOversoldThreshold - 5.0) : (not na(extendRsi) and extendRsi >= rsiOverboughtThreshold + 5.0)
+    bool bandBreach = isLong ? (not na(extendBbPercentB) and extendBbPercentB <= 0.0) : (not na(extendBbPercentB) and extendBbPercentB >= 1.0)
+    bool reversalCandle = isLong ? (close > open) : (close < open)
+    bool rejectionWick = isLong ? (lowerWickRatio >= 0.35) : (upperWickRatio >= 0.35)
+    bool volatilitySweetSpot = atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+    bool sessionQuality = inOverlap or inNewYork or inLondon
+
+    int metConditions = 0
+
+    if deepExtension
+        metConditions += 1
+
+    if bandBreach
+        metConditions += 1
+
+    if reversalCandle
+        metConditions += 1
+
+    if rejectionWick
+        metConditions += 1
+
+    if volatilitySweetSpot
+        metConditions += 1
+
+    if sessionQuality
+        metConditions += 1
+
+    100.0 * metConditions / 6.0
+
+
+// ============================================================================
+// 14. JSON HELPERS
+// ============================================================================
+
+boolToJson(bool value) =>
+    string result = "false"
+
+    if value
+        result := "true"
+
+    result
+
+
+nullableFloat(float value, string numberFormat) =>
+    string result = "null"
+
+    if not na(value)
+        result := str.tostring(
+             value,
+             numberFormat
+         )
+
+    result
+
+
+nullableVolume(float value) =>
+    string result = "null"
+
+    if not na(value)
+        result := str.tostring(
+             value,
+             "#.####"
+         )
+
+    result
+
+
+// ============================================================================
+// 15. ACTIVE CANDIDATE VALUES
+// ============================================================================
+
+getCandidateDirection() =>
+    string result = "neutral"
+
+    if finalLongCandidate
+        result := "long"
+    else if finalShortCandidate
+        result := "short"
+
+    result
+
+
+getCandidateModel() =>
+    string result = "none"
+
+    if finalLongCandidate
+        result := longModel
+    else if finalShortCandidate
+        result := shortModel
+
+    result
+
+
+getSignalFamily(string model) =>
+    string result = "unknown"
+
+    if model == "bb_rsi_armed_reversal"
+        result := "reversal"
+
+    result
+
+
+string candidateDirection =
+     getCandidateDirection()
+
+string candidateModel =
+     getCandidateModel()
+
+string candidateFamily =
+     getSignalFamily(candidateModel)
+
+float candidateEntry =
+     close
+
+float candidateStop = na
+float candidateTarget = na
+float candidateStopDistance = na
+float candidateTargetDistance = na
+float candidateRewardRisk = na
+float candidateStrength = 0.0
+float candidateStrengthRaw = 0.0
+float candidateConviction = 0.0
+
+if finalLongCandidate
+    candidateStop :=
+         proposedLongStop
+
+    candidateTarget :=
+         proposedLongTarget
+
+    candidateStopDistance :=
+         longStopDistance
+
+    candidateTargetDistance :=
+         longTargetDistance
+
+    candidateRewardRisk :=
+         longRewardRisk
+
+    [longStrengthValue, longStrengthRawValue] =
+         calculateLongStrength(
+             candidateModel
+         )
+
+    candidateStrength := longStrengthValue
+    candidateStrengthRaw := longStrengthRawValue
+
+    candidateConviction :=
+         calculateConviction("long")
+
+else if finalShortCandidate
+    candidateStop :=
+         proposedShortStop
+
+    candidateTarget :=
+         proposedShortTarget
+
+    candidateStopDistance :=
+         shortStopDistance
+
+    candidateTargetDistance :=
+         shortTargetDistance
+
+    candidateRewardRisk :=
+         shortRewardRisk
+
+    [shortStrengthValue, shortStrengthRawValue] =
+         calculateShortStrength(
+             candidateModel
+         )
+
+    candidateStrength := shortStrengthValue
+    candidateStrengthRaw := shortStrengthRawValue
+
+    candidateConviction :=
+         calculateConviction("short")
+
+
+getStrengthLabel(float score) =>
+    string result = "very_weak"
+
+    if score >= 80.0
+        result := "very_strong"
+    else if score >= 70.0
+        result := "strong"
+    else if score >= 60.0
+        result := "moderate"
+    else if score >= 50.0
+        result := "weak"
+
+    result
+
+
+string strengthLabel =
+     getStrengthLabel(
+         candidateStrength
+     )
+
+string candidateSide =
+     candidateDirection == "long" ? "buy" : candidateDirection == "short" ? "sell" : "none"
+
+string candidatePriority =
+     candidateStrength >= 70.0 ? "high" : "normal"
+
+bool candidateIsShort =
+     candidateDirection == "short"
+
+bool candidateIsTrendFollowing =
+     false
+
+string candidateNotes =
+     candidateModel + " " + candidateDirection +
+     " candidate (fade/reversal); RSI=" + str.tostring(rsi, "#.#") +
+     ", ADX=" + str.tostring(adx, "#.#") +
+     ", ATRpips=" + str.tostring(atrPips, "#.#")
+
+string signalId =
+     signalIdPrefix + "-" +
+     str.tostring(time) +
+     "-" +
+     candidateDirection +
+     "-" +
+     candidateModel
+
+
+// ============================================================================
+// 16. CANONICAL PAYLOAD BUILDER
+// ============================================================================
+
+buildCanonicalPayload() =>
+    string generatedUtc =
+         str.format_time(
+             time,
+             "yyyy-MM-dd'T'HH:mm:ss'Z'",
+             "UTC"
+         )
+
+    string payload = "{"
+
+    payload := payload +
+         "\"schema_name\":\"st_ludaetuc_canonical_payload\","
+
+    payload := payload +
+         "\"schema_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"event_type\":\"signal\","
+
+    payload := payload + "\"meta\":{"
+
+    payload := payload +
+         "\"signal_id\":\"" +
+         signalId +
+         "\","
+
+    payload := payload +
+         "\"event_id\":\"" +
+         signalId +
+         "\","
+
+    payload := payload +
+         "\"parent_signal_id\":null,"
+
+    payload := payload +
+         "\"generated_at_utc\":\"" +
+         generatedUtc +
+         "\","
+
+    payload := payload +
+         "\"sequence_no\":1"
+
+    payload := payload + "},"
+
+    payload := payload + "\"system\":{"
+
+    payload := payload +
+         "\"name\":\"St Ludaetuc\","
+
+    payload := payload +
+         "\"environment\":\"paper\","
+
+    payload := payload +
+         "\"source\":\"tradingview\","
+
+    payload := payload +
+         "\"source_platform\":\"tradingview\","
+
+    payload := payload +
+         "\"strategy_id\":\"" +
+         strategyIdSlug +
+         "\","
+
+    payload := payload +
+         "\"strategy_name\":\"" +
+         strategyDisplayName +
+         "\","
+
+    payload := payload +
+         "\"strategy_version\":\"" +
+         strategyVersionString +
+         "\","
+
+    payload := payload +
+         "\"alert_version\":\"tv_alert_v1\","
+
+    payload := payload +
+         "\"payload_schema_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"payload_spec_version\":\"1.0\","
+
+    payload := payload +
+         "\"canonical_payload_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"model_family\":\"rule_based_pine_strategy\","
+
+    payload := payload +
+         "\"model_version\":\"" +
+         strategyVersionString +
+         "\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"instrument\":{"
+
+    payload := payload +
+         "\"symbol\":\"" +
+         pairSymbol +
+         "\","
+
+    payload := payload +
+         "\"display_name\":\"" +
+         pairDisplayName +
+         "\","
+
+    payload := payload +
+         "\"asset_class\":\"metal\","
+
+    payload := payload +
+         "\"subtype\":\"precious_metal\","
+
+    payload := payload +
+         "\"market_type\":\"spot_metal\","
+
+    payload := payload +
+         "\"broker_symbol\":\"" +
+         pairBrokerSymbol +
+         "\","
+
+    payload := payload +
+         "\"broker_instrument_name\":\"" +
+         pairDisplayName +
+         "\","
+
+    payload := payload +
+         "\"exchange_timezone\":\"UTC\","
+
+    payload := payload +
+         "\"base_currency\":\"" +
+         pairBaseCurrency +
+         "\","
+
+    payload := payload +
+         "\"quote_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"settlement_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"margin_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"tick_size\":" +
+         str.tostring(
+             syminfo.mintick,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"pip_size\":" +
+         str.tostring(
+             pipSize,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"contract_size\":" +
+         str.tostring(pairContractSize, "#") +
+         ","
+
+    payload := payload +
+         "\"unit_step\":" +
+         str.tostring(pairUnitStep, "#") +
+         ","
+
+    payload := payload +
+         "\"min_units\":" +
+         str.tostring(pairMinUnits, "#") +
+         ","
+
+    payload := payload +
+         "\"max_units\":" +
+         str.tostring(pairMaxUnits, "#") +
+         ","
+
+    payload := payload +
+         "\"quantity_decimals\":0,"
+
+    payload := payload +
+         "\"price_decimals\":" +
+         str.tostring(pairPriceDecimals, "#") +
+         ","
+
+    payload := payload +
+         "\"fee_model\":\"spread_only\","
+
+    payload := payload +
+         "\"swap_model\":\"oanda_daily_financing\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"market\":{"
+
+    payload := payload +
+         "\"timeframe\":\"2m\","
+
+    payload := payload +
+         "\"timeframe_seconds\":120,"
+
+    payload := payload +
+         "\"session_name\":\"" +
+         sessionName +
+         "\","
+
+    payload := payload +
+         "\"session_phase\":\"active\","
+
+    payload := payload +
+         "\"market_state\":\"open\","
+
+    payload := payload +
+         "\"bar_time_utc\":\"" +
+         generatedUtc +
+         "\","
+
+    payload := payload +
+         "\"bar_index\":" +
+         str.tostring(bar_index) +
+         ","
+
+    payload := payload +
+         "\"is_realtime\":" +
+         boolToJson(
+             barstate.isrealtime
+         ) +
+         ","
+
+    payload := payload +
+         "\"is_confirmed_bar\":" +
+         boolToJson(
+             barstate.isconfirmed
+         ) +
+         ","
+
+    payload := payload +
+         "\"weekday\":" +
+         str.tostring(dayofweek(time, "UTC")) +
+         ","
+
+    payload := payload +
+         "\"hour_utc\":" +
+         str.tostring(hour(time, "UTC")) +
+         ","
+
+    payload := payload +
+         "\"minute_utc\":" +
+         str.tostring(minute(time, "UTC"))
+
+    payload := payload + "},"
+
+    payload := payload + "\"signal\":{"
+
+    payload := payload +
+         "\"signal_type\":\"entry\","
+
+    payload := payload +
+         "\"family\":\"" +
+         candidateFamily +
+         "\","
+
+    payload := payload +
+         "\"direction\":\"" +
+         candidateDirection +
+         "\","
+
+    payload := payload +
+         "\"side\":\"" +
+         candidateSide +
+         "\","
+
+    payload := payload +
+         "\"strength_label\":\"" +
+         strengthLabel +
+         "\","
+
+    payload := payload +
+         "\"entry_model\":\"" +
+         candidateModel +
+         "\","
+
+    payload := payload +
+         "\"exit_model\":\"fixed_stop_take_profit\","
+
+    payload := payload +
+         "\"trigger_reason\":\"XAGUSD 2m candidate generator v1.0 BB/RSI armed exhaustion reversal conditions passed\","
+
+    payload := payload +
+         "\"setup_class\":\"" +
+         candidateFamily +
+         "\","
+
+    payload := payload +
+         "\"setup_subclass\":\"" +
+         candidateModel +
+         "\","
+
+    payload := payload +
+         "\"confidence_raw\":" +
+         nullableFloat(
+             candidateStrengthRaw,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"confidence_pct\":" +
+         nullableFloat(
+             candidateStrength,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"conviction_score\":" +
+         nullableFloat(
+             candidateConviction,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"quality_label\":\"" +
+         strengthLabel +
+         "\","
+
+    payload := payload +
+         "\"priority\":\"" +
+         candidatePriority +
+         "\","
+
+    payload := payload +
+         "\"is_short\":" +
+         boolToJson(candidateIsShort) +
+         ","
+
+    payload := payload +
+         "\"is_trend_following\":" +
+         boolToJson(candidateIsTrendFollowing) +
+         ","
+
+    payload := payload +
+         "\"is_scalp\":false,"
+
+    payload := payload +
+         "\"is_intraday\":true,"
+
+    payload := payload +
+         "\"regime_ok\":" +
+         boolToJson(commonCandidatePass) +
+         ","
+
+    payload := payload +
+         "\"confirmation_count\":1,"
+
+    payload := payload +
+         "\"notes\":\"" +
+         candidateNotes +
+         "\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"price\":{"
+
+    payload := payload +
+         "\"open\":" +
+         nullableFloat(
+             open,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"high\":" +
+         nullableFloat(
+             high,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"low\":" +
+         nullableFloat(
+             low,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"close\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"last\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"mark\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bid\":null,"
+
+    payload := payload +
+         "\"ask\":null,"
+
+    payload := payload +
+         "\"mid\":null,"
+
+    payload := payload +
+         "\"spread_points\":null,"
+
+    payload := payload +
+         "\"spread_price\":null,"
+
+    payload := payload +
+         "\"volume\":" +
+         nullableVolume(volume) +
+         ","
+
+    payload := payload +
+         "\"tick_volume\":" +
+         nullableVolume(volume) +
+         ","
+
+    payload := payload +
+         "\"vwap\":" +
+         nullableFloat(
+             vwapValue,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"typical\":" +
+         nullableFloat(
+             typicalPrice,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"weighted_close\":" +
+         nullableFloat(
+             weightedClosePrice,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_price\":" +
+         nullableFloat(
+             candleRange,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"body_price\":" +
+         nullableFloat(
+             candleBody,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"lower_wick_price\":" +
+         nullableFloat(
+             lowerWick,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload + "\"indicators\":{"
+
+    payload := payload +
+         "\"rsi\":" +
+         nullableFloat(
+             rsi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr\":" +
+         nullableFloat(
+             atr,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_percent_of_price\":" +
+         nullableFloat(
+             atrPercent,
+             "#.######"
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_fast\":" +
+         nullableFloat(
+             emaFast,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_slow\":" +
+         nullableFloat(
+             emaSlow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_regime\":" +
+         nullableFloat(
+             emaRegime,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"higher_timeframe_ema\":" +
+         nullableFloat(
+             htfEma,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_line\":" +
+         nullableFloat(
+             macdLine,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_signal\":" +
+         nullableFloat(
+             macdSignal,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_histogram\":" +
+         nullableFloat(
+             macdHistogram,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"adx\":" +
+         nullableFloat(
+             adx,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"plus_di\":" +
+         nullableFloat(
+             plusDi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"minus_di\":" +
+         nullableFloat(
+             minusDi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_basis\":" +
+         nullableFloat(
+             bbBasis,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_upper\":" +
+         nullableFloat(
+             bbUpper,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_lower\":" +
+         nullableFloat(
+             bbLower,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_width\":" +
+         nullableFloat(
+             bbWidth,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_percent_b\":" +
+         nullableFloat(
+             bbPercentB,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"vwap_session\":" +
+         nullableFloat(
+             vwapValue,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload + "\"structure\":{"
+
+    payload := payload +
+         "\"trend_bias\":\"" +
+         trendBias +
+         "\","
+
+    payload := payload +
+         "\"volatility_regime\":\"" +
+         volatilityRegime +
+         "\","
+
+    payload := payload +
+         "\"market_regime\":\"" +
+         marketRegime +
+         "\","
+
+    payload := payload +
+         "\"market_phase\":\"" +
+         marketRegime +
+         "\","
+
+    payload := payload +
+         "\"higher_timeframe_bias\":\"" +
+         higherTimeframeBias +
+         "\","
+
+    payload := payload +
+         "\"distance_to_recent_high\":" +
+         nullableFloat(
+             distanceToRecentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_to_recent_low\":" +
+         nullableFloat(
+             distanceToRecentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_to_vwap\":" +
+         nullableFloat(
+             distanceToVwap,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"nearest_support\":" +
+         nullableFloat(
+             recentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"nearest_resistance\":" +
+         nullableFloat(
+             recentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"swing_high_1\":" +
+         nullableFloat(
+             recentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"swing_low_1\":" +
+         nullableFloat(
+             recentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_high\":" +
+         nullableFloat(
+             rollingHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_low\":" +
+         nullableFloat(
+             rollingLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_mid\":" +
+         nullableFloat(
+             rollingMid,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_width\":" +
+         nullableFloat(
+             rollingRange,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"candle_pattern\":null"
+
+    payload := payload + "},"
+
+    payload := payload + "\"risk\":{"
+
+    payload := payload +
+         "\"risk_model\":\"atr_structure_hybrid_v1\","
+
+    payload := payload +
+         "\"account_risk_percent\":" +
+         str.tostring(accountRiskPercentInput, "#.##") +
+         ","
+
+    payload := payload +
+         "\"proposed_entry\":" +
+         nullableFloat(
+             candidateEntry,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_loss\":" +
+         nullableFloat(
+             candidateStop,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_take_profit\":" +
+         nullableFloat(
+             candidateTarget,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_distance_price\":" +
+         nullableFloat(
+             candidateStopDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_distance_pips\":" +
+         nullableFloat(
+             candidateStopDistance / pipSize,
+             "#.##"
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_target_distance_price\":" +
+         nullableFloat(
+             candidateTargetDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_target_distance_pips\":" +
+         nullableFloat(
+             candidateTargetDistance / pipSize,
+             "#.##"
+         ) +
+         ","
+
+    payload := payload +
+         "\"stop_distance_price\":" +
+         nullableFloat(
+             candidateStopDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"target_distance_price\":" +
+         nullableFloat(
+             candidateTargetDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"rr_ratio\":" +
+         nullableFloat(
+             candidateRewardRisk,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"reward_risk_multiple\":" +
+         nullableFloat(
+             candidateRewardRisk,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"risk_percent\":" +
+         str.tostring(accountRiskPercentInput, "#.##") +
+         ","
+
+    payload := payload +
+         "\"position_size_units\":null,"
+
+    payload := payload +
+         "\"position_size_units_abs\":null,"
+
+    payload := payload +
+         "\"position_size_lots\":null,"
+
+    payload := payload +
+         "\"max_spread_allowed\":" +
+         str.tostring(maxSpreadAllowedPriceInput, "#.#####") +
+         ","
+
+    payload := payload +
+         "\"max_spread_allowed_pips\":" +
+         str.tostring(maxSpreadAllowedPriceInput / pipSize, "#.##") +
+         ","
+
+    payload := payload +
+         "\"max_slippage_allowed\":" +
+         str.tostring(maxSlippageAllowedPriceInput, "#.#####") +
+         ","
+
+    payload := payload +
+         "\"max_slippage_allowed_pips\":" +
+         str.tostring(maxSlippageAllowedPriceInput / pipSize, "#.##") +
+         ","
+
+    payload := payload +
+         "\"drawdown_guard_status\":\"pass\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"costs\":{"
+
+    payload := payload +
+         "\"spread_cost_estimate\":null,"
+
+    payload := payload +
+         "\"commission_estimate\":null,"
+
+    payload := payload +
+         "\"financing_model\":\"oanda_cfd\","
+
+    payload := payload +
+         "\"financing_long_annualized\":null,"
+
+    payload := payload +
+         "\"financing_short_annualized\":null,"
+
+    payload := payload +
+         "\"estimated_overnight_cost_per_day\":null,"
+
+    payload := payload +
+         "\"triple_swap_day_flag\":null,"
+
+    payload := payload +
+         "\"rollover_basis_rate\":null,"
+
+    payload := payload +
+         "\"currency_conversion_impact\":null"
+
+    payload := payload + "},"
+
+    payload := payload + "\"context\":{"
+
+    payload := payload +
+         "\"high_impact_event_nearby\":null,"
+
+    payload := payload +
+         "\"minutes_to_next_high_impact_event\":null,"
+
+    payload := payload +
+         "\"news_risk_level\":null,"
+
+    payload := payload +
+         "\"macro_bias\":null,"
+
+    payload := payload +
+         "\"sentiment_bias\":null,"
+
+    payload := payload +
+         "\"context_status\":\"unchecked\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"asset_specific\":{"
+
+    payload := payload +
+         "\"fx\":{},"
+
+    payload := payload + "\"metals\":{"
+
+    payload := payload +
+         "\"metal_symbol\":\"" +
+         metalSymbol +
+         "\","
+
+    payload := payload +
+         "\"unit\":\"troy_ounce\","
+
+    payload := payload +
+         "\"contract_size_troy_oz\":" +
+         str.tostring(pairContractSize, "#") +
+         ","
+
+    payload := payload +
+         "\"exchange\":\"comex\","
+
+    payload := payload +
+         "\"price_per_troy_ounce\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload +
+         "\"commodities\":{},"
+
+    payload := payload +
+         "\"indices\":{},"
+
+    payload := payload +
+         "\"equities\":{},"
+
+    payload := payload +
+         "\"crypto\":{}"
+
+    payload := payload + "},"
+
+    payload := payload + "\"manus\":{"
+
+    payload := payload +
+         "\"signal_quality_score\":null,"
+
+    payload := payload +
+         "\"risk_score\":null,"
+
+    payload := payload +
+         "\"context_score\":null,"
+
+    payload := payload +
+         "\"strategy_fit_score\":null,"
+
+    payload := payload +
+         "\"expected_value_score\":null,"
+
+    payload := payload +
+         "\"approval_status\":\"pending\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"execution\":{"
+
+    payload := payload +
+         "\"execution_status\":\"not_sent\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"learning\":{"
+
+    payload := payload +
+         "\"trade_outcome\":\"unknown\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"extensions\":{"
+
+    payload := payload +
+         "\"candidate_generator_version\":\"" +
+         strategyVersionString +
+         "\","
+
+    payload := payload +
+         "\"candidate_strength\":" +
+         nullableFloat(
+             candidateStrength,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_pips\":" +
+         nullableFloat(
+             atrPips,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_ratio\":" +
+         nullableFloat(
+             atrRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_width_ratio\":" +
+         nullableFloat(
+             bbWidthRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_separation_atr\":" +
+         nullableFloat(
+             emaSeparationAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_from_vwap_atr\":" +
+         nullableFloat(
+             distanceFromVwapAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_from_fast_ema_atr\":" +
+         nullableFloat(
+             distanceFromFastEmaAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"rolling_range_atr\":" +
+         nullableFloat(
+             rollingRangeAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"candle_body_to_range\":" +
+         nullableFloat(
+             bodyToRange,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"upper_wick_ratio\":" +
+         nullableFloat(
+             upperWickRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"lower_wick_ratio\":" +
+         nullableFloat(
+             lowerWickRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"adx_di_spread\":" +
+         nullableFloat(
+             adxDiSpread,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"htf_timeframe\":\"" +
+         higherTimeframe +
+         "\","
+
+    payload := payload +
+         "\"engine_expected_version\":\"" +
+         engineExpectedVersion +
+         "\","
+
+    payload := payload +
+         "\"strategy_revision_date\":\"" +
+         strategyRevisionDate +
+         "\","
+
+    payload := payload +
+         "\"allow_manus_override_sl_tp\":true,"
+
+    payload := payload +
+         "\"pine_proposal_only\":true,"
+
+    payload := payload +
+         "\"candidate_policy\":\"metals_exhaustion_reversal_v1\","
+
+    payload := payload +
+         "\"candidates_today\":" +
+         str.tostring(candidatesToday)
+
+    payload := payload + "}"
+
+    payload := payload + "}"
+
+    payload
+
+
+// ============================================================================
+// 17. FINAL CANDIDATE VALIDATION AND ALERT EMISSION
+//
+// validLongCandidate, validShortCandidate and validFinalCandidate are now
+// declared earlier (hoisted before the Section 9 state-mutation cascade --
+// see the comment block there) so the armed-reversal disarm logic can gate
+// on them. They are reused here, not redeclared.
+// ============================================================================
+
+if validFinalCandidate
+    candidatesToday += 1
+    lastCandidateBar := bar_index
+
+    if enableAlerts
+        alert(
+             buildCanonicalPayload(),
+             alert.freq_once_per_bar_close
+        )
+
+
+// ============================================================================
+// 18. OPTIONAL STRATEGY-TESTER SIMULATION
+// ============================================================================
+
+var float activeStop = na
+var float activeTarget = na
+var int simulatedEntryBar = na
+
+bool flat =
+     strategy.position_size == 0
+
+if simulateCandidates and validFinalCandidate and flat
+    activeStop :=
+         candidateStop
+
+    activeTarget :=
+         candidateTarget
+
+    simulatedEntryBar :=
+         bar_index
+
+    if validLongCandidate
+        strategy.entry(
+             id = "Candidate Long",
+             direction = strategy.long,
+             comment = candidateModel
+        )
+
+        strategy.exit(
+             id = "Candidate Long Exit",
+             from_entry = "Candidate Long",
+             stop = activeStop,
+             limit = activeTarget
+        )
+
+    if validShortCandidate
+        strategy.entry(
+             id = "Candidate Short",
+             direction = strategy.short,
+             comment = candidateModel
+        )
+
+        strategy.exit(
+             id = "Candidate Short Exit",
+             from_entry = "Candidate Short",
+             stop = activeStop,
+             limit = activeTarget
+        )
+
+if simulateCandidates and strategy.position_size > 0
+    strategy.exit(
+         id = "Candidate Long Exit",
+         from_entry = "Candidate Long",
+         stop = activeStop,
+         limit = activeTarget
+    )
+
+if simulateCandidates and strategy.position_size < 0
+    strategy.exit(
+         id = "Candidate Short Exit",
+         from_entry = "Candidate Short",
+         stop = activeStop,
+         limit = activeTarget
+    )
+
+bool timeExit =
+     simulateCandidates and
+     strategy.position_size != 0 and
+     not na(simulatedEntryBar) and
+     bar_index - simulatedEntryBar >= simulatedMaximumHoldingBars
+
+if timeExit
+    strategy.close_all(
+         comment = "Candidate time exit"
+    )
+
+bool simulationJustClosed =
+     strategy.position_size == 0 and
+     strategy.position_size[1] != 0
+
+if simulationJustClosed
+    activeStop := na
+    activeTarget := na
+    simulatedEntryBar := na
+
+
+// ============================================================================
+// 19. CHART VISUALS
+// ============================================================================
+
+plot(
+     bbUpper,
+     title = "BB upper",
+     color = color.new(color.purple, 40),
+     linewidth = 1
+)
+
+plot(
+     bbBasis,
+     title = "BB basis",
+     color = color.new(color.gray, 40),
+     linewidth = 1
+)
+
+plot(
+     bbLower,
+     title = "BB lower",
+     color = color.new(color.purple, 40),
+     linewidth = 1
+)
+
+plot(
+     vwapValue,
+     title = "VWAP",
+     linewidth = 1
+)
+
+plotshape(
+     barstate.isconfirmed and longArmTrigger,
+     title = "Long armed",
+     style = shape.circle,
+     location = location.belowbar,
+     size = size.tiny,
+     color = color.new(color.lime, 30)
+)
+
+plotshape(
+     barstate.isconfirmed and shortArmTrigger,
+     title = "Short armed",
+     style = shape.circle,
+     location = location.abovebar,
+     size = size.tiny,
+     color = color.new(color.orange, 30)
+)
+
+plotshape(
+     barstate.isconfirmed and (longExtendTrigger or longDeepenTrigger),
+     title = "Long extended (awaiting reversal)",
+     style = shape.xcross,
+     location = location.belowbar,
+     size = size.tiny,
+     color = color.new(color.lime, 0)
+)
+
+plotshape(
+     barstate.isconfirmed and (shortExtendTrigger or shortDeepenTrigger),
+     title = "Short extended (awaiting reversal)",
+     style = shape.xcross,
+     location = location.abovebar,
+     size = size.tiny,
+     color = color.new(color.orange, 0)
+)
+
+plotshape(
+     validLongCandidate,
+     title = "Long candidate",
+     style = shape.triangleup,
+     location = location.belowbar,
+     size = size.small,
+     text = "L"
+)
+
+plotshape(
+     validShortCandidate,
+     title = "Short candidate",
+     style = shape.triangledown,
+     location = location.abovebar,
+     size = size.small,
+     text = "S"
+)
+
+float displayedStop = na
+float displayedTarget = na
+
+if strategy.position_size != 0
+    displayedStop :=
+         activeStop
+
+    displayedTarget :=
+         activeTarget
+
+plot(
+     displayedStop,
+     title = "Simulated stop",
+     style = plot.style_linebr,
+     linewidth = 2
+)
+
+plot(
+     displayedTarget,
+     title = "Simulated target",
+     style = plot.style_linebr,
+     linewidth = 2
+)
+
+color backgroundColour = na
+
+if not validChart
+    backgroundColour :=
+         color.new(
+             color.red,
+             85
+         )
+else if not validSession
+    backgroundColour :=
+         color.new(
+             color.gray,
+             94
+         )
+
+bgcolor(
+     backgroundColour
+)
+
+
+// ============================================================================
+// 20. DIAGNOSTIC DASHBOARD
+// ============================================================================
+
+var table dashboard =
+     table.new(
+         position.top_right,
+         2,
+         19,
+         border_width = 1
+     )
+
+if barstate.islast
+    table.cell(
+         dashboard,
+         0,
+         0,
+         "St Ludaetuc"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         0,
+         "XAG/USD (Silver) CG 1.0"
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         1,
+         "Chart valid"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         1,
+         str.tostring(validChart)
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         2,
+         "Session"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         2,
+         sessionName
+    )
+
+    string sessionPassText = "BLOCKED"
+
+    if validSession
+        sessionPassText := "PASS"
+
+    table.cell(
+         dashboard,
+         0,
+         3,
+         "Session pass"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         3,
+         sessionPassText
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         4,
+         "Market regime"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         4,
+         marketRegime
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         5,
+         "Trend"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         5,
+         trendBias
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         6,
+         "HTF bias"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         6,
+         higherTimeframeBias
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         7,
+         "ATR pips"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         7,
+         str.tostring(
+             atrPips,
+             "#.##"
+         )
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         8,
+         "Volatility"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         8,
+         volatilityRegime
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         9,
+         "RSI"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         9,
+         str.tostring(
+             rsi,
+             "#.##"
+         )
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         10,
+         "ADX / +DI / -DI"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         10,
+         str.tostring(adx, "#.#") + " / " + str.tostring(plusDi, "#.#") + " / " + str.tostring(minusDi, "#.#")
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         11,
+         "Candidates today"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         11,
+         str.tostring(
+             candidatesToday
+         )
+    )
+
+    string cooldownText = "WAIT"
+
+    if cooldownPass
+        cooldownText := "PASS"
+
+    table.cell(
+         dashboard,
+         0,
+         12,
+         "Cooldown"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         12,
+         cooldownText
+    )
+
+    string longArmedText = "none"
+
+    if longArmed
+        longArmedText := "ARMED, low<" + str.tostring(longArmedReferenceLow, format.mintick)
+    else if longAwaitingReversal
+        longArmedText := "REVERSAL WAIT, close>" + str.tostring(longReversalTriggerHigh, format.mintick)
+
+    string shortArmedText = "none"
+
+    if shortArmed
+        shortArmedText := "ARMED, high>" + str.tostring(shortArmedReferenceHigh, format.mintick)
+    else if shortAwaitingReversal
+        shortArmedText := "REVERSAL WAIT, close<" + str.tostring(shortReversalTriggerLow, format.mintick)
+
+    table.cell(
+         dashboard,
+         0,
+         13,
+         "Long armed"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         13,
+         longArmedText
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         14,
+         "Short armed"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         14,
+         shortArmedText
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         15,
+         "Long model"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         15,
+         longModel
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         16,
+         "Short model"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         16,
+         shortModel
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         17,
+         "Candidate strength"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         17,
+         str.tostring(candidateStrength, "#.#") + " (" + strengthLabel + ")"
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         18,
+         "Schema / engine ver"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         18,
+         schemaVersionString + " / " + engineExpectedVersion
+    )
