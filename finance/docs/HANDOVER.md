@@ -409,8 +409,10 @@ audit DBs were not queried or changed. PR 3/4/5 were not edited or merged.
 
 Repository `StLudaetuc/st-ludaetuc-engine`; only writable branch
 `finance/foundation-v1`; base `2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c`.
-Exact published commit and optional single draft PR are recorded in
-`docs/REVIEW_RECORD.md` and the delivery message after publication. Main remains
+Implementation commit: `a7eeeef226e08c64c26d8dfa7b3cee4497ee6322`.
+Single draft PR: [#2](https://github.com/StLudaetuc/st-ludaetuc-engine/pull/2),
+open, draft and unmerged. The final branch head is recorded in the saved morning
+handover after the publication-record commit. Main remains
 read-only, nothing merged or deployed, no changes outside Finance branch.
 
 ## 14. Tests and results

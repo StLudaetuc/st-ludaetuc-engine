@@ -10,7 +10,10 @@ Validation: 67 offline unittest cases PASS. PostgreSQL acceptance, privilege,
 concurrency, SQL/Python parity, full broker-history reconciliation and schema
 serializer conformance remain NOT_YET_DEMONSTRATED.
 
-Publication record will identify the implementation commit and single draft PR.
+Implementation commit: `a7eeeef226e08c64c26d8dfa7b3cee4497ee6322`.
+Single draft PR: [#2](https://github.com/StLudaetuc/st-ludaetuc-engine/pull/2),
+`finance/foundation-v1` → `main`, open, draft, unmerged.
+No other PR was opened or edited. No merge or deployment performed.
 The commit containing this file identifies its own documentation revision.
 
 Readiness means ready for source/design review only. It does not mean ready for
