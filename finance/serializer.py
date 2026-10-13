@@ -47,6 +47,8 @@ def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, ex
         raise ValueError('coverage cannot be self-declared')
     if not isinstance(coverage,Coverage) or (payload['coverage_state'],payload['evidence_count'],payload['first_evidence_id'],payload['last_evidence_id'],payload['unresolved_exception_count']) != (coverage.state,coverage.evidence_count,coverage.first_evidence_id,coverage.last_evidence_id,coverage.unresolved_exceptions):
         raise ValueError('coverage metadata must match current server-ordered evidence')
+    if payload['source_manifest_id']!=coverage.manifest_ref:
+        raise ValueError('source manifest must match current trusted evidence')
     if payload['currency_confirmed'] is not coverage.currency_confirmed or payload['costs_complete'] is not coverage.costs_complete:
         raise ValueError('currency/cost completeness cannot be self-declared')
     if isinstance(run,Run):

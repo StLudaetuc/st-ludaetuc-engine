@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-10-13T11:49:08.668561+00:00",
+  "generated_at": "2026-10-13T11:52:22.685647+00:00",
   "python": "3.12.14",
-  "tests_run": 151,
+  "tests_run": 152,
   "failures": 0,
   "errors": 0,
   "skipped": 0,
   "groups": {
     "test_core.FinanceTests": 56,
     "test_corrections.CorrectionTests": 61,
-    "test_corrections.SerializerTests": 19,
+    "test_corrections.SerializerTests": 20,
     "test_market_data.MarketDataTests": 11,
     "test_sql_candidate.SQLCandidateSyntaxTests": 4
   },
@@ -134,6 +134,7 @@
     "test_corrections.SerializerTests.test_H5_cannot_change_producer_number",
     "test_corrections.SerializerTests.test_H5_estimate_cannot_fact",
     "test_corrections.SerializerTests.test_H5_fabricated_trade_count",
+    "test_corrections.SerializerTests.test_H5_false_source_manifest_rejected",
     "test_corrections.SerializerTests.test_H5_future_assertion_withdrawal_blocks_old_fact",
     "test_corrections.SerializerTests.test_H5_incomplete_as_verified_reader_and_weekly",
     "test_corrections.SerializerTests.test_H5_missing_recognition_policy_not_economic_fact",

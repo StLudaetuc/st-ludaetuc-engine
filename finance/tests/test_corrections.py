@@ -256,6 +256,7 @@ class SerializerTests(unittest.TestCase):
                     else:p[key][name]={'value':'1.000000000000','currency':'GBP','state':'verified','classification':'FACT','reason':None,'evidence_id':'evidence:fixture'}
             else:p[key]='fixture'
         p.update(broker_environment='OANDA_LIVE',system_environment='PRODUCTION',financial_reality='ACTUAL',financial_state='REALISED',scope_level='PROJECT',classification='MIXED' if kind=='weekly' else 'FACT',basis='ACTUAL_CASH',coverage_state='VERIFIED',reconciliation_state='MATCHED',denominator_basis='closed_trades')
+        p['source_manifest_id']='manifest:fixture'
         j=AuthorityJournal();j.append('coverage','a',coverage(1),START)
         run=Run((Result('t','MATCHED',(),1),),(),0,1,1,0,1,0,1,'fixture',LIVE)
         j.append('reconciliation','a',run,START)
@@ -325,6 +326,9 @@ class SerializerTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.validate(p,j,e,'weekly')
     def test_H5_missing_recognition_policy_not_economic_fact(self):
         p,j,e=self.factory();p['recognition_policy_missing_count']=1
+        with self.assertRaises(ValueError):self.validate(p,j,e)
+    def test_H5_false_source_manifest_rejected(self):
+        p,j,e=self.factory();p['source_manifest_id']='manifest:other'
         with self.assertRaises(ValueError):self.validate(p,j,e)
     def test_H5_precision_overflow(self):
         p,j,e=self.factory();p['metrics']['spent']['value']='0.1234567890123'

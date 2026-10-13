@@ -90,13 +90,13 @@ market-data cases and all non-Finance branches/resources.
 ## Complete test result
 
 Original baseline before correction: **67/67 PASS**.
-Corrected final suite: **151 tests; 0 failures; 0 errors; 0 skipped**.
+Corrected final suite: **152 tests; 0 failures; 0 errors; 0 skipped**.
 Python 3.12.14; jsonschema 4.26.0; pglast 8.5 / PostgreSQL grammar 18.6.
 
 * Original Finance case names: 56 PASS (fixtures adapted to required explicit
   scope/coverage and changed quarantine/replay semantics; no case deleted).
 * Original market-data cases: 11 PASS, unchanged.
-* Correction and semantic regressions: 80 PASS.
+* Correction and semantic regressions: 81 PASS.
 * PostgreSQL 18 SQL/PL grammar tests: 4 PASS.
 
 `docs/TEST_RESULTS.json` records every case name, group totals and test time.

@@ -127,7 +127,7 @@ class Coverage:
         if self.state in {'VERIFIED','REVIEWED_EMPTY'} and not self.reviewed_by:
             raise ValueError('reviewed evidence required')
     def supports(self, start, end, observed_count):
-        return (self.state in {'VERIFIED','REVIEWED_EMPTY'} and not self.unresolved_exceptions and self.currency_confirmed and self.costs_complete
+        return (type(observed_count) is int and self.state in {'VERIFIED','REVIEWED_EMPTY'} and not self.unresolved_exceptions and self.currency_confirmed and self.costs_complete
                 and self.period_start <= instant(start) < instant(end) <= self.period_end
                 and observed_count == self.evidence_count)
 

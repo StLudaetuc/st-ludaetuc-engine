@@ -13,7 +13,7 @@ The commit containing this record is the corrected source candidate; the deliver
 handover records its exact SHA after Git assigns it. Independent review of that
 SHA remains pending; this provider does not approve its own work.
 
-Validation: 151 local checks passed, including the 67 baseline case names,
+Validation: 152 local checks passed, including the 67 baseline case names,
 regressions and PG18 grammar checks. Original 67 cases passed before any edit.
 Scope/evidence-dependent fixtures and changed error expectations were updated to
 the corrected APIs; no original case was deleted. Runtime PG18 acceptance,
