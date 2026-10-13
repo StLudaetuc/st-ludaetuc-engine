@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:st-ludaetuc:finance:weekly:v1",
+  "$id": "urn:st-ludaetuc:finance:weekly:v2",
   "$defs": {
     "metric": {
       "type": "object",
@@ -10,7 +10,8 @@
         "currency",
         "state",
         "reason",
-        "evidence_id"
+        "evidence_id",
+        "classification"
       ],
       "properties": {
         "value": {
@@ -18,8 +19,8 @@
             "string",
             "null"
           ],
-          "pattern": "^-?[0-9]{1,36}(\\.[0-9]{1,50})?$",
-          "maxLength": 88
+          "pattern": "^-?[0-9]{1,36}(\\.[0-9]{1,12})?$",
+          "maxLength": 50
         },
         "currency": {
           "const": "GBP"
@@ -30,7 +31,7 @@
             "observed_incomplete",
             "estimate",
             "unavailable",
-            "simulated"
+            "hypothetical"
           ]
         },
         "reason": {
@@ -46,6 +47,14 @@
             "null"
           ],
           "maxLength": 128
+        },
+        "classification": {
+          "enum": [
+            "FACT",
+            "ESTIMATED",
+            "UNKNOWN",
+            "HYPOTHETICAL"
+          ]
         }
       }
     },
@@ -57,7 +66,8 @@
         "unit",
         "state",
         "reason",
-        "evidence_id"
+        "evidence_id",
+        "classification"
       ],
       "properties": {
         "value": {
@@ -91,6 +101,12 @@
             "null"
           ],
           "maxLength": 128
+        },
+        "classification": {
+          "enum": [
+            "ESTIMATED",
+            "UNKNOWN"
+          ]
         }
       }
     }
@@ -120,11 +136,26 @@
     "forecast_inputs",
     "assumption_set_id",
     "allocation_policy",
-    "simulation_type"
+    "simulation_type",
+    "scope_level",
+    "classification",
+    "basis",
+    "coverage_state",
+    "evidence_count",
+    "first_evidence_id",
+    "last_evidence_id",
+    "unresolved_exception_count",
+    "reconciliation_state",
+    "denominator_basis",
+    "money_policy",
+    "currency_confirmed",
+    "costs_complete",
+    "recognition_policy",
+    "recognition_policy_missing_count"
   ],
   "properties": {
     "schema_version": {
-      "const": "finance_weekly_v1"
+      "const": "finance_weekly_v2"
     },
     "as_of": {
       "type": "string",
@@ -197,7 +228,7 @@
       "maxLength": 128
     },
     "formula_version": {
-      "const": "finance_foundation_v1"
+      "const": "finance_foundation_v2"
     },
     "lifetime": {
       "type": "object",
@@ -208,7 +239,9 @@
         "financing",
         "other_trading_costs",
         "net_economic_pnl",
-        "remaining_break_even"
+        "remaining_break_even",
+        "cash_spend",
+        "economic_expense"
       ],
       "properties": {
         "total_spent": {
@@ -228,6 +261,12 @@
         },
         "remaining_break_even": {
           "$ref": "#/$defs/metric"
+        },
+        "cash_spend": {
+          "$ref": "#/$defs/metric"
+        },
+        "economic_expense": {
+          "$ref": "#/$defs/metric"
         }
       }
     },
@@ -242,7 +281,9 @@
         "other_operating_costs",
         "broker_costs",
         "realised_pnl",
-        "net_result"
+        "net_result",
+        "cash_spend",
+        "economic_expense"
       ],
       "properties": {
         "infrastructure": {
@@ -267,6 +308,12 @@
           "$ref": "#/$defs/metric"
         },
         "net_result": {
+          "$ref": "#/$defs/metric"
+        },
+        "cash_spend": {
+          "$ref": "#/$defs/metric"
+        },
+        "economic_expense": {
           "$ref": "#/$defs/metric"
         }
       }
@@ -369,6 +416,96 @@
         "REPLAY",
         "VALIDATION"
       ]
+    },
+    "scope_level": {
+      "enum": [
+        "PROJECT",
+        "ACCOUNT"
+      ]
+    },
+    "classification": {
+      "enum": [
+        "FACT",
+        "MIXED",
+        "ESTIMATED",
+        "UNKNOWN",
+        "HYPOTHETICAL"
+      ]
+    },
+    "basis": {
+      "enum": [
+        "ACTUAL_CASH",
+        "HYPOTHETICAL_NON_CASH"
+      ]
+    },
+    "coverage_state": {
+      "enum": [
+        "VERIFIED",
+        "REVIEWED_EMPTY",
+        "UNKNOWN",
+        "INCOMPLETE",
+        "WITHDRAWN"
+      ]
+    },
+    "evidence_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "first_evidence_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    },
+    "last_evidence_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    },
+    "unresolved_exception_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "reconciliation_state": {
+      "enum": [
+        "MATCHED",
+        "BROKER_ONLY",
+        "INTERNAL_ONLY",
+        "VALUE_MISMATCH",
+        "PENDING_EOD_SYNC",
+        "INVESTIGATION_REQUIRED"
+      ]
+    },
+    "denominator_basis": {
+      "enum": [
+        "attempted_orders",
+        "filled_orders",
+        "closed_trades",
+        "partial_close_slices",
+        "transactions"
+      ]
+    },
+    "money_policy": {
+      "const": "money_scale12_half_away_v1"
+    },
+    "currency_confirmed": {
+      "type": "boolean"
+    },
+    "costs_complete": {
+      "type": "boolean"
+    },
+    "recognition_policy": {
+      "const": "EXPLICIT_PER_EXPENSE"
+    },
+    "recognition_policy_missing_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
     }
   }
 }

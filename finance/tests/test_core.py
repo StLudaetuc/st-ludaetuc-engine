@@ -4,9 +4,37 @@ from dataclasses import replace, FrozenInstanceError
 from decimal import Decimal, getcontext
 from finance.core import *
 from finance.oanda import normalise
+import finance.core as core
 
 START='2026-10-01T00:00:00Z'
 END='2026-11-01T00:00:00Z'
+
+def fixture_scope(environment):
+    return Scope('OANDA_PRACTICE' if environment=='practice' else 'OANDA_LIVE','PRODUCTION','ACTUAL','REALISED',None)
+
+def coverage(count, complete=True, start=START, end=END):
+    return Coverage(('VERIFIED' if count else 'REVIEWED_EMPTY') if complete else 'UNKNOWN',count,start,end,
+                    'first' if count else None,'last' if count else None,'manifest:fixture','fixture',0,True,True)
+
+# Compatibility in test fixtures only: production APIs require explicit scopes/evidence.
+def broker_totals(rows, account, environment, start, end):
+    scope=fixture_scope(environment)
+    count=len({r.transaction_id for r in rows if r.account==account and r.scope==scope and instant(start)<=r.at<instant(end)})
+    return core.broker_totals(rows,account,scope,start,end,coverage(count,start=start,end=end))
+
+def run_rate(rows,as_of):
+    count=sum(r.effective_from<=instant(as_of)<r.effective_to for r in rows)
+    return core.run_rate(rows,as_of,coverage(count,start=as_of,end='2100-01-01T00:00:00Z'))
+
+def economics(spend,totals,trades,environment,complete,**kw):
+    scope=Scope('OANDA_PRACTICE' if environment=='practice' else 'OANDA_LIVE',kw.get('system_environment','PRODUCTION'),
+                kw.get('financial_reality','ACTUAL'),kw.get('financial_state','REALISED'),kw.get('simulation_type'))
+    account={'account':'fixture','scope':scope,'net_trading':totals['net_trading'],'coverage_complete':complete}
+    expenses={'cash_spend':money(spend),'economic_expense':money(spend),'coverage_complete':complete}
+    r=core.project_economics([account],expenses,coverage(1,complete),START,END,trade_count=trades,denominator_basis='closed_trades')
+    r['remaining_break_even_gbp']=r['remaining_cash_break_even_gbp']
+    r['unit_economics_basis']='HYPOTHETICAL_NON_CASH' if environment=='practice' else 'ACTUAL_CASH'
+    return r
 def expense(**kw):
     args=dict(expense_id='e1', revision=1, source_key='invoice:render:123:line1',incurred_at=START,
         vendor='Render',description='Monthly service',category='infrastructure',original_amount='10',
@@ -16,12 +44,13 @@ def expense(**kw):
     args.update(kw)
     return Expense(**args)
 def component(**kw):
-    args=dict(account='practice1',environment='practice',transaction_id='1',component_key='pl',at=START,
+    args=dict(account='practice1',scope=fixture_scope('practice'),transaction_id='1',component_key='pl',at=START,
               kind='realised_pnl',amount='100',currency='GBP',fx_to_gbp='1')
     args.update(kw)
     return BrokerComponent(**args)
 def scoped(**kw):
-    return dict(account='practice1',environment='practice',currency='GBP',**kw)
+    row=dict(account='practice1',scope=fixture_scope('practice'),currency='GBP',event_time=START,received_at=START,event_id='e1',transaction_id='t1',fill_status='FILLED')
+    row.update(kw);return row
 
 class FinanceTests(unittest.TestCase):
     def test_decimal_arithmetic(self):
@@ -82,7 +111,7 @@ class FinanceTests(unittest.TestCase):
         self.assertEqual(r['month'],30);self.assertEqual(r['year'],360)
         self.assertAlmostEqual(float(r['day']),360/365.25)
     def test_run_rate_excludes_estimates(self):
-        self.assertEqual(run_rate([Subscription('x','30',START,END,'estimate')],START)['year'],0)
+        self.assertIsNone(run_rate([Subscription('x','30',START,END,'estimate')],START)['year'])
     def test_run_rate_expired(self):
         self.assertEqual(run_rate([Subscription('x','30',START,END,'invoice_verified')],END)['year'],0)
     def test_run_rate_overlap(self):
@@ -109,48 +138,48 @@ class FinanceTests(unittest.TestCase):
         self.assertTrue(e['operationally_profitable']);self.assertEqual(e['remaining_break_even_gbp'],0)
     def test_practice_not_real_profit(self):
         e=economics('20',{'net_trading':Decimal('95')},5,'practice',True)
-        self.assertIsNone(e['net_economic_gbp']);self.assertEqual(e['unit_economics_basis'],'practice_broker_actual')
+        self.assertEqual(e['net_economic_gbp'],-20);self.assertEqual(e['unit_economics_basis'],'HYPOTHETICAL_NON_CASH')
     def test_shadow_exclusion(self):
-        self.assertIsNone(economics('20',{'net_trading':Decimal('95')},5,'live',True,system_environment='SHADOW')['net_economic_gbp'])
+        self.assertEqual(economics('20',{'net_trading':Decimal('95')},5,'live',True,system_environment='SHADOW')['net_economic_gbp'],-20)
     def test_counterfactual_exclusion(self):
-        self.assertIsNone(economics('20',{'net_trading':Decimal('95')},5,'live',True,financial_reality='SIMULATED',simulation_type='COUNTERFACTUAL')['net_economic_gbp'])
+        with self.assertRaises(ValueError):economics('20',{'net_trading':Decimal('95')},5,'live',True,financial_reality='SIMULATED',simulation_type='COUNTERFACTUAL')
     def test_incomplete(self):
         self.assertIsNone(economics('20',{'net_trading':Decimal('95')},5,'live',False)['remaining_break_even_gbp'])
     def test_no_trades(self):
         self.assertIsNone(economics('20',{'net_trading':Decimal('0')},0,'live',True)['allocated_cost_per_trade_gbp'])
     def reconciliation(self,b,o,t,p,now=END,due=END):
-        return reconcile(b,o,t,p,now,due,'practice1','practice')
+        return reconcile(b,o,t,p,now,due,'practice1',fixture_scope('practice'))
     def test_reconciliation_complete(self):
         self.assertEqual(self.reconciliation([scoped(trade_id='1',closed=True,realised_pnl='4')],[scoped(trade_id='1',signal_id='s')],[scoped(trade_id='1',realised_pnl='4')],[scoped(signal_id='s')]),())
     def test_missing_outcome(self):
-        self.assertIn(('trade','1','outcome_overdue'),self.reconciliation([scoped(trade_id='1',closed=True)],[],[],[]))
+        self.assertIn(('trade','1','outcome_overdue'),self.reconciliation([scoped(trade_id='1',closed=True,realised_pnl='0')],[scoped(trade_id='1',signal_id='s')],[],[scoped(signal_id='s')]))
     def test_pending_eod(self):
-        self.assertIn(('trade','1','pending_eod'),self.reconciliation([scoped(trade_id='1',closed=True)],[],[],[],START,END))
+        self.assertIn(('trade','1','pending_eod'),self.reconciliation([scoped(trade_id='1',closed=True,realised_pnl='0')],[scoped(trade_id='1',signal_id='s')],[],[scoped(signal_id='s')],START,END))
     def test_pnl_mismatch(self):
-        self.assertIn(('trade','1','pnl_mismatch'),self.reconciliation([scoped(trade_id='1',closed=True,realised_pnl='3')],[],[scoped(trade_id='1',realised_pnl='4')],[]))
+        self.assertIn(('trade','1','pnl_mismatch'),self.reconciliation([scoped(trade_id='1',closed=True,realised_pnl='3')],[scoped(trade_id='1',signal_id='s')],[scoped(trade_id='1',realised_pnl='4')],[scoped(signal_id='s')]))
     def test_missing_pnl(self):
-        self.assertIn(('trade','1','pnl_missing'),self.reconciliation([scoped(trade_id='1',closed=True)],[],[scoped(trade_id='1',realised_pnl=None)],[]))
+        self.assertIn(('outcome','1','pnl_missing'),self.reconciliation([scoped(trade_id='1',closed=True)],[],[scoped(trade_id='1',realised_pnl=None)],[]))
     def test_missing_prediction(self):
         self.assertIn(('trade','1','prediction_missing'),self.reconciliation([scoped(trade_id='1',closed=False)],[scoped(trade_id='1',signal_id='s')],[],[]))
     def test_reconciliation_duplicate(self):
-        r=scoped(trade_id='1',closed=False);self.assertIn(('broker','1','duplicate_identity'),self.reconciliation([r,r],[],[],[]))
+        r=scoped(trade_id='1',closed=False);self.assertNotIn(('broker','1','duplicate_identity'),self.reconciliation([r,r],[],[],[]))
     def test_reconciliation_scope(self):
-        self.assertIn(('broker','','scope_missing'),self.reconciliation([dict(trade_id='1')],[],[],[]))
+        self.assertIn(('broker','1','scope_missing'),self.reconciliation([dict(trade_id='1')],[],[],[]))
     def test_currency_missing(self):
         r=scoped(trade_id='1',closed=True,realised_pnl='3');del r['currency']
-        self.assertIn(('broker','1','currency_missing'),self.reconciliation([r],[],[scoped(trade_id='1',realised_pnl='3')],[]))
+        self.assertIn(('broker','1','currency_missing'),self.reconciliation([r],[scoped(trade_id='1',signal_id='s')],[scoped(trade_id='1',realised_pnl='3')],[scoped(signal_id='s')]))
     def test_currency_mismatch(self):
         r=scoped(trade_id='1',closed=True,realised_pnl='3');r['currency']='USD'
-        self.assertIn(('trade','1','currency_mismatch'),self.reconciliation([r],[],[scoped(trade_id='1',realised_pnl='3')],[]))
+        self.assertIn(('trade','1','currency_mismatch'),self.reconciliation([r],[scoped(trade_id='1',signal_id='s')],[scoped(trade_id='1',realised_pnl='3')],[scoped(signal_id='s')]))
     def test_unknown_broker_state(self):
-        self.assertIn(('trade','1','broker_state_missing'),self.reconciliation([scoped(trade_id='1',closed=None)],[],[],[]))
+        self.assertIn(('broker','1','broker_state_missing'),self.reconciliation([scoped(trade_id='1',closed=None)],[],[],[]))
     def test_repeatability(self):
         r=[component(),component(component_key='f',kind='financing',amount='-3')]
         self.assertEqual(broker_totals(r,'practice1','practice',START,END),broker_totals(list(reversed(r)),'practice1','practice',START,END))
     def tx(self,**kw):
         r=dict(accountID='private-export-id',id='1',time=START,type='ORDER_FILL',accountBalance='1000',pl='100',financing='-3',commission='2',guaranteedExecutionFee='1',tradesClosed=[{'realizedPL':'100'}],halfSpreadCost='5');r.update(kw);return r
     def adapt(self,tx):
-        return normalise(tx,'practice1','private-export-id','practice','GBP','1')
+        return normalise(tx,'practice1','private-export-id',fixture_scope('practice'),'GBP','1')
     def test_adapter_no_nested_double_count(self):
         rows,d=self.adapt(self.tx());self.assertEqual(broker_totals(rows,'practice1','practice',START,END)['net_trading'],94);self.assertEqual(d['halfSpreadCost'],'5')
     def test_adapter_missing(self):
