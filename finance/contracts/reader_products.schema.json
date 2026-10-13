@@ -1,0 +1,982 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:st-ludaetuc:finance:reader:v1",
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "currency",
+        "state",
+        "reason",
+        "evidence_id"
+      ],
+      "properties": {
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]{1,36}(\\.[0-9]{1,50})?$",
+          "maxLength": 88
+        },
+        "currency": {
+          "const": "GBP"
+        },
+        "state": {
+          "enum": [
+            "verified",
+            "observed_incomplete",
+            "estimate",
+            "unavailable",
+            "simulated"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 240
+        },
+        "evidence_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      }
+    },
+    "drawdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "unit",
+        "state",
+        "reason",
+        "evidence_id"
+      ],
+      "properties": {
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(0(\\.[0-9]{1,12})?|1(\\.0{1,12})?)$",
+          "maxLength": 14
+        },
+        "unit": {
+          "const": "fraction_of_capital"
+        },
+        "state": {
+          "enum": [
+            "approved_assumption",
+            "observed_incomplete",
+            "unavailable"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 240
+        },
+        "evidence_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "as_of",
+        "period_start",
+        "period_end",
+        "account_alias",
+        "broker_environment",
+        "system_environment",
+        "financial_reality",
+        "financial_state",
+        "coverage_complete",
+        "trade_count",
+        "exception_count",
+        "pending_eod_count",
+        "source_manifest_id",
+        "formula_version",
+        "metrics",
+        "simulation_type"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "finance_reader_v1"
+        },
+        "product": {
+          "const": "finance-summary"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "account_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "broker_environment": {
+          "enum": [
+            "OANDA_PRACTICE",
+            "OANDA_LIVE"
+          ]
+        },
+        "system_environment": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "DEMO",
+            "SHADOW",
+            "REPLAY",
+            "PRODUCTION"
+          ]
+        },
+        "financial_reality": {
+          "enum": [
+            "ACTUAL",
+            "SIMULATED"
+          ]
+        },
+        "financial_state": {
+          "const": "REALISED"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "trade_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "exception_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "pending_eod_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "source_manifest_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "formula_version": {
+          "const": "finance_foundation_v1"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "spent",
+            "gross_pnl",
+            "financing",
+            "other_broker_costs",
+            "net_trading",
+            "net_economic"
+          ],
+          "properties": {
+            "spent": {
+              "$ref": "#/$defs/metric"
+            },
+            "gross_pnl": {
+              "$ref": "#/$defs/metric"
+            },
+            "financing": {
+              "$ref": "#/$defs/metric"
+            },
+            "other_broker_costs": {
+              "$ref": "#/$defs/metric"
+            },
+            "net_trading": {
+              "$ref": "#/$defs/metric"
+            },
+            "net_economic": {
+              "$ref": "#/$defs/metric"
+            }
+          }
+        },
+        "simulation_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "COUNTERFACTUAL",
+            "SHADOW",
+            "REPLAY",
+            "VALIDATION"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "as_of",
+        "period_start",
+        "period_end",
+        "account_alias",
+        "broker_environment",
+        "system_environment",
+        "financial_reality",
+        "financial_state",
+        "coverage_complete",
+        "trade_count",
+        "exception_count",
+        "pending_eod_count",
+        "source_manifest_id",
+        "formula_version",
+        "metrics",
+        "simulation_type"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "finance_reader_v1"
+        },
+        "product": {
+          "const": "finance-costs"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "account_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "broker_environment": {
+          "enum": [
+            "OANDA_PRACTICE",
+            "OANDA_LIVE"
+          ]
+        },
+        "system_environment": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "DEMO",
+            "SHADOW",
+            "REPLAY",
+            "PRODUCTION"
+          ]
+        },
+        "financial_reality": {
+          "enum": [
+            "ACTUAL",
+            "SIMULATED"
+          ]
+        },
+        "financial_state": {
+          "const": "REALISED"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "trade_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "exception_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "pending_eod_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "source_manifest_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "formula_version": {
+          "const": "finance_foundation_v1"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "infrastructure",
+            "api_ai",
+            "subscriptions",
+            "rd_testing",
+            "domains",
+            "data",
+            "tooling",
+            "other",
+            "total_spend",
+            "estimated_spend"
+          ],
+          "properties": {
+            "infrastructure": {
+              "$ref": "#/$defs/metric"
+            },
+            "api_ai": {
+              "$ref": "#/$defs/metric"
+            },
+            "subscriptions": {
+              "$ref": "#/$defs/metric"
+            },
+            "rd_testing": {
+              "$ref": "#/$defs/metric"
+            },
+            "domains": {
+              "$ref": "#/$defs/metric"
+            },
+            "data": {
+              "$ref": "#/$defs/metric"
+            },
+            "tooling": {
+              "$ref": "#/$defs/metric"
+            },
+            "other": {
+              "$ref": "#/$defs/metric"
+            },
+            "total_spend": {
+              "$ref": "#/$defs/metric"
+            },
+            "estimated_spend": {
+              "$ref": "#/$defs/metric"
+            }
+          }
+        },
+        "simulation_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "COUNTERFACTUAL",
+            "SHADOW",
+            "REPLAY",
+            "VALIDATION"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "as_of",
+        "period_start",
+        "period_end",
+        "account_alias",
+        "broker_environment",
+        "system_environment",
+        "financial_reality",
+        "financial_state",
+        "coverage_complete",
+        "trade_count",
+        "exception_count",
+        "pending_eod_count",
+        "source_manifest_id",
+        "formula_version",
+        "metrics",
+        "simulation_type"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "finance_reader_v1"
+        },
+        "product": {
+          "const": "finance-trading-pnl"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "account_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "broker_environment": {
+          "enum": [
+            "OANDA_PRACTICE",
+            "OANDA_LIVE"
+          ]
+        },
+        "system_environment": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "DEMO",
+            "SHADOW",
+            "REPLAY",
+            "PRODUCTION"
+          ]
+        },
+        "financial_reality": {
+          "enum": [
+            "ACTUAL",
+            "SIMULATED"
+          ]
+        },
+        "financial_state": {
+          "const": "REALISED"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "trade_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "exception_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "pending_eod_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "source_manifest_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "formula_version": {
+          "const": "finance_foundation_v1"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gross_pnl",
+            "financing",
+            "commission",
+            "conversion_costs",
+            "other_adjustments",
+            "net_trading"
+          ],
+          "properties": {
+            "gross_pnl": {
+              "$ref": "#/$defs/metric"
+            },
+            "financing": {
+              "$ref": "#/$defs/metric"
+            },
+            "commission": {
+              "$ref": "#/$defs/metric"
+            },
+            "conversion_costs": {
+              "$ref": "#/$defs/metric"
+            },
+            "other_adjustments": {
+              "$ref": "#/$defs/metric"
+            },
+            "net_trading": {
+              "$ref": "#/$defs/metric"
+            }
+          }
+        },
+        "simulation_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "COUNTERFACTUAL",
+            "SHADOW",
+            "REPLAY",
+            "VALIDATION"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "as_of",
+        "period_start",
+        "period_end",
+        "account_alias",
+        "broker_environment",
+        "system_environment",
+        "financial_reality",
+        "financial_state",
+        "coverage_complete",
+        "trade_count",
+        "exception_count",
+        "pending_eod_count",
+        "source_manifest_id",
+        "formula_version",
+        "metrics",
+        "simulation_type"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "finance_reader_v1"
+        },
+        "product": {
+          "const": "finance-break-even"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "account_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "broker_environment": {
+          "enum": [
+            "OANDA_PRACTICE",
+            "OANDA_LIVE"
+          ]
+        },
+        "system_environment": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "DEMO",
+            "SHADOW",
+            "REPLAY",
+            "PRODUCTION"
+          ]
+        },
+        "financial_reality": {
+          "enum": [
+            "ACTUAL",
+            "SIMULATED"
+          ]
+        },
+        "financial_state": {
+          "const": "REALISED"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "trade_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "exception_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "pending_eod_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "source_manifest_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "formula_version": {
+          "const": "finance_foundation_v1"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lifetime_spend",
+            "net_trading",
+            "net_economic",
+            "remaining_lifetime_break_even",
+            "period_operating_gap"
+          ],
+          "properties": {
+            "lifetime_spend": {
+              "$ref": "#/$defs/metric"
+            },
+            "net_trading": {
+              "$ref": "#/$defs/metric"
+            },
+            "net_economic": {
+              "$ref": "#/$defs/metric"
+            },
+            "remaining_lifetime_break_even": {
+              "$ref": "#/$defs/metric"
+            },
+            "period_operating_gap": {
+              "$ref": "#/$defs/metric"
+            }
+          }
+        },
+        "simulation_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "COUNTERFACTUAL",
+            "SHADOW",
+            "REPLAY",
+            "VALIDATION"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "as_of",
+        "period_start",
+        "period_end",
+        "account_alias",
+        "broker_environment",
+        "system_environment",
+        "financial_reality",
+        "financial_state",
+        "coverage_complete",
+        "trade_count",
+        "exception_count",
+        "pending_eod_count",
+        "source_manifest_id",
+        "formula_version",
+        "metrics",
+        "simulation_type"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "finance_reader_v1"
+        },
+        "product": {
+          "const": "finance-reconciliation-health"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "account_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "broker_environment": {
+          "enum": [
+            "OANDA_PRACTICE",
+            "OANDA_LIVE"
+          ]
+        },
+        "system_environment": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "DEMO",
+            "SHADOW",
+            "REPLAY",
+            "PRODUCTION"
+          ]
+        },
+        "financial_reality": {
+          "enum": [
+            "ACTUAL",
+            "SIMULATED"
+          ]
+        },
+        "financial_state": {
+          "const": "REALISED"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "trade_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "exception_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "pending_eod_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "source_manifest_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "formula_version": {
+          "const": "finance_foundation_v1"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {}
+        },
+        "simulation_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "COUNTERFACTUAL",
+            "SHADOW",
+            "REPLAY",
+            "VALIDATION"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "as_of",
+        "period_start",
+        "period_end",
+        "account_alias",
+        "broker_environment",
+        "system_environment",
+        "financial_reality",
+        "financial_state",
+        "coverage_complete",
+        "trade_count",
+        "exception_count",
+        "pending_eod_count",
+        "source_manifest_id",
+        "formula_version",
+        "metrics",
+        "simulation_type"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "finance_reader_v1"
+        },
+        "product": {
+          "const": "finance-forecast-inputs"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "account_alias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "broker_environment": {
+          "enum": [
+            "OANDA_PRACTICE",
+            "OANDA_LIVE"
+          ]
+        },
+        "system_environment": {
+          "enum": [
+            "DEVELOPMENT",
+            "VALIDATION",
+            "DEMO",
+            "SHADOW",
+            "REPLAY",
+            "PRODUCTION"
+          ]
+        },
+        "financial_reality": {
+          "enum": [
+            "ACTUAL",
+            "SIMULATED"
+          ]
+        },
+        "financial_state": {
+          "const": "REALISED"
+        },
+        "coverage_complete": {
+          "type": "boolean"
+        },
+        "trade_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "exception_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "pending_eod_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000
+        },
+        "source_manifest_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "formula_version": {
+          "const": "finance_foundation_v1"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capital",
+            "observed_expectancy",
+            "monthly_operating_cost",
+            "financing_per_trade",
+            "drawdown_assumption"
+          ],
+          "properties": {
+            "capital": {
+              "$ref": "#/$defs/metric"
+            },
+            "observed_expectancy": {
+              "$ref": "#/$defs/metric"
+            },
+            "monthly_operating_cost": {
+              "$ref": "#/$defs/metric"
+            },
+            "financing_per_trade": {
+              "$ref": "#/$defs/metric"
+            },
+            "drawdown_assumption": {
+              "$ref": "#/$defs/drawdown"
+            }
+          }
+        },
+        "simulation_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            null,
+            "COUNTERFACTUAL",
+            "SHADOW",
+            "REPLAY",
+            "VALIDATION"
+          ]
+        }
+      }
+    }
+  ]
+}
