@@ -1,0 +1,14 @@
+{
+  "status": "NOT_EXECUTED",
+  "postgres_version_target": "18.6",
+  "uid": 0,
+  "uid_map": "0          0          1",
+  "setuid_attempt": "UID1/1000/1001/65534 rejected EINVAL",
+  "nested_user_namespace": "unshare map-user1000 refused uid_map write Operation not permitted",
+  "official_source_root_checks": [
+    "initdb.c:820",
+    "backend/main/main.c:446"
+  ],
+  "postgres_root_protection_bypassed": false,
+  "shared_or_cloud_database_used": false
+}

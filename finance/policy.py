@@ -147,6 +147,10 @@ class AuthorityJournal:
     def latest(self, domain, key):
         with self._lock:
             return next((r for r in reversed(self._rows) if r[1:3] == (domain, key)), None)
+    def coverage_for(self, key, start, end):
+        start,end=instant(start),instant(end)
+        with self._lock:
+            return next((r for r in reversed(self._rows) if r[1:3]==('coverage',key) and isinstance(r[3],Coverage) and (r[3].period_start,r[3].period_end)==(start,end)),None)
     @property
     def history(self):
         with self._lock:

@@ -35,6 +35,7 @@ class Run:
     transaction_count: int
     account: str
     scope: Scope
+    schedule_verified: bool = False
     @property
     def clean(self):
         return not self.malformed and all(r.state == 'MATCHED' for r in self.results)
@@ -109,7 +110,7 @@ def reconcile_run(broker, opened, outcomes, predictions, *, as_of, outcome_due_a
             if slices or outcome:
                 state='INVESTIGATION_REQUIRED';reasons.append('cancelled_order_has_trade')
         elif not slices:
-            state='INTERNAL_ONLY';reasons.append('broker_record_missing')
+            state='PENDING_EOD_SYNC' if as_of < due else 'INTERNAL_ONLY';reasons.append('pending_broker_sync' if as_of < due else 'broker_record_missing')
         elif opened_row is None:
             state='BROKER_ONLY';reasons.append('opened_missing')
         elif opened_row.get('fill_status') != 'FILLED':
@@ -124,7 +125,7 @@ def reconcile_run(broker, opened, outcomes, predictions, *, as_of, outcome_due_a
                 reasons.append('pending_eod' if as_of < due else 'outcome_overdue')
             elif outcome is not None:
                 if not closed:
-                    state='INVESTIGATION_REQUIRED';reasons.append('outcome_without_broker_closure')
+                    state='PENDING_EOD_SYNC' if as_of < due else 'INVESTIGATION_REQUIRED';reasons.append('pending_broker_closure' if as_of < due else 'outcome_without_broker_closure')
                 elif len({r['currency'] for r in cash_slices}|{outcome['currency']}) != 1:
                     state='VALUE_MISMATCH';reasons.append('currency_mismatch')
                 elif add(r['realised_pnl'] for r in cash_slices) != outcome['realised_pnl']:
@@ -188,3 +189,16 @@ class ReconciliationJournal:
     @locked
     def latest_run(self):
         return self._journal.latest('run','CURRENT')
+
+
+def reconcile_scheduled(broker, opened, outcomes, predictions, *, event_at, as_of, account, scope, schedule, sync_runs):
+    from .schedule import sync_status
+    status=sync_status(event_at,as_of,schedule,sync_runs)
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=status['due_at'],account=account,scope=scope)
+    from dataclasses import replace
+    run=replace(run,schedule_verified=status['verified'])
+    if status['state']=='INVESTIGATION_REQUIRED':
+        from dataclasses import replace
+        results=tuple(replace(r,state='INVESTIGATION_REQUIRED',reasons=r.reasons+(status['reason'],)) if status['state']=='INVESTIGATION_REQUIRED' else r for r in run.results)
+        return replace(run,results=results)
+    return run

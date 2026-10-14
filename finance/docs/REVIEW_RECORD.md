@@ -21,3 +21,8 @@ SQL/Python parity and DB concurrency/privilege validation are NOT_YET_DEMONSTRAT
 
 See HANDOVER.md for correction evidence, explicit accounting-policy choices and
 named residuals. Review readiness is source/design review only, not activation.
+
+
+## vNext correction cycle
+
+Reference6e23e193598592252b9303c9a5dfd498151da527 read in full. Code correction dispositions in CORRECTION_VNEXT.md.179provider cases pass; unchanged independent Python53/56pass with3documented API/fixture differences. PostgreSQL18runtime NOT EXECUTED. Candidate requires further work, not approval.

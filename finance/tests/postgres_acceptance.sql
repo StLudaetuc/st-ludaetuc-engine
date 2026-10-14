@@ -25,9 +25,9 @@ SELECT pg_temp.assert((SELECT server_order<999999999 FROM finance.expense_verifi
 INSERT INTO finance.expense_verification(decision_id,expense_id,revision,decision,reviewed_by,evidence_ref,source_decided_at)
  VALUES('v3','e1',2,'invoice_verified','fixture','evidence:invoice','2026-10-01T00:00:00Z');
 DO $$ BEGIN
- BEGIN UPDATE finance.expense_revision SET original_amount=1; RAISE EXCEPTION 'update allowed'; EXCEPTION WHEN raise_exception THEN IF SQLERRM='update allowed' THEN RAISE; END IF; END;
- BEGIN DELETE FROM finance.expense_revision; RAISE EXCEPTION 'delete allowed'; EXCEPTION WHEN raise_exception THEN IF SQLERRM='delete allowed' THEN RAISE; END IF; END;
- BEGIN TRUNCATE finance.expense_revision; RAISE EXCEPTION 'truncate allowed'; EXCEPTION WHEN raise_exception THEN IF SQLERRM='truncate allowed' THEN RAISE; END IF; END;
+ BEGIN UPDATE finance.expense_revision SET original_amount=1; RAISE EXCEPTION 'update allowed'; EXCEPTION WHEN raise_exception OR feature_not_supported THEN IF SQLERRM='update allowed' THEN RAISE; END IF; END;
+ BEGIN DELETE FROM finance.expense_revision; RAISE EXCEPTION 'delete allowed'; EXCEPTION WHEN raise_exception OR feature_not_supported THEN IF SQLERRM='delete allowed' THEN RAISE; END IF; END;
+ BEGIN TRUNCATE finance.expense_revision; RAISE EXCEPTION 'truncate allowed'; EXCEPTION WHEN raise_exception OR feature_not_supported THEN IF SQLERRM='truncate allowed' THEN RAISE; END IF; END;
  BEGIN INSERT INTO finance.expense_identity(expense_id,source_key) VALUES('e2','invoice:fixture'); RAISE EXCEPTION 'duplicate allowed'; EXCEPTION WHEN unique_violation THEN NULL; END;
 END $$;
 INSERT INTO finance.broker_account(account_key,broker_environment,system_environment,financial_reality,financial_state,simulation_type,currency)
@@ -40,10 +40,15 @@ INSERT INTO finance.broker_component(account_key,transaction_id,component_key,ki
  SELECT account_key,'t',c.key,c.kind,c.amount,1,'identity','2026-10-01T00:00:00Z' FROM finance.broker_account CROSS JOIN (VALUES('financing','financing',-3),('commission','commission',-2),('guaranteedExecutionFee','other_adjustment',0)) c(key,kind,amount);
 INSERT INTO finance.engine_event_evidence(account_key,source_event_id,source_event_type,event_time,source_received_at,fill_status,source_evidence_ref,source_sha256)
  SELECT account_key,'ev','trade_opened','2026-10-01T00:00:00Z','2026-10-01T00:00:00Z','FILLED','evidence:ev',repeat('b',64) FROM finance.broker_account;
-INSERT INTO finance.reconciliation_run(run_id,account_key,period_start,period_end,source_as_of,outcome_due_at,broker_evidence_count,internal_evidence_count,broker_complete,internal_complete,broker_reviewed_empty,internal_reviewed_empty,evidence_ref)
- SELECT 'r-'||account_key,account_key,'2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','2100-01-01Z','2026-11-02T00:00:00Z',1,1,true,true,false,false,'evidence:run' FROM finance.broker_account;
+INSERT INTO finance.reconciliation_run(run_id,account_key,period_start,period_end,source_as_of,outcome_due_at,broker_evidence_count,internal_evidence_count,broker_complete,internal_complete,broker_reviewed_empty,internal_reviewed_empty,evidence_ref,schedule_version,schedule_evidence_ref,schedule_verified)
+ SELECT 'r-'||account_key,account_key,'2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','2100-01-01Z','2026-11-02T00:00:00Z',1,1,true,true,false,false,'evidence:run','london_eod_tues_sat_0030_v1','evidence:test-schedule',true FROM finance.broker_account;
+-- Explicit synthetic schedule-proof context: never a claim about Make.
 INSERT INTO finance.reconciliation_result(run_id,result_id,trade_id,state,reason,evidence_ref)
  SELECT 'r-'||account_key,'matched','trade','MATCHED','matched all evidence','evidence:matched' FROM finance.broker_account;
+INSERT INTO finance.reconciliation_binding(run_id,result_id,account_key,transaction_id)
+ SELECT 'r-'||account_key,'matched',account_key,'t' FROM finance.broker_account;
+INSERT INTO finance.reconciliation_binding(run_id,result_id,account_key,source_event_id)
+ SELECT 'r-'||account_key,'matched',account_key,'ev' FROM finance.broker_account;
 INSERT INTO finance.coverage_assertion(assertion_id,domain,scope_key,period_start,period_end,state,evidence_count,first_evidence_id,last_evidence_id,reconciliation_run_id,currency_confirmed,costs_complete,reviewed_by,evidence_ref,source_asserted_at)
  SELECT 'c-'||account_key,'BROKER',account_key,'2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','VERIFIED',1,'t','t','r-'||account_key,true,true,'fixture','manifest:broker','2100-01-01Z' FROM finance.broker_account;
 INSERT INTO finance.coverage_assertion(assertion_id,domain,scope_key,period_start,period_end,state,evidence_count,first_evidence_id,last_evidence_id,currency_confirmed,costs_complete,reviewed_by,evidence_ref)
@@ -53,8 +58,8 @@ SELECT pg_temp.assert((SELECT net_economic_gbp=128 AND cash_net_economic_gbp=128
 INSERT INTO finance.coverage_assertion(assertion_id,domain,scope_key,period_start,period_end,state,evidence_count,currency_confirmed,costs_complete,reviewed_by,evidence_ref,source_asserted_at)
  VALUES('withdraw','BROKER','a','2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','WITHDRAWN',1,true,true,'fixture','manifest:withdraw','2026-10-01T00:00:00Z');
 SELECT pg_temp.assert((SELECT net_economic_gbp IS NULL FROM finance.project_totals('2026-10-01T00:00:00Z','2026-11-01T00:00:00Z')),'withdrawal supersedes future source');
-INSERT INTO finance.reconciliation_run(run_id,account_key,period_start,period_end,source_as_of,outcome_due_at,broker_evidence_count,internal_evidence_count,broker_complete,internal_complete,broker_reviewed_empty,internal_reviewed_empty,evidence_ref)
- VALUES('new-a','a','2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','2026-10-02T00:00:00Z','2026-11-02T00:00:00Z',1,1,true,true,false,false,'evidence:new');
+INSERT INTO finance.reconciliation_run(run_id,account_key,period_start,period_end,source_as_of,outcome_due_at,broker_evidence_count,internal_evidence_count,broker_complete,internal_complete,broker_reviewed_empty,internal_reviewed_empty,evidence_ref,schedule_version,schedule_evidence_ref,schedule_verified)
+ VALUES('new-a','a','2026-10-01T00:00:00Z','2026-11-01T00:00:00Z','2026-10-02T00:00:00Z','2026-11-02T00:00:00Z',1,1,true,true,false,false,'evidence:new','london_eod_tues_sat_0030_v1','evidence:test-schedule',true);
 INSERT INTO finance.reconciliation_result(run_id,result_id,trade_id,state,reason,evidence_ref)
  VALUES('new-a','bad','trade','VALUE_MISMATCH','broker discrepancy','evidence:bad');
 SELECT pg_temp.assert((SELECT run_id='new-a' FROM finance.latest_runs WHERE account_key='a'),'latest run not source timestamp');

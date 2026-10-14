@@ -23,6 +23,8 @@ def main():
     command=['psql','-X','-v','ON_ERROR_STOP=1','-h',str(socket),'-U',args.user,'-d','finance_validation_isolated','-A','-t']
     def sql(text):return subprocess.run(command+['-c',text],env=env,text=True,capture_output=True,check=True,timeout=30).stdout.strip()
     version=int(sql("SHOW server_version_num"));assert 180000<=version<190000
+    assert sql("SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','public') AND nspname NOT LIKE 'pg_toast%' AND nspname NOT LIKE 'pg_temp%'")=='0', 'fresh database required'
+    assert sql("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'")=='0', 'public objects require fresh database'
     sql((ROOT/'migrations/001_foundation.sql').read_text());sql((ROOT/'tests/postgres_acceptance.sql').read_text())
     vectors=[(quantise(Decimal('0.0000000000005')),'finance.q(0.0000000000005)'),
              (quantise(Decimal('-0.0000000000005')),'finance.q(-0.0000000000005)'),

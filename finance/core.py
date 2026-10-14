@@ -161,7 +161,7 @@ def import_expenses(stream, ledger):
             if raw['verification'] not in {'estimate', 'unverified'} or raw.get('verified_by'):
                 raise ValueError('import cannot self-verify')
             for key in ('expense_id','source_key'):
-                if not re.fullmatch(r'[A-Za-z0-9_:.\-]{1,200}', raw[key]):
+                if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_:.\-]{0,199}', raw[key]):
                     raise ValueError('unsafe identity')
             evidence_ref(raw['evidence_ref'])
             for key in ('vendor','description','fx_source','service','environment','correction_reason'):

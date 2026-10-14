@@ -1,3 +1,7 @@
+# vNext status — DRAFT / validation incomplete
+
+See `docs/CORRECTION_VNEXT.md`.179Python cases pass; required PostgreSQL18runtime has not executed in this UID0-only workspace. Do not merge/deploy/import. Monetary, FX, recognition and reporting proposals are not ratified.
+
 # Finance foundation — independent-review correction candidate
 
 Offline, undeployed. Only `finance/foundation-v1` is writable. No imports into

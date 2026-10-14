@@ -1,17 +1,8 @@
 {
-  "generated_at": "2026-10-13T11:52:22.685647+00:00",
-  "python": "3.12.14",
-  "tests_run": 152,
+  "tests": 179,
   "failures": 0,
   "errors": 0,
   "skipped": 0,
-  "groups": {
-    "test_core.FinanceTests": 56,
-    "test_corrections.CorrectionTests": 61,
-    "test_corrections.SerializerTests": 20,
-    "test_market_data.MarketDataTests": 11,
-    "test_sql_candidate.SQLCandidateSyntaxTests": 4
-  },
   "cases": [
     "test_core.FinanceTests.test_adapter_missing",
     "test_core.FinanceTests.test_adapter_no_nested_double_count",
@@ -164,24 +155,36 @@
     "test_sql_candidate.SQLCandidateSyntaxTests.test_acceptance_sql_and_procedural_grammar",
     "test_sql_candidate.SQLCandidateSyntaxTests.test_migration_procedural_grammar",
     "test_sql_candidate.SQLCandidateSyntaxTests.test_migration_sql_grammar",
-    "test_sql_candidate.SQLCandidateSyntaxTests.test_pg18_parser"
+    "test_sql_candidate.SQLCandidateSyntaxTests.test_pg18_parser",
+    "test_vnext.VNextTests.test_H5_registry_covers_all_schema_metrics",
+    "test_vnext.VNextTests.test_H5_unratified_money_unavailable",
+    "test_vnext.VNextTests.test_H5_verified_null_rejected",
+    "test_vnext.VNextTests.test_H5_weekly_without_metric_windows_rejected",
+    "test_vnext.VNextTests.test_L1_constructed_recognition_vector",
+    "test_vnext.VNextTests.test_L7_csv_formula_identity_rejected_atomic",
+    "test_vnext.VNextTests.test_M2_after_deadline_strict",
+    "test_vnext.VNextTests.test_M2_opened_no_broker_predeadline_pending",
+    "test_vnext.VNextTests.test_M2_outcome_no_closure_predeadline_pending",
+    "test_vnext.VNextTests.test_N3_coverage_periods_coexist",
+    "test_vnext.VNextTests.test_N3_withdrawal_only_own_period",
+    "test_vnext.VNextTests.test_N6_all_reviewed_non_cash_types",
+    "test_vnext.VNextTests.test_N6_non_cash_with_cash_rejected",
+    "test_vnext.VNextTests.test_N6_unknown_type_fails_closed",
+    "test_vnext.VNextTests.test_N7_DST_end",
+    "test_vnext.VNextTests.test_N7_DST_start",
+    "test_vnext.VNextTests.test_N7_before_grace_pending",
+    "test_vnext.VNextTests.test_N7_conflicting_run_exception",
+    "test_vnext.VNextTests.test_N7_duplicate_runs_idempotent",
+    "test_vnext.VNextTests.test_N7_exact_run_boundary_next_batch",
+    "test_vnext.VNextTests.test_N7_future_completion_not_evidence",
+    "test_vnext.VNextTests.test_N7_grace_explicit",
+    "test_vnext.VNextTests.test_N7_late_catchup_resolves",
+    "test_vnext.VNextTests.test_N7_missing_run_after_grace",
+    "test_vnext.VNextTests.test_N7_partial_results_not_complete",
+    "test_vnext.VNextTests.test_N7_unverified_configuration_not_assumed",
+    "test_vnext.VNextTests.test_N7_zero_requires_reviewed_empty"
   ],
-  "original_baseline_tests_before_edits": {
-    "count": 67,
-    "result": "PASS"
-  },
-  "sql_grammar": {
-    "postgresql_parser_version": [
-      18,
-      6
-    ],
-    "sql": "PASS",
-    "plpgsql": "PASS",
-    "scope": "SYNTAX_ONLY"
-  },
-  "postgresql18_runtime_acceptance": "NOT_EXECUTED_LOCAL_RUNTIME_UNAVAILABLE",
+  "postgres_runtime": "NOT_EXECUTED",
   "sql_python_runtime_parity": "NOT_EXECUTED",
-  "postgresql_concurrent_revision_order_checks": "NOT_EXECUTED",
-  "shared_or_cloud_database_connections": 0,
-  "new_cloud_databases": 0
+  "status": "REQUIRES_FURTHER_WORK"
 }

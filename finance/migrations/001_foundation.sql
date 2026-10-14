@@ -6,6 +6,15 @@ CREATE SEQUENCE finance.authority_order;
 CREATE DOMAIN finance.money AS numeric CHECK(VALUE NOT IN ('NaN'::numeric,'Infinity'::numeric,'-Infinity'::numeric) AND abs(VALUE)<1e18 AND scale(VALUE)<=12);
 CREATE DOMAIN finance.currency AS text CHECK(VALUE IN ('GBP','USD','EUR','AED','CAD','JPY','AUD','CHF'));
 CREATE FUNCTION finance.q(value numeric) RETURNS numeric LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog AS $$ SELECT round(value,12) $$;
+CREATE FUNCTION finance.q_ratio(n numeric,d numeric) RETURNS numeric LANGUAGE plpgsql IMMUTABLE STRICT SET search_path=pg_catalog AS $$
+DECLARE k integer;nn numeric;dd numeric;whole numeric;rem numeric;
+BEGIN
+ IF d=0 THEN RAISE EXCEPTION 'zero denominator'; END IF;
+ k:=greatest(scale(n),scale(d)); nn:=abs(n)*power(10::numeric,k+12); dd:=abs(d)*power(10::numeric,k);
+ whole:=div(nn,dd);rem:=mod(nn,dd);
+ IF rem*2>=dd THEN whole:=whole+1; END IF;
+ RETURN sign(n)*sign(d)*whole*0.000000000001;
+END $$;
 -- PostgreSQL numeric round ties away from zero; Python ROUND_HALF_UP equivalent.
 CREATE TABLE finance.expense_identity(expense_id text PRIMARY KEY, source_key text NOT NULL UNIQUE, server_order bigint NOT NULL);
 CREATE TABLE finance.expense_revision(
@@ -41,9 +50,9 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER expense_sequence BEFORE INSERT ON finance.expense_revision FOR EACH ROW EXECUTE FUNCTION finance.expense_sequence();
-CREATE VIEW finance.effective_expenses AS SELECT DISTINCT ON(expense_id) * FROM finance.expense_revision ORDER BY expense_id,revision DESC;
-CREATE VIEW finance.latest_verifications AS SELECT DISTINCT ON(expense_id) * FROM finance.expense_verification ORDER BY expense_id,server_order DESC;
-CREATE VIEW finance.verified_expenses AS SELECT e.* FROM finance.effective_expenses e JOIN finance.latest_verifications v USING(expense_id)
+CREATE VIEW finance.effective_expenses WITH (security_invoker=true) AS SELECT DISTINCT ON(expense_id) * FROM finance.expense_revision ORDER BY expense_id,revision DESC;
+CREATE VIEW finance.latest_verifications WITH (security_invoker=true) AS SELECT DISTINCT ON(expense_id) * FROM finance.expense_verification ORDER BY expense_id,server_order DESC;
+CREATE VIEW finance.verified_expenses WITH (security_invoker=true) AS SELECT e.* FROM finance.effective_expenses e JOIN finance.latest_verifications v USING(expense_id)
  WHERE v.revision=e.revision AND v.decision IN ('invoice_verified','manual_verified');
 
 CREATE TABLE finance.subscription_schedule(
@@ -59,7 +68,7 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER subscription_identity BEFORE INSERT ON finance.subscription_schedule FOR EACH ROW EXECUTE FUNCTION finance.subscription_identity();
-CREATE VIEW finance.effective_subscriptions AS SELECT s.* FROM finance.subscription_schedule s WHERE NOT EXISTS(SELECT 1 FROM finance.subscription_schedule n WHERE n.supersedes_schedule_id=s.schedule_id);
+CREATE VIEW finance.effective_subscriptions WITH (security_invoker=true) AS SELECT s.* FROM finance.subscription_schedule s WHERE NOT EXISTS(SELECT 1 FROM finance.subscription_schedule n WHERE n.supersedes_schedule_id=s.schedule_id);
 
 CREATE TABLE finance.broker_account(
  account_key text PRIMARY KEY,
@@ -120,12 +129,14 @@ CREATE TABLE finance.engine_event_evidence(
  signal_id text,broker_trade_id text,event_time timestamptz NOT NULL,source_received_at timestamptz NOT NULL,
  fill_status text CHECK(fill_status IN ('FILLED','CANCELLED','REJECTED','UNKNOWN')),observed_pnl finance.money,
  source_evidence_ref text NOT NULL,source_sha256 text NOT NULL CHECK(source_sha256 ~ '^[0-9a-f]{64}$'),server_order bigint NOT NULL,
- PRIMARY KEY(account_key,source_event_id,source_sha256)
+ PRIMARY KEY(account_key,source_event_id)
 );
 CREATE TABLE finance.reconciliation_run(
  run_id text PRIMARY KEY,account_key text NOT NULL REFERENCES finance.broker_account,
  period_start timestamptz NOT NULL,period_end timestamptz NOT NULL CHECK(period_end>period_start),
  source_as_of timestamptz NOT NULL,outcome_due_at timestamptz NOT NULL,
+ schedule_version text,schedule_evidence_ref text,schedule_verified boolean NOT NULL DEFAULT false,
+ CHECK(NOT schedule_verified OR (schedule_version='london_eod_tues_sat_0030_v1' AND schedule_evidence_ref ~ '^evidence:[A-Za-z0-9_.-]{1,160}$')),
  broker_evidence_count integer NOT NULL CHECK(broker_evidence_count>=0),internal_evidence_count integer NOT NULL CHECK(internal_evidence_count>=0),
  broker_complete boolean NOT NULL,internal_complete boolean NOT NULL,
  broker_reviewed_empty boolean NOT NULL,internal_reviewed_empty boolean NOT NULL,
@@ -138,6 +149,26 @@ CREATE TABLE finance.reconciliation_result(
  state text NOT NULL CHECK(state IN ('MATCHED','BROKER_ONLY','INTERNAL_ONLY','VALUE_MISMATCH','PENDING_EOD_SYNC','INVESTIGATION_REQUIRED')),
  reason text NOT NULL,evidence_ref text NOT NULL,server_order bigint NOT NULL,PRIMARY KEY(run_id,result_id)
 );
+CREATE TABLE finance.reconciliation_binding(
+ run_id text NOT NULL,result_id text NOT NULL,account_key text NOT NULL,
+ transaction_id text,source_event_id text,
+ FOREIGN KEY(run_id,result_id) REFERENCES finance.reconciliation_result,
+ FOREIGN KEY(run_id,account_key) REFERENCES finance.reconciliation_run(run_id,account_key),
+ FOREIGN KEY(account_key,transaction_id) REFERENCES finance.broker_transaction,
+ FOREIGN KEY(account_key,source_event_id) REFERENCES finance.engine_event_evidence(account_key,source_event_id),
+ CHECK((transaction_id IS NULL)<>(source_event_id IS NULL)),
+ UNIQUE(run_id,transaction_id),UNIQUE(run_id,source_event_id),server_order bigint NOT NULL
+);
+CREATE FUNCTION finance.binding_evidence() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,finance AS $$
+DECLARE r record;trade text;
+BEGIN
+ SELECT * INTO r FROM finance.reconciliation_run WHERE run_id=NEW.run_id AND account_key=NEW.account_key;
+ SELECT trade_id INTO trade FROM finance.reconciliation_result WHERE run_id=NEW.run_id AND result_id=NEW.result_id;
+ IF NEW.transaction_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM finance.broker_transaction tx WHERE tx.account_key=NEW.account_key AND tx.transaction_id=NEW.transaction_id AND tx.event_time>=r.period_start AND tx.event_time<r.period_end) THEN RAISE EXCEPTION 'broker binding outside scope/window'; END IF;
+ IF NEW.source_event_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM finance.engine_event_evidence ev WHERE ev.account_key=NEW.account_key AND ev.source_event_id=NEW.source_event_id AND ev.event_time>=r.period_start AND ev.event_time<r.period_end AND (ev.broker_trade_id IS NULL OR ev.broker_trade_id=trade)) THEN RAISE EXCEPTION 'internal binding outside trade scope/window'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER binding_evidence BEFORE INSERT ON finance.reconciliation_binding FOR EACH ROW EXECUTE FUNCTION finance.binding_evidence();
 CREATE TABLE finance.exception_resolution(
  decision_id text PRIMARY KEY,run_id text NOT NULL,result_id text NOT NULL,
  state text NOT NULL CHECK(state IN ('RESOLVED','WITHDRAWN')),matched_run_id text,matched_result_id text,
@@ -151,15 +182,17 @@ CREATE FUNCTION finance.resolution_evidence() RETURNS trigger LANGUAGE plpgsql S
 BEGIN
  IF NOT EXISTS(SELECT 1 FROM finance.reconciliation_result WHERE run_id=NEW.run_id AND result_id=NEW.result_id AND state<>'MATCHED') THEN RAISE EXCEPTION 'source exception required'; END IF;
  IF NEW.state='RESOLVED' AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_result n JOIN finance.reconciliation_run nr ON nr.run_id=n.run_id
- JOIN finance.reconciliation_result old ON old.run_id=NEW.run_id AND old.result_id=NEW.result_id
- JOIN finance.reconciliation_run oldr ON oldr.run_id=old.run_id
+ JOIN finance.reconciliation_result src ON src.run_id=NEW.run_id AND src.result_id=NEW.result_id
+ JOIN finance.reconciliation_run oldr ON oldr.run_id=src.run_id
  WHERE n.run_id=NEW.matched_run_id AND n.result_id=NEW.matched_result_id AND n.state='MATCHED'
- AND n.trade_id=old.trade_id AND nr.account_key=oldr.account_key AND nr.server_order>oldr.server_order) THEN RAISE EXCEPTION 'new matched same-account evidence required'; END IF;
+ AND n.trade_id=src.trade_id AND nr.account_key=oldr.account_key AND nr.server_order>oldr.server_order AND nr.period_start=oldr.period_start AND nr.period_end=oldr.period_end
+ AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_run newer WHERE newer.account_key=nr.account_key AND newer.period_start=nr.period_start AND newer.period_end=nr.period_end AND newer.server_order>nr.server_order)) THEN RAISE EXCEPTION 'new matched same-account evidence required'; END IF;
+ IF NEW.state='WITHDRAWN' AND NOT EXISTS(SELECT 1 FROM finance.exception_resolution d WHERE d.run_id=NEW.run_id AND d.result_id=NEW.result_id AND d.state='RESOLVED' AND d.server_order=(SELECT max(server_order) FROM finance.exception_resolution WHERE run_id=NEW.run_id AND result_id=NEW.result_id)) THEN RAISE EXCEPTION 'current resolved decision required for withdrawal'; END IF;
  RETURN NEW;
 END $$;
 CREATE TRIGGER resolution_evidence BEFORE INSERT ON finance.exception_resolution FOR EACH ROW EXECUTE FUNCTION finance.resolution_evidence();
-CREATE VIEW finance.latest_resolutions AS SELECT DISTINCT ON(run_id,result_id) * FROM finance.exception_resolution ORDER BY run_id,result_id,server_order DESC;
-CREATE VIEW finance.unresolved_results AS SELECT r.* FROM finance.reconciliation_result r LEFT JOIN finance.latest_resolutions d USING(run_id,result_id)
+CREATE VIEW finance.latest_resolutions WITH (security_invoker=true) AS SELECT DISTINCT ON(run_id,result_id) * FROM finance.exception_resolution ORDER BY run_id,result_id,server_order DESC;
+CREATE VIEW finance.unresolved_results WITH (security_invoker=true) AS SELECT r.* FROM finance.reconciliation_result r LEFT JOIN finance.latest_resolutions d USING(run_id,result_id)
  WHERE r.state<>'MATCHED' AND coalesce(d.state,'WITHDRAWN')<>'RESOLVED';
 
 CREATE TABLE finance.coverage_assertion(
@@ -176,19 +209,22 @@ CREATE TABLE finance.coverage_assertion(
  CHECK(state NOT IN ('VERIFIED','REVIEWED_EMPTY') OR reviewed_by<>''),
  CHECK(evidence_ref ~ '^(invoice|receipt|evidence|manifest|attestation|statement|source|billing|fx|assumption):[A-Za-z0-9_.-]{1,160}$')
 );
-CREATE VIEW finance.latest_coverage AS SELECT DISTINCT ON(domain,scope_key) * FROM finance.coverage_assertion ORDER BY domain,scope_key,server_order DESC;
-CREATE VIEW finance.latest_runs AS SELECT DISTINCT ON(account_key) * FROM finance.reconciliation_run ORDER BY account_key,server_order DESC;
+CREATE VIEW finance.latest_coverage WITH (security_invoker=true) AS SELECT DISTINCT ON(domain,scope_key,period_start,period_end) * FROM finance.coverage_assertion ORDER BY domain,scope_key,period_start,period_end,server_order DESC;
+CREATE VIEW finance.latest_runs WITH (security_invoker=true) AS SELECT DISTINCT ON(account_key,period_start,period_end) * FROM finance.reconciliation_run ORDER BY account_key,period_start,period_end,server_order DESC;
 CREATE FUNCTION finance.coverage_ok(p_domain text,p_scope text,p_start timestamptz,p_end timestamptz,p_count bigint)
  RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog,finance AS $$
  SELECT coalesce((SELECT c.state IN ('VERIFIED','REVIEWED_EMPTY') AND c.evidence_count=p_count AND c.currency_confirmed AND c.costs_complete AND c.period_start<=p_start AND c.period_end>=p_end
  AND (p_domain<>'BROKER' OR EXISTS(SELECT 1 FROM finance.latest_runs r WHERE r.run_id=c.reconciliation_run_id AND r.account_key=p_scope
- AND r.broker_complete AND r.internal_complete AND r.broker_evidence_count=p_count
+ AND r.schedule_verified AND r.broker_complete AND r.internal_complete AND r.broker_evidence_count=p_count
  AND r.internal_evidence_count=(SELECT count(*) FROM finance.engine_event_evidence ev WHERE ev.account_key=p_scope AND ev.event_time>=r.period_start AND ev.event_time<r.period_end)
- AND ((r.broker_evidence_count=0 AND r.internal_evidence_count=0) OR EXISTS(SELECT 1 FROM finance.reconciliation_result rr WHERE rr.run_id=r.run_id)) AND r.period_start<=p_start AND r.period_end>=p_end
+ AND NOT EXISTS(SELECT 1 FROM finance.broker_transaction tx WHERE tx.account_key=p_scope AND tx.event_time>=p_start AND tx.event_time<p_end AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_binding b WHERE b.run_id=r.run_id AND b.account_key=p_scope AND b.transaction_id=tx.transaction_id))
+ AND NOT EXISTS(SELECT 1 FROM finance.engine_event_evidence ev WHERE ev.account_key=p_scope AND ev.event_time>=p_start AND ev.event_time<p_end AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_binding b WHERE b.run_id=r.run_id AND b.account_key=p_scope AND b.source_event_id=ev.source_event_id))
+ AND NOT EXISTS(SELECT 1 FROM finance.broker_trade_action ba JOIN finance.broker_transaction tx USING(account_key,transaction_id) WHERE ba.account_key=p_scope AND tx.event_time>=p_start AND tx.event_time<p_end AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_result rr WHERE rr.run_id=r.run_id AND rr.trade_id=ba.trade_id))
+ AND NOT EXISTS(SELECT 1 FROM finance.unresolved_results prior JOIN finance.reconciliation_run pr ON pr.run_id=prior.run_id WHERE pr.account_key=p_scope AND pr.period_start=p_start AND pr.period_end=p_end AND pr.server_order<r.server_order) AND r.period_start<=p_start AND r.period_end>=p_end
  AND NOT EXISTS(SELECT 1 FROM finance.unresolved_results x WHERE x.run_id=r.run_id)))
- FROM finance.latest_coverage c WHERE c.domain=p_domain AND c.scope_key=p_scope),false)
+ FROM finance.latest_coverage c WHERE c.domain=p_domain AND c.scope_key=p_scope AND c.period_start=p_start AND c.period_end=p_end),false)
  $$;
-CREATE VIEW finance.broker_economics AS SELECT a.account_key,a.broker_environment,a.system_environment,a.financial_reality,a.financial_state,a.simulation_type,a.currency,
+CREATE VIEW finance.broker_economics WITH (security_invoker=true) AS SELECT a.account_key,a.broker_environment,a.system_environment,a.financial_reality,a.financial_state,a.simulation_type,a.currency,
  t.transaction_id,t.event_time,c.component_key,c.trade_id,c.kind,c.amount,c.gbp_amount
  FROM finance.broker_account a JOIN finance.broker_transaction t USING(account_key) JOIN finance.broker_component c USING(account_key,transaction_id);
 CREATE FUNCTION finance.account_totals(p_account text,p_start timestamptz,p_end timestamptz)
@@ -202,10 +238,10 @@ BEGIN
  ok:=finance.coverage_ok('BROKER',p_account,p_start,p_end,n);
  -- No unknown monetary transaction or missing top-level cash profile may pass.
  IF EXISTS(SELECT 1 FROM finance.broker_transaction t WHERE t.account_key=p_account AND t.event_time>=p_start AND t.event_time<p_end AND
- (t.transaction_type NOT IN ('ORDER_FILL','DAILY_FINANCING','TRANSFER_FUNDS') OR
+ (t.transaction_type NOT IN ('ORDER_FILL','DAILY_FINANCING','TRANSFER_FUNDS','MARKET_ORDER','ORDER_CANCEL','MARKET_ORDER_REJECT','LIMIT_ORDER','LIMIT_ORDER_REJECT','STOP_ORDER','STOP_ORDER_REJECT','TAKE_PROFIT_ORDER','TAKE_PROFIT_ORDER_REJECT','STOP_LOSS_ORDER','STOP_LOSS_ORDER_REJECT','TRAILING_STOP_LOSS_ORDER','TRAILING_STOP_LOSS_ORDER_REJECT') OR
  (SELECT count(*) FROM finance.broker_component c WHERE c.account_key=t.account_key AND c.transaction_id=t.transaction_id AND
  c.component_key=ANY(CASE t.transaction_type WHEN 'ORDER_FILL' THEN ARRAY['pl','financing','commission','guaranteedExecutionFee'] WHEN 'DAILY_FINANCING' THEN ARRAY['financing'] ELSE ARRAY['amount'] END))
- <> CASE t.transaction_type WHEN 'ORDER_FILL' THEN 4 ELSE 1 END)) THEN ok:=false; END IF;
+ <> CASE t.transaction_type WHEN 'ORDER_FILL' THEN 4 WHEN 'DAILY_FINANCING' THEN 1 WHEN 'TRANSFER_FUNDS' THEN 1 ELSE 0 END)) THEN ok:=false; END IF;
  RETURN QUERY SELECT net,CASE WHEN ok THEN net END,ok,n;
 END $$;
 CREATE FUNCTION finance.expense_totals(p_start timestamptz,p_end timestamptz)
@@ -218,8 +254,8 @@ BEGIN
  SELECT count(*),count(*) FILTER(WHERE recognition_policy IS NULL),count(*) FILTER(WHERE paid_at IS NULL),
  finance.q(coalesce(sum(gbp_amount) FILTER(WHERE paid_at>=p_start AND paid_at<p_end),0)),
  finance.q(coalesce(sum(CASE recognition_policy WHEN 'point_in_time_v1' THEN CASE WHEN incurred_at>=p_start AND incurred_at<p_end THEN gbp_amount ELSE 0 END
- WHEN 'straight_line_seconds_v1' THEN finance.q(gbp_amount * least(extract(epoch FROM billing_end-billing_start),greatest(extract(epoch FROM p_end-billing_start),0)) / extract(epoch FROM billing_end-billing_start))
- - finance.q(gbp_amount * least(extract(epoch FROM billing_end-billing_start),greatest(extract(epoch FROM p_start-billing_start),0)) / extract(epoch FROM billing_end-billing_start)) END),0))
+ WHEN 'straight_line_seconds_v1' THEN finance.q_ratio(gbp_amount * least(extract(epoch FROM billing_end-billing_start),greatest(extract(epoch FROM p_end-billing_start),0)),extract(epoch FROM billing_end-billing_start))
+ - finance.q_ratio(gbp_amount * least(extract(epoch FROM billing_end-billing_start),greatest(extract(epoch FROM p_start-billing_start),0)),extract(epoch FROM billing_end-billing_start)) END),0))
  INTO v,unknown_policy,unknown_cash,cash,expense FROM finance.verified_expenses;
  ok:=finance.coverage_ok('EXPENSES','PROJECT',p_start,p_end,n) AND n=v;
  RETURN QUERY SELECT CASE WHEN ok AND unknown_cash=0 THEN cash END,CASE WHEN ok AND unknown_policy=0 THEN expense END,ok,n,unknown_policy;
@@ -253,19 +289,52 @@ BEGIN
  finance.q(coalesce(sum(monthly_gbp) FILTER(WHERE verification IN ('invoice_verified','manual_verified')),0)) INTO n,excluded,unknown_count,monthly
  FROM finance.effective_subscriptions WHERE effective_from<=p_as_of AND effective_to>p_as_of;
  ok:=finance.coverage_ok('RECURRING','PROJECT',p_start,p_end,n) AND excluded=0 AND unknown_count=0;
- RETURN QUERY SELECT CASE WHEN ok THEN monthly END,CASE WHEN ok THEN finance.q(monthly*12) END,CASE WHEN ok THEN finance.q(monthly*12/365.25) END,
+ RETURN QUERY SELECT CASE WHEN ok THEN monthly END,CASE WHEN ok THEN finance.q(monthly*12) END,CASE WHEN ok THEN finance.q_ratio(monthly*12,365.25) END,
  CASE WHEN ok THEN 'VERIFIED' ELSE 'UNKNOWN' END,excluded,unknown_count;
 END $$;
-CREATE VIEW finance.monthly_cash_spend AS SELECT date_trunc('month',paid_at AT TIME ZONE 'UTC') AS period,category,finance.q(sum(gbp_amount)) AS observed_gbp FROM finance.verified_expenses WHERE paid_at IS NOT NULL GROUP BY 1,2;
-CREATE VIEW finance.weekly_cash_spend AS SELECT date_trunc('week',paid_at AT TIME ZONE 'UTC') AS period,category,finance.q(sum(gbp_amount)) AS observed_gbp FROM finance.verified_expenses WHERE paid_at IS NOT NULL GROUP BY 1,2;
-CREATE VIEW finance.order_denominators AS SELECT account_key,count(*) AS attempted_orders,count(*) FILTER(WHERE fill_status='FILLED') AS filled_orders,count(*) FILTER(WHERE fill_status='CANCELLED') AS cancelled_orders
+CREATE FUNCTION finance.cash_spend_periods(p_grain text,p_timezone text)
+ RETURNS TABLE(period timestamp,category text,observed_gbp numeric) LANGUAGE plpgsql STABLE SET search_path=pg_catalog,finance AS $$
+BEGIN
+ IF p_grain NOT IN ('week','month') OR p_timezone IS NULL OR NOT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=p_timezone) THEN RAISE EXCEPTION 'explicit reporting calendar required'; END IF;
+ RETURN QUERY SELECT date_trunc(p_grain,e.paid_at AT TIME ZONE p_timezone),e.category,finance.q(sum(e.gbp_amount)) FROM finance.verified_expenses e WHERE e.paid_at IS NOT NULL GROUP BY 1,2;
+END $$;
+CREATE VIEW finance.order_denominators WITH (security_invoker=true) AS SELECT account_key,count(*) AS attempted_orders,count(*) FILTER(WHERE fill_status='FILLED') AS filled_orders,count(*) FILTER(WHERE fill_status='CANCELLED') AS cancelled_orders
  FROM finance.engine_event_evidence WHERE source_event_type='trade_opened' GROUP BY account_key;
 CREATE TABLE finance.report_snapshot(report_id text PRIMARY KEY,formula_version text NOT NULL,source_manifest_id text NOT NULL,
  bounded_output jsonb NOT NULL CHECK(jsonb_typeof(bounded_output)='object' AND octet_length(bounded_output::text)<=1048576),server_order bigint NOT NULL,server_received_at timestamptz NOT NULL);
+CREATE TABLE finance.authority_allocation(server_order bigint PRIMARY KEY);
+CREATE FUNCTION finance.lock_authority() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,finance AS $$
+DECLARE key text;head bigint;expected bigint;
+BEGIN
+ IF current_setting('transaction_isolation')<>'read committed' THEN RAISE EXCEPTION 'authority decisions require READ COMMITTED'; END IF;
+ CASE TG_TABLE_NAME
+ WHEN 'expense_verification' THEN key:=NEW.expense_id;
+ WHEN 'coverage_assertion' THEN key:=NEW.domain||':'||NEW.scope_key||':'||extract(epoch FROM NEW.period_start)::text||':'||extract(epoch FROM NEW.period_end)::text;
+ WHEN 'reconciliation_run' THEN key:=NEW.account_key||':'||extract(epoch FROM NEW.period_start)::text||':'||extract(epoch FROM NEW.period_end)::text;
+ WHEN 'exception_resolution' THEN key:=NEW.run_id||':'||NEW.result_id;
+ END CASE;
+ PERFORM pg_advisory_xact_lock(hashtextextended(TG_TABLE_NAME||':'||key,0));
+ IF TG_TABLE_NAME='expense_verification' THEN SELECT max(server_order) INTO head FROM finance.expense_verification WHERE expense_id=NEW.expense_id;
+ ELSIF TG_TABLE_NAME='coverage_assertion' THEN SELECT max(server_order) INTO head FROM finance.coverage_assertion WHERE domain=NEW.domain AND scope_key=NEW.scope_key AND period_start=NEW.period_start AND period_end=NEW.period_end;
+ ELSIF TG_TABLE_NAME='reconciliation_run' THEN SELECT max(server_order) INTO head FROM finance.reconciliation_run WHERE account_key=NEW.account_key AND period_start=NEW.period_start AND period_end=NEW.period_end;
+ ELSE SELECT max(server_order) INTO head FROM finance.exception_resolution WHERE run_id=NEW.run_id AND result_id=NEW.result_id;
+ END IF;
+ expected:=NEW.supersedes_server_order;
+ IF expected IS NOT NULL AND expected<>coalesce(head,0) THEN RAISE EXCEPTION 'stale authority predecessor'; END IF;
+ NEW.supersedes_server_order:=head;
+ RETURN NEW;
+END $$;
+DO $$ DECLARE t text; BEGIN
+ FOREACH t IN ARRAY ARRAY['expense_verification','coverage_assertion','reconciliation_run','exception_resolution'] LOOP
+ EXECUTE format('ALTER TABLE finance.%I ADD COLUMN supersedes_server_order bigint',t);
+ EXECUTE format('CREATE TRIGGER "0_authority_lock" BEFORE INSERT ON finance.%I FOR EACH ROW EXECUTE FUNCTION finance.lock_authority()',t);
+ END LOOP;
+END $$;
 CREATE FUNCTION finance.stamp_authority() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog,finance AS $$
 BEGIN
  -- Forced even if a caller explicitly supplies server_order/server_received_at.
  NEW.server_order:=nextval('finance.authority_order');
+ INSERT INTO finance.authority_allocation VALUES(NEW.server_order);
  IF TG_ARGV[0]='clock' THEN NEW.server_received_at:=clock_timestamp(); END IF;
  RETURN NEW;
 END $$;
@@ -274,13 +343,16 @@ BEGIN RAISE EXCEPTION 'append-only evidence; append a decision, revision or new 
 DO $$
 DECLARE t text;clock text;
 BEGIN
- FOREACH t IN ARRAY ARRAY['expense_identity','expense_revision','expense_verification','subscription_schedule','broker_account','broker_transaction','broker_component','broker_trade_action','broker_snapshot','engine_event_evidence','reconciliation_run','reconciliation_result','exception_resolution','coverage_assertion','report_snapshot'] LOOP
+ FOREACH t IN ARRAY ARRAY['expense_identity','expense_revision','expense_verification','subscription_schedule','broker_account','broker_transaction','broker_component','broker_trade_action','broker_snapshot','engine_event_evidence','reconciliation_run','reconciliation_result','reconciliation_binding','exception_resolution','coverage_assertion','report_snapshot'] LOOP
+ EXECUTE format('ALTER TABLE finance.%I ADD UNIQUE(server_order)',t);
  clock:=CASE WHEN t IN ('expense_revision','expense_verification','subscription_schedule','broker_transaction','reconciliation_run','exception_resolution','coverage_assertion','report_snapshot') THEN 'clock' ELSE 'order' END;
  EXECUTE format('CREATE TRIGGER a_server_order BEFORE INSERT ON finance.%I FOR EACH ROW EXECUTE FUNCTION finance.stamp_authority(%L)',t,clock);
  EXECUTE format('CREATE TRIGGER immutable_rows BEFORE UPDATE OR DELETE ON finance.%I FOR EACH ROW EXECUTE FUNCTION finance.reject_mutation()',t);
  EXECUTE format('CREATE TRIGGER immutable_truncate BEFORE TRUNCATE ON finance.%I FOR EACH STATEMENT EXECUTE FUNCTION finance.reject_mutation()',t);
  END LOOP;
 END $$;
+CREATE TRIGGER immutable_rows BEFORE UPDATE OR DELETE ON finance.authority_allocation FOR EACH ROW EXECUTE FUNCTION finance.reject_mutation();
+CREATE TRIGGER immutable_truncate BEFORE TRUNCATE ON finance.authority_allocation FOR EACH STATEMENT EXECUTE FUNCTION finance.reject_mutation();
 REVOKE ALL ON ALL TABLES IN SCHEMA finance FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA finance FROM PUBLIC;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA finance FROM PUBLIC;

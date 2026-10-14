@@ -1,0 +1,109 @@
+test_candidate_state_machine_is_correct_when_given_true_due (test_v2_python.D_OperationalTiming.test_candidate_state_machine_is_correct_when_given_true_due) ... ok
+test_finding_due_time_is_derived_not_caller_asserted (test_v2_python.D_OperationalTiming.test_finding_due_time_is_derived_not_caller_asserted)
+No schedule/calendar model exists: outcome_due_at is free caller input, so a naive ... ok
+test_practice_profit_never_reduces_break_even (test_v2_python.D_OperationalTiming.test_practice_profit_never_reduces_break_even) ... ok
+test_reference_schedule_across_dst_end_2026 (test_v2_python.D_OperationalTiming.test_reference_schedule_across_dst_end_2026) ... ok
+test_future_dated_verification_cannot_beat_later_withdrawal (test_v2_python.H1Ordering.test_future_dated_verification_cannot_beat_later_withdrawal) ... ok
+test_journal_orders_are_unique_and_monotonic_under_threads (test_v2_python.H1Ordering.test_journal_orders_are_unique_and_monotonic_under_threads) ... ok
+test_verification_never_carries_to_new_revision (test_v2_python.H1Ordering.test_verification_never_carries_to_new_revision) ... ok
+test_broker_without_matching_coverage_is_unavailable (test_v2_python.H2EmptyEvidence.test_broker_without_matching_coverage_is_unavailable) ... ok
+test_count_mismatch_is_unavailable (test_v2_python.H2EmptyEvidence.test_count_mismatch_is_unavailable) ... ok
+test_coverage_for_october_does_not_support_november (test_v2_python.H2EmptyEvidence.test_coverage_for_october_does_not_support_november) ... ok
+test_unknown_coverage_yields_null_not_zero (test_v2_python.H2EmptyEvidence.test_unknown_coverage_yields_null_not_zero) ... ok
+test_verified_coverage_cannot_be_empty (test_v2_python.H2EmptyEvidence.test_verified_coverage_cannot_be_empty) ... ok
+test_duplicate_account_rejected (test_v2_python.H3ProjectLevel.test_duplicate_account_rejected) ... ok
+test_incomplete_eligible_account_blocks_project (test_v2_python.H3ProjectLevel.test_incomplete_eligible_account_blocks_project) ... ok
+test_spend_deducted_once_across_live_accounts_practice_excluded (test_v2_python.H3ProjectLevel.test_spend_deducted_once_across_live_accounts_practice_excluded) ... ok
+test_truthy_non_bool_completeness_rejected (test_v2_python.H3ProjectLevel.test_truthy_non_bool_completeness_rejected) ... ok
+test_adapter_requires_explicit_scope_object (test_v2_python.H4ExplicitScope.test_adapter_requires_explicit_scope_object) ... ok
+test_legacy_and_lowercase_labels_rejected (test_v2_python.H4ExplicitScope.test_legacy_and_lowercase_labels_rejected) ... ok
+test_only_live_production_actual_realised_is_cash (test_v2_python.H4ExplicitScope.test_only_live_production_actual_realised_is_cash) ... ok
+test_scope_has_no_defaults (test_v2_python.H4ExplicitScope.test_scope_has_no_defaults) ... ok
+test_baselines_serialize (test_v2_python.H5Serializer.test_baselines_serialize) ... ERROR
+test_finding_lifetime_metrics_bound_to_lifetime_coverage (test_v2_python.H5Serializer.test_finding_lifetime_metrics_bound_to_lifetime_coverage)
+Weekly lifetime break-even is accepted as FACT while the only coverage checked is the week. ... ok
+test_finding_practice_realised_pnl_cannot_be_labelled_fact (test_v2_python.H5Serializer.test_finding_practice_realised_pnl_cannot_be_labelled_fact)
+Weekly keys realised_pnl / broker_costs / other_trading_costs are outside TRADING_KEYS, ... FAIL
+test_finding_verified_fact_requires_a_value (test_v2_python.H5Serializer.test_finding_verified_fact_requires_a_value) ... ok
+test_forged_value_rejected (test_v2_python.H5Serializer.test_forged_value_rejected) ... ok
+test_missing_jsonschema_fails_closed (test_v2_python.H5Serializer.test_missing_jsonschema_fails_closed) ... ok
+test_practice_cannot_carry_economic_conclusion (test_v2_python.H5Serializer.test_practice_cannot_carry_economic_conclusion) ... ok
+test_precision_beyond_policy_rejected_by_schema (test_v2_python.H5Serializer.test_precision_beyond_policy_rejected_by_schema) ... ok
+test_residual_provenance_is_caller_trusted (test_v2_python.H5Serializer.test_residual_provenance_is_caller_trusted)
+Documents trust boundary R-WRITER-02: any in-process caller can build the journal. ... ERROR
+test_rewritten_reconciliation_state_rejected (test_v2_python.H5Serializer.test_rewritten_reconciliation_state_rejected) ... ok
+test_unavailable_must_be_null_with_reason (test_v2_python.H5Serializer.test_unavailable_must_be_null_with_reason) ... ok
+test_withdrawn_coverage_blocks_fact_and_self_declared_completeness (test_v2_python.H5Serializer.test_withdrawn_coverage_blocks_fact_and_self_declared_completeness) ... ok
+test_declared_policy (test_v2_python.M1MoneyPolicy.test_declared_policy) ... ok
+test_differs_from_half_even_only_on_exact_ties (test_v2_python.M1MoneyPolicy.test_differs_from_half_even_only_on_exact_ties) ... ok
+test_fx_single_rounding (test_v2_python.M1MoneyPolicy.test_fx_single_rounding) ... ok
+test_money_boundary_rejections (test_v2_python.M1MoneyPolicy.test_money_boundary_rejections) ... ok
+test_ties_away_from_zero_and_negative_zero (test_v2_python.M1MoneyPolicy.test_ties_away_from_zero_and_negative_zero) ... ok
+test_cancelled_never_counts_as_closed_trade (test_v2_python.M2Reconciliation.test_cancelled_never_counts_as_closed_trade) ... ok
+test_finding_broker_close_lag_before_eod_is_pending (test_v2_python.M2Reconciliation.test_finding_broker_close_lag_before_eod_is_pending)
+Outcome posted by the EOD bridge before the broker CLOSE slice is exported. ... ok
+test_finding_broker_export_lag_before_eod_is_pending (test_v2_python.M2Reconciliation.test_finding_broker_export_lag_before_eod_is_pending)
+Engine trade_opened has arrived; broker export not yet synced; deadline not reached. ... ok
+test_http_200_without_fill_evidence_is_not_execution (test_v2_python.M2Reconciliation.test_http_200_without_fill_evidence_is_not_execution) ... ok
+test_malformed_row_is_quarantined_not_fatal (test_v2_python.M2Reconciliation.test_malformed_row_is_quarantined_not_fatal) ... ok
+test_partial_close_rolls_up (test_v2_python.M2Reconciliation.test_partial_close_rolls_up) ... ok
+test_pending_then_overdue_exactly_at_deadline (test_v2_python.M2Reconciliation.test_pending_then_overdue_exactly_at_deadline) ... ok
+test_value_mismatch_and_conflicting_replay (test_v2_python.M2Reconciliation.test_value_mismatch_and_conflicting_replay) ... ok
+test_finding_routine_non_cash_oanda_types_are_not_investigations (test_v2_python.M3Attribution.test_finding_routine_non_cash_oanda_types_are_not_investigations)
+A real OANDA stream contains MARKET_ORDER/STOP_LOSS_ORDER/ORDER_CANCEL etc. for every trade. ... ok
+test_nested_mismatch_quarantined_adjacent_accepted (test_v2_python.M3Attribution.test_nested_mismatch_quarantined_adjacent_accepted) ... ok
+test_atomic_on_late_failure (test_v2_python.M4Import.test_atomic_on_late_failure) ... ok
+test_formula_text_neutralised (test_v2_python.M4Import.test_formula_text_neutralised) ... ok
+test_rejections (test_v2_python.M4Import.test_rejections) ... ok
+test_size_bounds (test_v2_python.M4Import.test_size_bounds) ... ok
+test_M6_practice_unit_economics_hypothetical (test_v2_python.MediumOthers.test_M6_practice_unit_economics_hypothetical) ... ok
+test_M7_run_rate_unknown_is_null_and_counts_exposed (test_v2_python.MediumOthers.test_M7_run_rate_unknown_is_null_and_counts_exposed) ... ok
+test_M8_missing_policy_or_payment_is_unavailable (test_v2_python.MediumOthers.test_M8_missing_policy_or_payment_is_unavailable) ... ok
+test_M8_straight_line_is_additive_and_exact (test_v2_python.MediumOthers.test_M8_straight_line_is_additive_and_exact) ... ok
+test_M9_resolution_lifecycle (test_v2_python.MediumOthers.test_M9_resolution_lifecycle) ... ok
+
+======================================================================
+ERROR: test_baselines_serialize (test_v2_python.H5Serializer.test_baselines_serialize)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/review_reference/finance/tests_independent/v2/test_v2_python.py", line 254, in test_baselines_serialize
+    p, j = build(); ser(p, j)
+                    ^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/review_reference/finance/tests_independent/v2/test_v2_python.py", line 236, in ser
+    return serialize(p, kind, journal=j, coverage_key='k', scope=scope, observed_count=1,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/finance/serializer.py", line 55, in serialize
+    raise ValueError('incomplete report cannot be FACT')
+ValueError: incomplete report cannot be FACT
+
+======================================================================
+ERROR: test_residual_provenance_is_caller_trusted (test_v2_python.H5Serializer.test_residual_provenance_is_caller_trusted)
+Documents trust boundary R-WRITER-02: any in-process caller can build the journal.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/review_reference/finance/tests_independent/v2/test_v2_python.py", line 323, in test_residual_provenance_is_caller_trusted
+    self.assertTrue(ser(p, forged))
+                    ^^^^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/review_reference/finance/tests_independent/v2/test_v2_python.py", line 236, in ser
+    return serialize(p, kind, journal=j, coverage_key='k', scope=scope, observed_count=1,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/finance/serializer.py", line 55, in serialize
+    raise ValueError('incomplete report cannot be FACT')
+ValueError: incomplete report cannot be FACT
+
+======================================================================
+FAIL: test_finding_practice_realised_pnl_cannot_be_labelled_fact (test_v2_python.H5Serializer.test_finding_practice_realised_pnl_cannot_be_labelled_fact)
+Weekly keys realised_pnl / broker_costs / other_trading_costs are outside TRADING_KEYS,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/review_reference/finance/tests_independent/v2/test_v2_python.py", line 266, in test_finding_practice_realised_pnl_cannot_be_labelled_fact
+    self.assertEqual(p['this_week']['realised_pnl']['classification'], 'FACT')
+AssertionError: 'HYPOTHETICAL' != 'FACT'
+- HYPOTHETICAL
++ FACT
+
+
+----------------------------------------------------------------------
+Ran 56 tests in 0.115s
+
+FAILED (failures=1, errors=2)

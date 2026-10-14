@@ -8,19 +8,24 @@ quarantine the whole transaction, not zero-fill it.
 from .core import BrokerComponent
 from .policy import money, instant, Scope, add
 
-PROFILE = 'oanda_v20_account_cash_v1'
+PROFILE = 'oanda_v20_account_cash_v2'
+NON_CASH_TYPES=frozenset(('MARKET_ORDER', 'ORDER_CANCEL', 'MARKET_ORDER_REJECT', 'LIMIT_ORDER', 'LIMIT_ORDER_REJECT', 'STOP_ORDER', 'STOP_ORDER_REJECT', 'TAKE_PROFIT_ORDER', 'TAKE_PROFIT_ORDER_REJECT', 'STOP_LOSS_ORDER', 'STOP_LOSS_ORDER_REJECT', 'TRAILING_STOP_LOSS_ORDER', 'TRAILING_STOP_LOSS_ORDER_REJECT'))
 
 def normalise(transaction, account_alias, expected_account_id, scope, account_currency, fx_to_gbp):
     if not isinstance(scope, Scope) or scope.financial_reality != 'ACTUAL' or scope.financial_state != 'REALISED':
         raise ValueError('explicit actual broker scope required')
     if transaction.get('accountID') != expected_account_id or not expected_account_id:
         raise ValueError('account mismatch')
-    for key in ('id', 'time', 'type', 'accountBalance'):
+    for key in ('id', 'time', 'type'):
         if transaction.get(key) is None:
             raise ValueError('missing broker field: ' + key)
-    money(transaction['accountBalance'])
+    if transaction.get('accountBalance') is not None: money(transaction['accountBalance'])
+    if transaction['type'] not in NON_CASH_TYPES and transaction.get('accountBalance') is None: raise ValueError('missing broker field: accountBalance')
     instant(transaction['time'])
     kind = transaction['type']
+    if kind in NON_CASH_TYPES:
+        if any(transaction.get(k) not in (None,'0','0.0') for k in ('pl','financing','commission','guaranteedExecutionFee','amount')): raise ValueError('non_cash_profile_contains_cash')
+        return (), {'profile':PROFILE,'transaction_type':kind,'non_cash':True,'transaction_id':transaction['id']}
     if kind == 'ORDER_FILL':
         fields = [('pl', 'realised_pnl', 1), ('financing', 'financing', 1),
                   ('commission', 'commission', -1), ('guaranteedExecutionFee', 'other_adjustment', -1)]

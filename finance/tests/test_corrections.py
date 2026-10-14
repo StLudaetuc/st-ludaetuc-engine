@@ -13,7 +13,7 @@ import finance.core as core
 from finance.policy import *
 from finance.reconciliation import *
 from finance.oanda import normalise_batch
-from finance.serializer import serialize
+from finance.serializer import serialize,TRADING_KEYS,ECONOMIC_KEYS,CASH_ECONOMIC_KEYS,FORECAST_KEYS
 
 LIVE=fixture_scope('live'); PRACTICE=fixture_scope('practice')
 
@@ -256,14 +256,19 @@ class SerializerTests(unittest.TestCase):
                     else:p[key][name]={'value':'1.000000000000','currency':'GBP','state':'verified','classification':'FACT','reason':None,'evidence_id':'evidence:fixture'}
             else:p[key]='fixture'
         p.update(broker_environment='OANDA_LIVE',system_environment='PRODUCTION',financial_reality='ACTUAL',financial_state='REALISED',scope_level='PROJECT',classification='MIXED' if kind=='weekly' else 'FACT',basis='ACTUAL_CASH',coverage_state='VERIFIED',reconciliation_state='MATCHED',denominator_basis='closed_trades')
+        for group in ('metrics','lifetime','this_week','run_rate','unit_economics','forecast_inputs'):
+            if 'estimated_spend' in p.get(group,{}):
+                p[group]['estimated_spend'].update(state='estimate',classification='ESTIMATED')
+                p['classification']='MIXED'
         p['source_manifest_id']='manifest:fixture'
-        j=AuthorityJournal();j.append('coverage','a',coverage(1),START)
-        run=Run((Result('t','MATCHED',(),1),),(),0,1,1,0,1,0,1,'fixture',LIVE)
+        j=AuthorityJournal();j.append('coverage','a',coverage(1),START);j.append('project_inception','a',instant(START),START)
+        run=Run((Result('t','MATCHED',(),1),),(),0,1,1,0,1,0,1,'fixture',LIVE,True)
         j.append('reconciliation','a',run,START)
         expected={(g,k):copy.deepcopy(v) for g in ('metrics','lifetime','this_week','run_rate','unit_economics','forecast_inputs') for k,v in p.get(g,{}).items()}
         return p,j,expected
     def validate(self,p,j,e,kind='reader',scope=LIVE):
-        return serialize(p,kind,journal=j,coverage_key='a',scope=scope,observed_count=1,expected_metrics=e,reconciliation_key='a')
+        contexts={(g,k):dict(start=START,end=END,coverage_key='a',observed_count=1,reconciliation_key='a',window_kind='lifetime' if g=='lifetime' or k in {'lifetime_spend','remaining_lifetime_break_even'} else 'recurring' if g=='run_rate' else 'period',inception_key='a',evidence_domain='BROKER' if k in TRADING_KEYS else 'PROJECT' if k in ECONOMIC_KEYS|CASH_ECONOMIC_KEYS else 'RECURRING' if g=='run_rate' else 'SNAPSHOT_OR_ASSUMPTION' if k in FORECAST_KEYS else 'EXPENSES') for g,k in e}
+        return serialize(p,kind,journal=j,coverage_key='a',scope=scope,observed_count=1,expected_metrics=e,reconciliation_key='a',metric_contexts=contexts,policy_approvals={k:'attestation:test-only' for k in ('money_policy','reporting_currency','fx_source','recognition')})
     def test_H5_reader_good_and_repeatable(self):
         p,j,e=self.factory();self.assertEqual(self.validate(p,j,e),self.validate(p,j,e))
     def test_H5_positive_practice_is_hypothetical_only(self):
@@ -273,7 +278,7 @@ class SerializerTests(unittest.TestCase):
         for key in ('gross_pnl','financing','other_broker_costs','net_trading'):
             p['metrics'][key].update(state='hypothetical',classification='HYPOTHETICAL')
         expected={(g,k):copy.deepcopy(v) for g,k in e for v in [p[g][k]]}
-        j.append('reconciliation','a',Run((Result('t','MATCHED',(),1),),(),0,1,1,0,1,0,1,'fixture',PRACTICE),END)
+        j.append('reconciliation','a',Run((Result('t','MATCHED',(),1),),(),0,1,1,0,1,0,1,'fixture',PRACTICE,True),END)
         self.validate(p,j,expected,scope=PRACTICE)
     def test_H5_weekly_good(self):
         p,j,e=self.factory('weekly');self.validate(p,j,e,'weekly')

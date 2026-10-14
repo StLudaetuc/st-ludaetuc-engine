@@ -9,14 +9,24 @@ from pathlib import Path
 from .policy import Scope, Coverage, AuthorityJournal, money, instant, quantise, POLICY_VERSION
 from .reconciliation import Run
 
+# Exhaustive metric taxonomy. Unknown schema additions must fail closed.
 CASH_ECONOMIC_KEYS={'cash_net_economic','remaining_cash_break_even'}
 ECONOMIC_KEYS={'net_economic','net_economic_pnl','remaining_lifetime_break_even','remaining_break_even',
                'period_operating_gap','net_result','net_profit_per_trade'}
 TRADING_KEYS={'gross_pnl','gross_trading_pnl','financing','other_broker_costs','net_trading','commission',
-              'conversion_costs','other_adjustments','gross_profit_per_trade','financing_per_trade','realised_expectancy'}
+              'conversion_costs','other_adjustments','gross_profit_per_trade','financing_per_trade',
+              'realised_expectancy','observed_expectancy','realised_pnl','broker_costs','other_trading_costs'}
+COST_KEYS={'spent','cash_spend','economic_expense','infrastructure','api_ai','subscriptions','rd_testing',
+           'domains','data','tooling','other','total_spend','lifetime_spend','total_spent','other_operating_costs',
+           'monthly_operating_cost','operating_costs','cost_per_day','cost_per_month','cost_per_year','cost_per_trade'}
+ESTIMATE_KEYS={'estimated_spend'}
+FORECAST_KEYS={'capital','financing_assumption','drawdown_assumption'}
+METRIC_REGISTRY={**{k:'CASH_ECONOMIC' for k in CASH_ECONOMIC_KEYS},**{k:'ECONOMIC' for k in ECONOMIC_KEYS},
+ **{k:'TRADING' for k in TRADING_KEYS},**{k:'COST' for k in COST_KEYS},**{k:'ESTIMATE' for k in ESTIMATE_KEYS},
+ **{k:'FORECAST' for k in FORECAST_KEYS}}
 GROUPS=('metrics','lifetime','this_week','run_rate','unit_economics','forecast_inputs')
 
-def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, expected_metrics, reconciliation_key):
+def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, expected_metrics, reconciliation_key, metric_contexts=None, policy_approvals=None):
     if kind not in {'reader','weekly'} or not isinstance(journal,AuthorityJournal) or not isinstance(scope,Scope):
         raise ValueError('explicit trusted producer context required')
     encoded=json.dumps(payload,allow_nan=False,ensure_ascii=False)
@@ -34,11 +44,11 @@ def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, ex
         raise ValueError('producer scope/precision mismatch')
     start,end=instant(payload['period_start']),instant(payload['period_end'])
     if end<=start: raise ValueError('invalid report period')
-    decision=journal.latest('coverage',coverage_key)
+    decision=journal.coverage_for(coverage_key,start,end)
     coverage=decision[3] if decision else None
     reconcile=journal.latest('reconciliation',reconciliation_key) if reconciliation_key is not None else None
     run=reconcile[3] if reconcile else None
-    clean=isinstance(run,Run) and run.clean and run.transaction_count == observed_count and run.scope == scope and run.account == payload['account_alias']
+    clean=isinstance(run,Run) and run.clean and run.schedule_verified and run.transaction_count == observed_count and run.scope == scope and run.account == payload['account_alias']
     needs_reconciliation=kind=='weekly' or payload.get('product')!='finance-costs'
     complete=isinstance(coverage,Coverage) and coverage.supports(start,end,observed_count) and (clean or not needs_reconciliation)
     if payload['classification']=='FACT' and not complete:
@@ -79,6 +89,36 @@ def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, ex
     for group,key,metric in metrics:
         state,classification=metric['state'],metric['classification'];value=metric['value']
         classifications.append(classification)
+        if key not in METRIC_REGISTRY: raise ValueError('unregistered financial metric')
+        if state=='verified' and (value is None or classification!='FACT'): raise ValueError('verified metric requires non-null FACT')
+        if key in ESTIMATE_KEYS and value is not None and (state!='estimate' or classification!='ESTIMATED'):
+            raise ValueError('estimated spend cannot become FACT')
+        # Every asserted metric needs its own trusted window context. Weekly
+        # lifetime and recurring evidence must never borrow final-week coverage.
+        metric_complete=complete
+        if value is not None:
+            context=(metric_contexts or {}).get((group,key))
+            if not isinstance(context,dict): raise ValueError('metric reporting-window context required')
+            ms,me=instant(context['start']),instant(context['end'])
+            domain='BROKER' if key in TRADING_KEYS else 'PROJECT' if key in ECONOMIC_KEYS|CASH_ECONOMIC_KEYS else 'RECURRING' if group=='run_rate' else 'SNAPSHOT_OR_ASSUMPTION' if key in FORECAST_KEYS else 'EXPENSES'
+            if context.get('evidence_domain')!=domain: raise ValueError('metric evidence domain mismatch')
+            window_kind='lifetime' if group=='lifetime' or key in {'lifetime_spend','remaining_lifetime_break_even'} else ('recurring' if group=='run_rate' else 'period')
+            if context.get('window_kind')!=window_kind or me<=ms: raise ValueError('metric window kind mismatch')
+            if window_kind=='period' and (ms,me)!=(start,end): raise ValueError('period metric window mismatch')
+            if window_kind=='lifetime':
+                inception=journal.latest('project_inception',context.get('inception_key'))
+                if not inception or ms!=instant(inception[3]) or ms>start or me!=end: raise ValueError('trusted lifetime inception window required')
+            md=journal.coverage_for(context['coverage_key'],ms,me);mc=md[3] if md else None
+            metric_complete=isinstance(mc,Coverage) and mc.supports(ms,me,context['observed_count'])
+            if key in TRADING_KEYS|ECONOMIC_KEYS|CASH_ECONOMIC_KEYS:
+                rd=journal.latest('reconciliation',context['reconciliation_key']);rr=rd[3] if rd else None
+                metric_complete=metric_complete and isinstance(rr,Run) and rr.clean and rr.schedule_verified and rr.account==payload['account_alias'] and rr.scope==scope and rr.transaction_count==context['observed_count']
+        if classification=='FACT' and not metric_complete: raise ValueError('metric window evidence incomplete')
+        if value is not None and classification=='FACT' and metric.get('currency')=='GBP':
+            required={'money_policy','reporting_currency','fx_source'}
+            if key in ECONOMIC_KEYS|{'economic_expense'}: required.add('recognition')
+            if not required<=set(policy_approvals or {}): raise ValueError('unratified policy: metric unavailable or conditional only')
+            if any(not isinstance(policy_approvals[k],str) or not policy_approvals[k].startswith('attestation:') for k in required): raise ValueError('policy approval evidence required')
         if metric.get('evidence_id') is not None:
             from .policy import evidence_ref
             evidence_ref(metric['evidence_id'])
@@ -88,7 +128,7 @@ def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, ex
             money(value)
             if metric.get('currency')=='GBP' and quantise(money(value)) != money(value):
                 raise ValueError('monetary policy mismatch')
-        if classification=='FACT' and (state!='verified' or not complete):
+        if classification=='FACT' and (state!='verified' or not metric_complete):
             raise ValueError('ESTIMATED/UNKNOWN/incomplete cannot be FACT')
         if state in {'estimate','approved_assumption'} and classification!='ESTIMATED':
             raise ValueError('assumptions/estimates must remain estimates')
@@ -104,6 +144,7 @@ def serialize(payload, kind, *, journal, coverage_key, scope, observed_count, ex
             raise ValueError('unapproved/missing recognition policy cannot become economic fact')
         if key in TRADING_KEYS and scope.broker_environment=='OANDA_PRACTICE' and value is not None and classification!='HYPOTHETICAL':
             raise ValueError('Practice trading metrics are hypothetical non-cash')
+        if group=='unit_economics' and scope.broker_environment=='OANDA_PRACTICE' and value is not None and classification!='HYPOTHETICAL': raise ValueError('Practice unit economics must be hypothetical')
         if (group=='unit_economics' or key.endswith('_per_trade')) and value is not None and (payload['denominator_basis']!='closed_trades' or not payload['trade_count']):
             raise ValueError('executed closed-trade denominator required')
         if scope.financial_reality=='SIMULATED' and key in TRADING_KEYS and value is not None and classification!='HYPOTHETICAL':
