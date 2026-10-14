@@ -1,0 +1,304 @@
+sssssssssssssssssE.EE.F...F.......E..E....F..EEEEEEEEEEEFEEEEE
+======================================================================
+ERROR: test_duplicate_ingestion_idempotent_conflict_rejected (finance.tests_independent.test_independent_python.BrokerEconomics.test_duplicate_ingestion_idempotent_conflict_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 243, in test_duplicate_ingestion_idempotent_conflict_rejected
+    comps, _ = norm(fill())
+               ~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 216, in norm
+    return oanda.normalise(tx, 'acct-alias', '001-004-1-001', env, 'GBP', '1')
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/oanda.py", line 15, in normalise
+    raise ValueError('explicit actual broker scope required')
+ValueError: explicit actual broker scope required
+
+======================================================================
+ERROR: test_signs_and_no_nested_double_count (finance.tests_independent.test_independent_python.BrokerEconomics.test_signs_and_no_nested_double_count)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 221, in test_signs_and_no_nested_double_count
+    comps, diag = norm(fill())
+                  ~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 216, in norm
+    return oanda.normalise(tx, 'acct-alias', '001-004-1-001', env, 'GBP', '1')
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/oanda.py", line 15, in normalise
+    raise ValueError('explicit actual broker scope required')
+ValueError: explicit actual broker scope required
+
+======================================================================
+ERROR: test_transfers_excluded_from_trading (finance.tests_independent.test_independent_python.BrokerEconomics.test_transfers_excluded_from_trading)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 230, in test_transfers_excluded_from_trading
+    comps, _ = norm({'id': '9', 'accountID': '001-004-1-001', 'time': T0, 'type': 'TRANSFER_FUNDS',
+               ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     'accountBalance': '1', 'amount': '5000'})
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 216, in norm
+    return oanda.normalise(tx, 'acct-alias', '001-004-1-001', env, 'GBP', '1')
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/oanda.py", line 15, in normalise
+    raise ValueError('explicit actual broker scope required')
+ValueError: explicit actual broker scope required
+
+======================================================================
+ERROR: test_finding_run_rate_reports_excluded_uncertain_schedules (finance.tests_independent.test_independent_python.ExpenseLedgerAdversarial.test_finding_run_rate_reports_excluded_uncertain_schedules)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 160, in test_finding_run_rate_reports_excluded_uncertain_schedules
+    result = core.run_rate(subs, '2026-10-15T00:00:00Z')
+TypeError: run_rate() missing 1 required positional argument: 'coverage'
+
+======================================================================
+ERROR: test_overlapping_subscription_schedules_rejected (finance.tests_independent.test_independent_python.ExpenseLedgerAdversarial.test_overlapping_subscription_schedules_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 156, in test_overlapping_subscription_schedules_rejected
+    core.run_rate(subs, '2026-12-15T00:00:00Z')
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: run_rate() missing 1 required positional argument: 'coverage'
+
+======================================================================
+ERROR: test_break_even_boundaries (finance.tests_independent.test_independent_python.PracticeVersusActual.test_break_even_boundaries)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 274, in test_break_even_boundaries
+    exact = core.economics('100', totals, 4, 'live', True)
+            ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_estimates_and_simulation_suppress_conclusion (finance.tests_independent.test_independent_python.PracticeVersusActual.test_estimates_and_simulation_suppress_conclusion) (kw={'simulation_type': 'SHADOW'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 269, in test_estimates_and_simulation_suppress_conclusion
+    self.assertIsNone(core.economics('10', totals, 1, 'live', True, **kw)['net_economic_gbp'])
+                      ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_estimates_and_simulation_suppress_conclusion (finance.tests_independent.test_independent_python.PracticeVersusActual.test_estimates_and_simulation_suppress_conclusion) (kw={'financial_state': 'UNREALISED'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 269, in test_estimates_and_simulation_suppress_conclusion
+    self.assertIsNone(core.economics('10', totals, 1, 'live', True, **kw)['net_economic_gbp'])
+                      ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_estimates_and_simulation_suppress_conclusion (finance.tests_independent.test_independent_python.PracticeVersusActual.test_estimates_and_simulation_suppress_conclusion) (kw={'system_environment': 'DEMO'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 269, in test_estimates_and_simulation_suppress_conclusion
+    self.assertIsNone(core.economics('10', totals, 1, 'live', True, **kw)['net_economic_gbp'])
+                      ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_estimates_and_simulation_suppress_conclusion (finance.tests_independent.test_independent_python.PracticeVersusActual.test_estimates_and_simulation_suppress_conclusion) (kw={'financial_reality': 'SIMULATED'})
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 269, in test_estimates_and_simulation_suppress_conclusion
+    self.assertIsNone(core.economics('10', totals, 1, 'live', True, **kw)['net_economic_gbp'])
+                      ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_estimates_and_simulation_suppress_conclusion (finance.tests_independent.test_independent_python.PracticeVersusActual.test_estimates_and_simulation_suppress_conclusion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 270, in test_estimates_and_simulation_suppress_conclusion
+    self.assertIsNone(core.economics('10', totals, 1, 'live', False)['net_economic_gbp'])
+                      ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_finding_empty_evidence_cannot_conclude_break_even (finance.tests_independent.test_independent_python.PracticeVersusActual.test_finding_empty_evidence_cannot_conclude_break_even)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 292, in test_finding_empty_evidence_cannot_conclude_break_even
+    r = core.economics('0', dict(ZERO), 0, 'live', True)
+        ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_finding_live_scope_must_be_explicit_not_defaulted (finance.tests_independent.test_independent_python.PracticeVersusActual.test_finding_live_scope_must_be_explicit_not_defaulted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 283, in test_finding_live_scope_must_be_explicit_not_defaulted
+    core.economics('10', totals, 1, 'live', True)
+    ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_finding_practice_unit_economics_not_mixed_with_actual_spend (finance.tests_independent.test_independent_python.PracticeVersusActual.test_finding_practice_unit_economics_not_mixed_with_actual_spend)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 287, in test_finding_practice_unit_economics_not_mixed_with_actual_spend
+    r = core.economics('10', totals, 5, 'practice', True)
+        ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_practice_never_produces_economic_conclusion (finance.tests_independent.test_independent_python.PracticeVersusActual.test_practice_never_produces_economic_conclusion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 259, in test_practice_never_produces_economic_conclusion
+    r = core.economics('10', totals, 5, 'practice', True)
+        ^^^^^^^^^^^^^^
+AttributeError: module 'finance.core' has no attribute 'economics'
+
+======================================================================
+ERROR: test_finding_broker_sync_lag_before_eod_is_pending_not_missing (finance.tests_independent.test_independent_python.Reconciliation.test_finding_broker_sync_lag_before_eod_is_pending_not_missing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 342, in test_finding_broker_sync_lag_before_eod_is_pending_not_missing
+    r = rec(**self.chain)  # opened, broker EOD export not yet in, before deadline
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+======================================================================
+ERROR: test_finding_partial_close_is_not_a_duplicate_failure (finance.tests_independent.test_independent_python.Reconciliation.test_finding_partial_close_is_not_a_duplicate_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 338, in test_finding_partial_close_is_not_a_duplicate_failure
+    r = rec(broker=partials, outcomes=[dict(S, trade_id='t1', realised_pnl='5', currency='GBP')], **self.chain)
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+======================================================================
+ERROR: test_matched_chain_has_no_exceptions (finance.tests_independent.test_independent_python.Reconciliation.test_matched_chain_has_no_exceptions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 310, in test_matched_chain_has_no_exceptions
+    r = rec(broker=[dict(S, trade_id='t1', closed=True, realised_pnl='5.00', currency='GBP')],
+            outcomes=[dict(S, trade_id='t1', realised_pnl='5.0', currency='GBP')], **self.chain)
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+======================================================================
+ERROR: test_pending_eod_then_overdue_exactly_at_deadline (finance.tests_independent.test_independent_python.Reconciliation.test_pending_eod_then_overdue_exactly_at_deadline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 316, in test_pending_eod_then_overdue_exactly_at_deadline
+    self.assertIn(('trade', 't1', 'pending_eod'), rec(broker=broker, **self.chain))
+                                                  ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+======================================================================
+ERROR: test_value_currency_duplicate_and_false_closure (finance.tests_independent.test_independent_python.Reconciliation.test_value_currency_duplicate_and_false_closure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 322, in test_value_currency_duplicate_and_false_closure
+    rec(broker=b, outcomes=[dict(S, trade_id='t1', realised_pnl='5.01', currency='GBP')], **self.chain))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+======================================================================
+ERROR: test_wrong_scope_rows_flagged (finance.tests_independent.test_independent_python.Reconciliation.test_wrong_scope_rows_flagged)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 333, in test_wrong_scope_rows_flagged
+    rec(broker=[dict(trade_id='t1', account='a2', environment='live', closed=True)], **self.chain))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+======================================================================
+FAIL: test_finding_weekly_schema_forbids_verified_actual_from_practice_or_incomplete (finance.tests_independent.test_independent_python.ContractSemantics.test_finding_weekly_schema_forbids_verified_actual_from_practice_or_incomplete)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 370, in test_finding_weekly_schema_forbids_verified_actual_from_practice_or_incomplete
+    self.assertRegex(text, r'"if"\s*:', 'no conditional rule: Practice/SIMULATED/incomplete report may label '
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                        'net_economic_pnl "verified"')
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Regex didn't match: '"if"\\s*:' not found in '{\n  "$schema": "https://json-schema.org/draft/2020-12/schema",\n  "$id": "urn:st-ludaetuc:finance:weekly:v2",\n  "$defs": {\n    "metric": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "value",\n        "currency",\n        "state",\n        "reason",\n        "evidence_id",\n        "classification"\n      ],\n      "properties": {\n        "value": {\n          "type": [\n            "string",\n            "null"\n          ],\n          "pattern": "^-?[0-9]{1,36}(\\\\.[0-9]{1,12})?$",\n          "maxLength": 50\n        },\n        "currency": {\n          "const": "GBP"\n        },\n        "state": {\n          "enum": [\n            "verified",\n            "observed_incomplete",\n            "estimate",\n            "unavailable",\n            "hypothetical"\n          ]\n        },\n        "reason": {\n          "type": [\n            "string",\n            "null"\n          ],\n          "maxLength": 240\n        },\n        "evidence_id": {\n          "type": [\n            "string",\n            "null"\n          ],\n          "maxLength": 128\n        },\n        "classification": {\n          "enum": [\n            "FACT",\n            "ESTIMATED",\n            "UNKNOWN",\n            "HYPOTHETICAL"\n          ]\n        }\n      }\n    },\n    "drawdown": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "value",\n        "unit",\n        "state",\n        "reason",\n        "evidence_id",\n        "classification"\n      ],\n      "properties": {\n        "value": {\n          "type": [\n            "string",\n            "null"\n          ],\n          "pattern": "^(0(\\\\.[0-9]{1,12})?|1(\\\\.0{1,12})?)$",\n          "maxLength": 14\n        },\n        "unit": {\n          "const": "fraction_of_capital"\n        },\n        "state": {\n          "enum": [\n            "approved_assumption",\n            "observed_incomplete",\n            "unavailable"\n          ]\n        },\n        "reason": {\n          "type": [\n            "string",\n            "null"\n          ],\n          "maxLength": 240\n        },\n        "evidence_id": {\n          "type": [\n            "string",\n            "null"\n          ],\n          "maxLength": 128\n        },\n        "classification": {\n          "enum": [\n            "ESTIMATED",\n            "UNKNOWN"\n          ]\n        }\n      }\n    }\n  },\n  "type": "object",\n  "additionalProperties": false,\n  "required": [\n    "schema_version",\n    "as_of",\n    "period_start",\n    "period_end",\n    "account_alias",\n    "broker_environment",\n    "system_environment",\n    "financial_reality",\n    "financial_state",\n    "coverage_complete",\n    "trade_count",\n    "exception_count",\n    "pending_eod_count",\n    "source_manifest_id",\n    "formula_version",\n    "lifetime",\n    "this_week",\n    "run_rate",\n    "unit_economics",\n    "forecast_inputs",\n    "assumption_set_id",\n    "allocation_policy",\n    "simulation_type",\n    "scope_level",\n    "classification",\n    "basis",\n    "coverage_state",\n    "evidence_count",\n    "first_evidence_id",\n    "last_evidence_id",\n    "unresolved_exception_count",\n    "reconciliation_state",\n    "denominator_basis",\n    "money_policy",\n    "currency_confirmed",\n    "costs_complete",\n    "recognition_policy",\n    "recognition_policy_missing_count"\n  ],\n  "properties": {\n    "schema_version": {\n      "const": "finance_weekly_v2"\n    },\n    "as_of": {\n      "type": "string",\n      "format": "date-time",\n      "maxLength": 40\n    },\n    "period_start": {\n      "type": "string",\n      "format": "date-time",\n      "maxLength": 40\n    },\n    "period_end": {\n      "type": "string",\n      "format": "date-time",\n      "maxLength": 40\n    },\n    "account_alias": {\n      "type": "string",\n      "minLength": 1,\n      "maxLength": 64\n    },\n    "broker_environment": {\n      "enum": [\n        "OANDA_PRACTICE",\n        "OANDA_LIVE"\n      ]\n    },\n    "system_environment": {\n      "enum": [\n        "DEVELOPMENT",\n        "VALIDATION",\n        "DEMO",\n        "SHADOW",\n        "REPLAY",\n        "PRODUCTION"\n      ]\n    },\n    "financial_reality": {\n      "enum": [\n        "ACTUAL",\n        "SIMULATED"\n      ]\n    },\n    "financial_state": {\n      "const": "REALISED"\n    },\n    "coverage_complete": {\n      "type": "boolean"\n    },\n    "trade_count": {\n      "type": [\n        "integer",\n        "null"\n      ],\n      "minimum": 0,\n      "maximum": 1000000000\n    },\n    "exception_count": {\n      "type": "integer",\n      "minimum": 0,\n      "maximum": 1000000000\n    },\n    "pending_eod_count": {\n      "type": "integer",\n      "minimum": 0,\n      "maximum": 1000000000\n    },\n    "source_manifest_id": {\n      "type": "string",\n      "maxLength": 128\n    },\n    "formula_version": {\n      "const": "finance_foundation_v2"\n    },\n    "lifetime": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "total_spent",\n        "gross_trading_pnl",\n        "financing",\n        "other_trading_costs",\n        "net_economic_pnl",\n        "remaining_break_even",\n        "cash_spend",\n        "economic_expense"\n      ],\n      "properties": {\n        "total_spent": {\n          "$ref": "#/$defs/metric"\n        },\n        "gross_trading_pnl": {\n          "$ref": "#/$defs/metric"\n        },\n        "financing": {\n          "$ref": "#/$defs/metric"\n        },\n        "other_trading_costs": {\n          "$ref": "#/$defs/metric"\n        },\n        "net_economic_pnl": {\n          "$ref": "#/$defs/metric"\n        },\n        "remaining_break_even": {\n          "$ref": "#/$defs/metric"\n        },\n        "cash_spend": {\n          "$ref": "#/$defs/metric"\n        },\n        "economic_expense": {\n          "$ref": "#/$defs/metric"\n        }\n      }\n    },\n    "this_week": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "infrastructure",\n        "api_ai",\n        "subscriptions",\n        "rd_testing",\n        "other_operating_costs",\n        "broker_costs",\n        "realised_pnl",\n        "net_result",\n        "cash_spend",\n        "economic_expense"\n      ],\n      "properties": {\n        "infrastructure": {\n          "$ref": "#/$defs/metric"\n        },\n        "api_ai": {\n          "$ref": "#/$defs/metric"\n        },\n        "subscriptions": {\n          "$ref": "#/$defs/metric"\n        },\n        "rd_testing": {\n          "$ref": "#/$defs/metric"\n        },\n        "other_operating_costs": {\n          "$ref": "#/$defs/metric"\n        },\n        "broker_costs": {\n          "$ref": "#/$defs/metric"\n        },\n        "realised_pnl": {\n          "$ref": "#/$defs/metric"\n        },\n        "net_result": {\n          "$ref": "#/$defs/metric"\n        },\n        "cash_spend": {\n          "$ref": "#/$defs/metric"\n        },\n        "economic_expense": {\n          "$ref": "#/$defs/metric"\n        }\n      }\n    },\n    "run_rate": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "cost_per_day",\n        "cost_per_month",\n        "cost_per_year"\n      ],\n      "properties": {\n        "cost_per_day": {\n          "$ref": "#/$defs/metric"\n        },\n        "cost_per_month": {\n          "$ref": "#/$defs/metric"\n        },\n        "cost_per_year": {\n          "$ref": "#/$defs/metric"\n        }\n      }\n    },\n    "unit_economics": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "cost_per_trade",\n        "gross_profit_per_trade",\n        "financing_per_trade",\n        "net_profit_per_trade",\n        "realised_expectancy"\n      ],\n      "properties": {\n        "cost_per_trade": {\n          "$ref": "#/$defs/metric"\n        },\n        "gross_profit_per_trade": {\n          "$ref": "#/$defs/metric"\n        },\n        "financing_per_trade": {\n          "$ref": "#/$defs/metric"\n        },\n        "net_profit_per_trade": {\n          "$ref": "#/$defs/metric"\n        },\n        "realised_expectancy": {\n          "$ref": "#/$defs/metric"\n        }\n      }\n    },\n    "forecast_inputs": {\n      "type": "object",\n      "additionalProperties": false,\n      "required": [\n        "capital",\n        "realised_expectancy",\n        "operating_costs",\n        "financing_assumption",\n        "drawdown_assumption"\n      ],\n      "properties": {\n        "capital": {\n          "$ref": "#/$defs/metric"\n        },\n        "realised_expectancy": {\n          "$ref": "#/$defs/metric"\n        },\n        "operating_costs": {\n          "$ref": "#/$defs/metric"\n        },\n        "financing_assumption": {\n          "$ref": "#/$defs/metric"\n        },\n        "drawdown_assumption": {\n          "$ref": "#/$defs/drawdown"\n        }\n      }\n    },\n    "assumption_set_id": {\n      "type": [\n        "string",\n        "null"\n      ],\n      "maxLength": 128\n    },\n    "allocation_policy": {\n      "const": "period_operating_cost_divided_by_unique_fully_closed_reconciled_trades"\n    },\n    "simulation_type": {\n      "type": [\n        "string",\n        "null"\n      ],\n      "enum": [\n        null,\n        "COUNTERFACTUAL",\n        "SHADOW",\n        "REPLAY",\n        "VALIDATION"\n      ]\n    },\n    "scope_level": {\n      "enum": [\n        "PROJECT",\n        "ACCOUNT"\n      ]\n    },\n    "classification": {\n      "enum": [\n        "FACT",\n        "MIXED",\n        "ESTIMATED",\n        "UNKNOWN",\n        "HYPOTHETICAL"\n      ]\n    },\n    "basis": {\n      "enum": [\n        "ACTUAL_CASH",\n        "HYPOTHETICAL_NON_CASH"\n      ]\n    },\n    "coverage_state": {\n      "enum": [\n        "VERIFIED",\n        "REVIEWED_EMPTY",\n        "UNKNOWN",\n        "INCOMPLETE",\n        "WITHDRAWN"\n      ]\n    },\n    "evidence_count": {\n      "type": "integer",\n      "minimum": 0,\n      "maximum": 1000000000\n    },\n    "first_evidence_id": {\n      "type": [\n        "string",\n        "null"\n      ],\n      "maxLength": 128\n    },\n    "last_evidence_id": {\n      "type": [\n        "string",\n        "null"\n      ],\n      "maxLength": 128\n    },\n    "unresolved_exception_count": {\n      "type": "integer",\n      "minimum": 0,\n      "maximum": 1000000000\n    },\n    "reconciliation_state": {\n      "enum": [\n        "MATCHED",\n        "BROKER_ONLY",\n        "INTERNAL_ONLY",\n        "VALUE_MISMATCH",\n        "PENDING_EOD_SYNC",\n        "INVESTIGATION_REQUIRED"\n      ]\n    },\n    "denominator_basis": {\n      "enum": [\n        "attempted_orders",\n        "filled_orders",\n        "closed_trades",\n        "partial_close_slices",\n        "transactions"\n      ]\n    },\n    "money_policy": {\n      "const": "money_scale12_half_away_v1"\n    },\n    "currency_confirmed": {\n      "type": "boolean"\n    },\n    "costs_complete": {\n      "type": "boolean"\n    },\n    "recognition_policy": {\n      "const": "EXPLICIT_PER_EXPENSE"\n    },\n    "recognition_policy_missing_count": {\n      "type": "integer",\n      "minimum": 0,\n      "maximum": 1000000000\n    }\n  }\n}\n' : no conditional rule: Practice/SIMULATED/incomplete report may label net_economic_pnl "verified"
+
+======================================================================
+FAIL: test_fx_conversion_exact_no_rounding_drift (finance.tests_independent.test_independent_python.DecimalIntegrity.test_fx_conversion_exact_no_rounding_drift)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 87, in test_fx_conversion_exact_no_rounding_drift
+    self.assertEqual(e.gbp, Decimal('0.000000000000999999999999'))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Decimal('1E-12') != Decimal('9.99999999999E-13')
+
+======================================================================
+FAIL: test_finding_import_bounds_input_size (finance.tests_independent.test_independent_python.HistoricalImportSecurity.test_finding_import_bounds_input_size)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 200, in test_finding_import_bounds_input_size
+    self.assertIn('max_rows', core.import_expenses.__code__.co_varnames,
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  'no row/size bound on historical import (memory exhaustion)')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'max_rows' not found in ('stream', 'ledger', 'fields', 'text', 'io', 'candidate', 'row', 'reader', 'f', 'allowed', 'required', 'count', 'index', 'raw', 'key') : no row/size bound on historical import (memory exhaustion)
+
+======================================================================
+FAIL: test_finding_malformed_pnl_is_an_exception_not_a_crash (finance.tests_independent.test_independent_python.Reconciliation.test_finding_malformed_pnl_is_an_exception_not_a_crash)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 349, in test_finding_malformed_pnl_is_an_exception_not_a_crash
+    r = rec(broker=b, outcomes=[dict(S, trade_id='t1', realised_pnl=5.0, currency='GBP')], **self.chain)
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 300, in rec
+    return core.reconcile(list(broker), list(opened), list(outcomes), list(predictions), as_of, due, 'a1', 'live')
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 141, in reconcile
+    run=reconcile_run(broker,opened,outcomes,predictions,as_of=as_of,outcome_due_at=outcome_due_at,account=account,scope=scope)
+  File "/home/user/finrev4da/cand/finance/reconciliation.py", line 46, in reconcile_run
+    raise ValueError('explicit reconciliation scope required')
+ValueError: explicit reconciliation scope required
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_python.py", line 351, in test_finding_malformed_pnl_is_an_exception_not_a_crash
+    self.fail('one float realised_pnl aborts the whole reconciliation run')
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: one float realised_pnl aborts the whole reconciliation run
+
+----------------------------------------------------------------------
+Ran 58 tests in 0.017s
+
+FAILED (failures=4, errors=21, skipped=17)

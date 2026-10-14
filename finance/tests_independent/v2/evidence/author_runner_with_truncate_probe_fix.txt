@@ -1,0 +1,1 @@
+PostgreSQL 18 migration, acceptance, 4 parity vectors, revision race and forced-order checks PASS  (only change: TRUNCATE probe also accepts feature_not_supported; see report)

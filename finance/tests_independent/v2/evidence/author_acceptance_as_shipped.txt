@@ -1,0 +1,10 @@
+# migration
+REVOKE
+COMMIT
+# postgres_acceptance.sql as shipped
+psql:/home/user/finrev4da/cand/finance/tests/postgres_acceptance.sql:32: ERROR:  cannot truncate a table referenced in a foreign key constraint
+DETAIL:  Table "expense_verification" references "expense_revision".
+HINT:  Truncate table "expense_verification" at the same time, or use TRUNCATE ... CASCADE.
+CONTEXT:  SQL statement "TRUNCATE finance.expense_revision"
+PL/pgSQL function inline_code_block line 4 at SQL statement
+PostgreSQL 18.6 on x86_64-conda-linux-gnu, compiled by x86_64-conda-linux-gnu-cc (conda-forge gcc 15.3.0-7) 15.3.0, 64-bit

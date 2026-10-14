@@ -1,0 +1,289 @@
+EEEEEEEEEF.EEEEEE
+======================================================================
+ERROR: test_append_only_rejects_update_delete_truncate (finance.tests_independent.test_independent_postgres.FinancePostgres.test_append_only_rejects_update_delete_truncate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 91, in test_append_only_rejects_update_delete_truncate
+    self.expense('e1')
+    ~~~~~~~~~~~~^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 62, in expense
+    self.q(f'INSERT INTO finance.expense_revision({cols}) VALUES ({",".join(["%s"] * len(vals))})', vals)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column "verified_by" of relation "expense_revision" does not exist
+LINE 1: ...ing,service,environment,evidence_ref,verification,verified_b...
+                                                             ^
+
+======================================================================
+ERROR: test_capital_transfers_never_profit (finance.tests_independent.test_independent_postgres.FinancePostgres.test_capital_transfers_never_profit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 222, in test_capital_transfers_never_profit
+    self.account('live')
+    ~~~~~~~~~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (live, OANDA_LIVE, PRODUCTION, ACTUAL, GBP, null, null, 1).
+
+======================================================================
+ERROR: test_estimate_unverified_and_open_exception_block_conclusion (finance.tests_independent.test_independent_postgres.FinancePostgres.test_estimate_unverified_and_open_exception_block_conclusion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 208, in test_estimate_unverified_and_open_exception_block_conclusion
+    self.account('live')
+    ~~~~~~~~~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (live, OANDA_LIVE, PRODUCTION, ACTUAL, GBP, null, null, 1).
+
+======================================================================
+ERROR: test_finding_empty_evidence_cannot_show_break_even (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_empty_evidence_cannot_show_break_even)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 233, in test_finding_empty_evidence_cannot_show_break_even
+    self.account('live')
+    ~~~~~~~~~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (live, OANDA_LIVE, PRODUCTION, ACTUAL, GBP, null, null, 1).
+
+======================================================================
+ERROR: test_finding_future_dated_assertion_cannot_pin_latest (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_future_dated_assertion_cannot_pin_latest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 240, in test_finding_future_dated_assertion_cannot_pin_latest
+    self.account('live')
+    ~~~~~~~~~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (live, OANDA_LIVE, PRODUCTION, ACTUAL, GBP, null, null, 1).
+
+======================================================================
+ERROR: test_finding_parity_run_rate_day (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_parity_run_rate_day)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 191, in test_finding_parity_run_rate_day
+    self.q("INSERT INTO finance.subscription_schedule VALUES ('s1','sub',NULL,'2026-01-01Z','2027-01-01Z',10,"
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           "'invoice_verified','ev','reviewer')")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InvalidDatetimeFormat: invalid input syntax for type timestamp with time zone: "reviewer"
+LINE 1: ...-01-01Z','2027-01-01Z',10,'invoice_verified','ev','reviewer'...
+                                                             ^
+
+======================================================================
+ERROR: test_finding_project_spend_subtracted_once_across_accounts (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_project_spend_subtracted_once_across_accounts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 254, in test_finding_project_spend_subtracted_once_across_accounts
+    self.expense('e1', amount='100')
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 62, in expense
+    self.q(f'INSERT INTO finance.expense_revision({cols}) VALUES ({",".join(["%s"] * len(vals))})', vals)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column "verified_by" of relation "expense_revision" does not exist
+LINE 1: ...ing,service,environment,evidence_ref,verification,verified_b...
+                                                             ^
+
+======================================================================
+ERROR: test_finding_recorded_at_is_server_assigned (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_recorded_at_is_server_assigned)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 249, in test_finding_recorded_at_is_server_assigned
+    self.expense('e1', recorded_at='2001-01-01T00:00:00Z')
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 62, in expense
+    self.q(f'INSERT INTO finance.expense_revision({cols}) VALUES ({",".join(["%s"] * len(vals))})', vals)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column "verified_by" of relation "expense_revision" does not exist
+LINE 1: ...ing,service,environment,evidence_ref,verification,verified_b...
+                                                             ^
+
+======================================================================
+ERROR: test_finding_run_rate_exposes_uncertain_schedules (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_run_rate_exposes_uncertain_schedules)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 267, in test_finding_run_rate_exposes_uncertain_schedules
+    cols = [d.name for d in self.conn.execute("SELECT * FROM finance.run_rate('2026-06-01Z')").description]
+                            ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedFunction: function finance.run_rate(unknown) does not exist
+LINE 1: SELECT * FROM finance.run_rate('2026-06-01Z')
+                      ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+
+======================================================================
+ERROR: test_parity_broker_components_randomised (finance.tests_independent.test_independent_postgres.FinancePostgres.test_parity_broker_components_randomised)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 159, in test_parity_broker_components_randomised
+    self.account('live', ccy='USD')
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (live, OANDA_LIVE, PRODUCTION, ACTUAL, USD, null, null, 1).
+
+======================================================================
+ERROR: test_parity_run_rate_month_and_year (finance.tests_independent.test_independent_postgres.FinancePostgres.test_parity_run_rate_month_and_year)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 183, in test_parity_run_rate_month_and_year
+    self.q("INSERT INTO finance.subscription_schedule VALUES ('s1','sub',NULL,'2026-01-01Z','2027-01-01Z',"
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           "'10.123456789012','invoice_verified','ev','reviewer')")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.InvalidDatetimeFormat: invalid input syntax for type timestamp with time zone: "reviewer"
+LINE 1: ...01-01Z','10.123456789012','invoice_verified','ev','reviewer'...
+                                                             ^
+
+======================================================================
+ERROR: test_parity_spend_randomised (finance.tests_independent.test_independent_postgres.FinancePostgres.test_parity_spend_randomised)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 142, in test_parity_spend_randomised
+    self.expense(f'e{i}', at=at, amount=amount, ccy=ccy, fx=fx, verification=ver)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 62, in expense
+    self.q(f'INSERT INTO finance.expense_revision({cols}) VALUES ({",".join(["%s"] * len(vals))})', vals)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column "verified_by" of relation "expense_revision" does not exist
+LINE 1: ...ing,service,environment,evidence_ref,verification,verified_b...
+                                                             ^
+
+======================================================================
+ERROR: test_practice_excluded_even_when_labelled_production (finance.tests_independent.test_independent_postgres.FinancePostgres.test_practice_excluded_even_when_labelled_production)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 200, in test_practice_excluded_even_when_labelled_production
+    self.account('practice', broker='OANDA_PRACTICE', system='PRODUCTION')
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (practice, OANDA_PRACTICE, PRODUCTION, ACTUAL, GBP, null, null, 1).
+
+======================================================================
+ERROR: test_revision_gap_duplicate_source_and_concurrent_corrections (finance.tests_independent.test_independent_postgres.FinancePostgres.test_revision_gap_duplicate_source_and_concurrent_corrections)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 99, in test_revision_gap_duplicate_source_and_concurrent_corrections
+    self.expense('e1')
+    ~~~~~~~~~~~~^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 62, in expense
+    self.q(f'INSERT INTO finance.expense_revision({cols}) VALUES ({",".join(["%s"] * len(vals))})', vals)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column "verified_by" of relation "expense_revision" does not exist
+LINE 1: ...ing,service,environment,evidence_ref,verification,verified_b...
+                                                             ^
+
+======================================================================
+ERROR: test_unresolved_reconciliation_exception_blocks_conclusion (finance.tests_independent.test_independent_postgres.FinancePostgres.test_unresolved_reconciliation_exception_blocks_conclusion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 216, in test_unresolved_reconciliation_exception_blocks_conclusion
+    self.account('live')
+    ~~~~~~~~~~~~^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 65, in account
+    self.q('INSERT INTO finance.broker_account VALUES (%s,%s,%s,%s,%s)', (key, broker, system, 'ACTUAL', ccy))
+    ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 45, in q
+    cur = self.conn.execute(sql, params)
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.NotNullViolation: null value in column "currency" of relation "broker_account" violates not-null constraint
+DETAIL:  Failing row contains (live, OANDA_LIVE, PRODUCTION, ACTUAL, GBP, null, null, 1).
+
+======================================================================
+FAIL: test_finding_views_are_security_invoker (finance.tests_independent.test_independent_postgres.FinancePostgres.test_finding_views_are_security_invoker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/finrev4da/cand/finance/tests_independent/test_independent_postgres.py", line 273, in test_finding_views_are_security_invoker
+    self.assertEqual(rows, [], 'views execute with owner rights; a future Reader grant on a view bypasses table ACLs')
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [('effective_expenses',), ('latest_verific[246 chars]s',)] != []
+
+First list contains 12 additional elements.
+First extra element 0:
+('effective_expenses',)
+
++ []
+- [('effective_expenses',),
+-  ('latest_verifications',),
+-  ('verified_expenses',),
+-  ('effective_subscriptions',),
+-  ('latest_resolutions',),
+-  ('unresolved_results',),
+-  ('latest_coverage',),
+-  ('latest_runs',),
+-  ('broker_economics',),
+-  ('monthly_cash_spend',),
+-  ('weekly_cash_spend',),
+-  ('order_denominators',)] : views execute with owner rights; a future Reader grant on a view bypasses table ACLs
+
+----------------------------------------------------------------------
+Ran 17 tests in 1.619s
+
+FAILED (failures=1, errors=15)

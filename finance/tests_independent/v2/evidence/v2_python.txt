@@ -1,0 +1,158 @@
+test_candidate_state_machine_is_correct_when_given_true_due (finance.tests_independent.v2.test_v2_python.D_OperationalTiming.test_candidate_state_machine_is_correct_when_given_true_due) ... ok
+test_finding_due_time_is_derived_not_caller_asserted (finance.tests_independent.v2.test_v2_python.D_OperationalTiming.test_finding_due_time_is_derived_not_caller_asserted)
+No schedule/calendar model exists: outcome_due_at is free caller input, so a naive ... FAIL
+test_practice_profit_never_reduces_break_even (finance.tests_independent.v2.test_v2_python.D_OperationalTiming.test_practice_profit_never_reduces_break_even) ... ok
+test_reference_schedule_across_dst_end_2026 (finance.tests_independent.v2.test_v2_python.D_OperationalTiming.test_reference_schedule_across_dst_end_2026) ... ok
+test_future_dated_verification_cannot_beat_later_withdrawal (finance.tests_independent.v2.test_v2_python.H1Ordering.test_future_dated_verification_cannot_beat_later_withdrawal) ... ok
+test_journal_orders_are_unique_and_monotonic_under_threads (finance.tests_independent.v2.test_v2_python.H1Ordering.test_journal_orders_are_unique_and_monotonic_under_threads) ... ok
+test_verification_never_carries_to_new_revision (finance.tests_independent.v2.test_v2_python.H1Ordering.test_verification_never_carries_to_new_revision) ... ok
+test_broker_without_matching_coverage_is_unavailable (finance.tests_independent.v2.test_v2_python.H2EmptyEvidence.test_broker_without_matching_coverage_is_unavailable) ... ok
+test_count_mismatch_is_unavailable (finance.tests_independent.v2.test_v2_python.H2EmptyEvidence.test_count_mismatch_is_unavailable) ... ok
+test_coverage_for_october_does_not_support_november (finance.tests_independent.v2.test_v2_python.H2EmptyEvidence.test_coverage_for_october_does_not_support_november) ... ok
+test_unknown_coverage_yields_null_not_zero (finance.tests_independent.v2.test_v2_python.H2EmptyEvidence.test_unknown_coverage_yields_null_not_zero) ... ok
+test_verified_coverage_cannot_be_empty (finance.tests_independent.v2.test_v2_python.H2EmptyEvidence.test_verified_coverage_cannot_be_empty) ... ok
+test_duplicate_account_rejected (finance.tests_independent.v2.test_v2_python.H3ProjectLevel.test_duplicate_account_rejected) ... ok
+test_incomplete_eligible_account_blocks_project (finance.tests_independent.v2.test_v2_python.H3ProjectLevel.test_incomplete_eligible_account_blocks_project) ... ok
+test_spend_deducted_once_across_live_accounts_practice_excluded (finance.tests_independent.v2.test_v2_python.H3ProjectLevel.test_spend_deducted_once_across_live_accounts_practice_excluded) ... ok
+test_truthy_non_bool_completeness_rejected (finance.tests_independent.v2.test_v2_python.H3ProjectLevel.test_truthy_non_bool_completeness_rejected) ... ok
+test_adapter_requires_explicit_scope_object (finance.tests_independent.v2.test_v2_python.H4ExplicitScope.test_adapter_requires_explicit_scope_object) ... ok
+test_legacy_and_lowercase_labels_rejected (finance.tests_independent.v2.test_v2_python.H4ExplicitScope.test_legacy_and_lowercase_labels_rejected) ... ok
+test_only_live_production_actual_realised_is_cash (finance.tests_independent.v2.test_v2_python.H4ExplicitScope.test_only_live_production_actual_realised_is_cash) ... ok
+test_scope_has_no_defaults (finance.tests_independent.v2.test_v2_python.H4ExplicitScope.test_scope_has_no_defaults) ... ok
+test_baselines_serialize (finance.tests_independent.v2.test_v2_python.H5Serializer.test_baselines_serialize) ... ok
+test_finding_lifetime_metrics_bound_to_lifetime_coverage (finance.tests_independent.v2.test_v2_python.H5Serializer.test_finding_lifetime_metrics_bound_to_lifetime_coverage)
+Weekly lifetime break-even is accepted as FACT while the only coverage checked is the week. ... FAIL
+test_finding_practice_realised_pnl_cannot_be_labelled_fact (finance.tests_independent.v2.test_v2_python.H5Serializer.test_finding_practice_realised_pnl_cannot_be_labelled_fact)
+Weekly keys realised_pnl / broker_costs / other_trading_costs are outside TRADING_KEYS, ... FAIL
+test_finding_verified_fact_requires_a_value (finance.tests_independent.v2.test_v2_python.H5Serializer.test_finding_verified_fact_requires_a_value) ... FAIL
+test_forged_value_rejected (finance.tests_independent.v2.test_v2_python.H5Serializer.test_forged_value_rejected) ... ok
+test_missing_jsonschema_fails_closed (finance.tests_independent.v2.test_v2_python.H5Serializer.test_missing_jsonschema_fails_closed) ... ok
+test_practice_cannot_carry_economic_conclusion (finance.tests_independent.v2.test_v2_python.H5Serializer.test_practice_cannot_carry_economic_conclusion) ... ok
+test_precision_beyond_policy_rejected_by_schema (finance.tests_independent.v2.test_v2_python.H5Serializer.test_precision_beyond_policy_rejected_by_schema) ... ok
+test_residual_provenance_is_caller_trusted (finance.tests_independent.v2.test_v2_python.H5Serializer.test_residual_provenance_is_caller_trusted)
+Documents trust boundary R-WRITER-02: any in-process caller can build the journal. ... ok
+test_rewritten_reconciliation_state_rejected (finance.tests_independent.v2.test_v2_python.H5Serializer.test_rewritten_reconciliation_state_rejected) ... ok
+test_unavailable_must_be_null_with_reason (finance.tests_independent.v2.test_v2_python.H5Serializer.test_unavailable_must_be_null_with_reason) ... ok
+test_withdrawn_coverage_blocks_fact_and_self_declared_completeness (finance.tests_independent.v2.test_v2_python.H5Serializer.test_withdrawn_coverage_blocks_fact_and_self_declared_completeness) ... ok
+test_declared_policy (finance.tests_independent.v2.test_v2_python.M1MoneyPolicy.test_declared_policy) ... ok
+test_differs_from_half_even_only_on_exact_ties (finance.tests_independent.v2.test_v2_python.M1MoneyPolicy.test_differs_from_half_even_only_on_exact_ties) ... ok
+test_fx_single_rounding (finance.tests_independent.v2.test_v2_python.M1MoneyPolicy.test_fx_single_rounding) ... ok
+test_money_boundary_rejections (finance.tests_independent.v2.test_v2_python.M1MoneyPolicy.test_money_boundary_rejections) ... ok
+test_ties_away_from_zero_and_negative_zero (finance.tests_independent.v2.test_v2_python.M1MoneyPolicy.test_ties_away_from_zero_and_negative_zero) ... ok
+test_cancelled_never_counts_as_closed_trade (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_cancelled_never_counts_as_closed_trade) ... ok
+test_finding_broker_close_lag_before_eod_is_pending (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_finding_broker_close_lag_before_eod_is_pending)
+Outcome posted by the EOD bridge before the broker CLOSE slice is exported. ... FAIL
+test_finding_broker_export_lag_before_eod_is_pending (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_finding_broker_export_lag_before_eod_is_pending)
+Engine trade_opened has arrived; broker export not yet synced; deadline not reached. ... FAIL
+test_http_200_without_fill_evidence_is_not_execution (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_http_200_without_fill_evidence_is_not_execution) ... ok
+test_malformed_row_is_quarantined_not_fatal (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_malformed_row_is_quarantined_not_fatal) ... ok
+test_partial_close_rolls_up (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_partial_close_rolls_up) ... ok
+test_pending_then_overdue_exactly_at_deadline (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_pending_then_overdue_exactly_at_deadline) ... ok
+test_value_mismatch_and_conflicting_replay (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_value_mismatch_and_conflicting_replay) ... ok
+test_finding_routine_non_cash_oanda_types_are_not_investigations (finance.tests_independent.v2.test_v2_python.M3Attribution.test_finding_routine_non_cash_oanda_types_are_not_investigations)
+A real OANDA stream contains MARKET_ORDER/STOP_LOSS_ORDER/ORDER_CANCEL etc. for every trade. ... FAIL
+test_nested_mismatch_quarantined_adjacent_accepted (finance.tests_independent.v2.test_v2_python.M3Attribution.test_nested_mismatch_quarantined_adjacent_accepted) ... ok
+test_atomic_on_late_failure (finance.tests_independent.v2.test_v2_python.M4Import.test_atomic_on_late_failure) ... ok
+test_formula_text_neutralised (finance.tests_independent.v2.test_v2_python.M4Import.test_formula_text_neutralised) ... ok
+test_rejections (finance.tests_independent.v2.test_v2_python.M4Import.test_rejections) ... ok
+test_size_bounds (finance.tests_independent.v2.test_v2_python.M4Import.test_size_bounds) ... ok
+test_M6_practice_unit_economics_hypothetical (finance.tests_independent.v2.test_v2_python.MediumOthers.test_M6_practice_unit_economics_hypothetical) ... ok
+test_M7_run_rate_unknown_is_null_and_counts_exposed (finance.tests_independent.v2.test_v2_python.MediumOthers.test_M7_run_rate_unknown_is_null_and_counts_exposed) ... ok
+test_M8_missing_policy_or_payment_is_unavailable (finance.tests_independent.v2.test_v2_python.MediumOthers.test_M8_missing_policy_or_payment_is_unavailable) ... ok
+test_M8_straight_line_is_additive_and_exact (finance.tests_independent.v2.test_v2_python.MediumOthers.test_M8_straight_line_is_additive_and_exact) ... ok
+test_M9_resolution_lifecycle (finance.tests_independent.v2.test_v2_python.MediumOthers.test_M9_resolution_lifecycle) ... ok
+
+======================================================================
+FAIL: test_finding_due_time_is_derived_not_caller_asserted (finance.tests_independent.v2.test_v2_python.D_OperationalTiming.test_finding_due_time_is_derived_not_caller_asserted)
+No schedule/calendar model exists: outcome_due_at is free caller input, so a naive
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 572, in test_finding_due_time_is_derived_not_caller_asserted
+    self.assertTrue(any('sync' in n.lower() and 'due' in n.lower() or 'schedule' in n.lower() for n in api),
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    'no EOD schedule/due-time derivation; Europe/London 00:30 Tue-Sat and DST are unmodelled')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : no EOD schedule/due-time derivation; Europe/London 00:30 Tue-Sat and DST are unmodelled
+
+======================================================================
+FAIL: test_finding_lifetime_metrics_bound_to_lifetime_coverage (finance.tests_independent.v2.test_v2_python.H5Serializer.test_finding_lifetime_metrics_bound_to_lifetime_coverage)
+Weekly lifetime break-even is accepted as FACT while the only coverage checked is the week.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 315, in test_finding_lifetime_metrics_bound_to_lifetime_coverage
+    with self.assertRaises(ValueError, msg='lifetime FACT accepted on one-week coverage only'):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised : lifetime FACT accepted on one-week coverage only
+
+======================================================================
+FAIL: test_finding_practice_realised_pnl_cannot_be_labelled_fact (finance.tests_independent.v2.test_v2_python.H5Serializer.test_finding_practice_realised_pnl_cannot_be_labelled_fact)
+Weekly keys realised_pnl / broker_costs / other_trading_costs are outside TRADING_KEYS,
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 267, in test_finding_practice_realised_pnl_cannot_be_labelled_fact
+    with self.assertRaises(ValueError, msg='Practice realised_pnl serialized as verified FACT'):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised : Practice realised_pnl serialized as verified FACT
+
+======================================================================
+FAIL: test_finding_verified_fact_requires_a_value (finance.tests_independent.v2.test_v2_python.H5Serializer.test_finding_verified_fact_requires_a_value)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 272, in test_finding_verified_fact_requires_a_value
+    with self.assertRaises(ValueError, msg='state=verified/FACT with value=null accepted'):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised : state=verified/FACT with value=null accepted
+
+======================================================================
+FAIL: test_finding_broker_close_lag_before_eod_is_pending (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_finding_broker_close_lag_before_eod_is_pending)
+Outcome posted by the EOD bridge before the broker CLOSE slice is exported.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 394, in test_finding_broker_close_lag_before_eod_is_pending
+    self.assertEqual(r.results[0].state, 'PENDING_EOD_SYNC',
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     'pre-EOD close lag reported as %s %s' % (r.results[0].state, r.results[0].reasons))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'INVESTIGATION_REQUIRED' != 'PENDING_EOD_SYNC'
+- INVESTIGATION_REQUIRED
++ PENDING_EOD_SYNC
+ : pre-EOD close lag reported as INVESTIGATION_REQUIRED ('outcome_without_broker_closure',)
+
+======================================================================
+FAIL: test_finding_broker_export_lag_before_eod_is_pending (finance.tests_independent.v2.test_v2_python.M2Reconciliation.test_finding_broker_export_lag_before_eod_is_pending)
+Engine trade_opened has arrived; broker export not yet synced; deadline not reached.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 387, in test_finding_broker_export_lag_before_eod_is_pending
+    self.assertEqual(r.results[0].state, 'PENDING_EOD_SYNC',
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     'pre-EOD broker lag reported as %s %s' % (r.results[0].state, r.results[0].reasons))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'INTERNAL_ONLY' != 'PENDING_EOD_SYNC'
+- INTERNAL_ONLY
++ PENDING_EOD_SYNC
+ : pre-EOD broker lag reported as INTERNAL_ONLY ('broker_record_missing',)
+
+======================================================================
+FAIL: test_finding_routine_non_cash_oanda_types_are_not_investigations (finance.tests_independent.v2.test_v2_python.M3Attribution.test_finding_routine_non_cash_oanda_types_are_not_investigations)
+A real OANDA stream contains MARKET_ORDER/STOP_LOSS_ORDER/ORDER_CANCEL etc. for every trade.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_python.py", line 436, in test_finding_routine_non_cash_oanda_types_are_not_investigations
+    self.assertEqual(exceptions, (), 'routine non-cash transaction raised %s' % (exceptions,))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: ({'row_index': 0, 'state': 'INVESTIGATION_[59 chars]R'},) != ()
+
+First tuple contains 1 additional elements.
+First extra element 0:
+{'row_index': 0, 'state': 'INVESTIGATION_REQUIRED', 'reason': 'unclassified_transaction: MARKET_ORDER'}
+
++ ()
+- ({'reason': 'unclassified_transaction: MARKET_ORDER',
+-   'row_index': 0,
+-   'state': 'INVESTIGATION_REQUIRED'},) : routine non-cash transaction raised ({'row_index': 0, 'state': 'INVESTIGATION_REQUIRED', 'reason': 'unclassified_transaction: MARKET_ORDER'},)
+
+----------------------------------------------------------------------
+Ran 56 tests in 0.172s
+
+FAILED (failures=7)

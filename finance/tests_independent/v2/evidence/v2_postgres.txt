@@ -1,0 +1,222 @@
+test_H2_no_or_unknown_coverage_is_null_reviewed_empty_is_zero (finance.tests_independent.v2.test_v2_postgres.Economics.test_H2_no_or_unknown_coverage_is_null_reviewed_empty_is_zero) ... ok
+test_H3_spend_once_practice_excluded_and_python_parity (finance.tests_independent.v2.test_v2_postgres.Economics.test_H3_spend_once_practice_excluded_and_python_parity) ... ok
+test_cancelled_orders_are_not_filled_denominators (finance.tests_independent.v2.test_v2_postgres.Economics.test_cancelled_orders_are_not_filled_denominators) ... ok
+test_finding_coverage_of_one_period_survives_assertion_of_the_next (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_coverage_of_one_period_survives_assertion_of_the_next) ... FAIL
+test_finding_reconciliation_results_must_cover_population (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_reconciliation_results_must_cover_population) ... FAIL
+test_finding_sql_exception_resolution_insertable (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_sql_exception_resolution_insertable)
+resolution_evidence() aliases a table as `old`, which collides with PL/pgSQL OLD: every insert fails. ... 
+  test_finding_sql_exception_resolution_insertable (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_sql_exception_resolution_insertable) (sql='result_id,state,matched_run_id,matched_result_id,reviewed_by')
+resolution_evidence() aliases a table as `old`, which collides with PL/pgSQL OLD: every insert fails. ... FAIL
+  test_finding_sql_exception_resolution_insertable (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_sql_exception_resolution_insertable) (sql="result_id,state,reviewed_by,evidence_ref) VALUES('d2','old',")
+resolution_evidence() aliases a table as `old`, which collides with PL/pgSQL OLD: every insert fails. ... FAIL
+test_practice_labelled_production_never_reaches_break_even (finance.tests_independent.v2.test_v2_postgres.Economics.test_practice_labelled_production_never_reaches_break_even) ... ok
+test_unresolved_exception_blocks_and_estimate_blocks (finance.tests_independent.v2.test_v2_postgres.Economics.test_unresolved_exception_blocks_and_estimate_blocks) ... ok
+test_weekly_views_use_utc_weeks (finance.tests_independent.v2.test_v2_postgres.Economics.test_weekly_views_use_utc_weeks)
+Policy observation: a Monday 00:15 BST payment is attributed to the previous UTC week. ... ok
+test_finding_withdrawal_committed_last_is_authoritative_coverage (finance.tests_independent.v2.test_v2_postgres.H1Concurrency.test_finding_withdrawal_committed_last_is_authoritative_coverage) ... FAIL
+test_finding_withdrawal_committed_last_is_authoritative_verification (finance.tests_independent.v2.test_v2_postgres.H1Concurrency.test_finding_withdrawal_committed_last_is_authoritative_verification) ... FAIL
+test_order_is_assigned_before_revision_lock (finance.tests_independent.v2.test_v2_postgres.H1Concurrency.test_order_is_assigned_before_revision_lock)
+Documents: a_server_order fires before expense_sequence's row lock (trigger name order). ... ok
+test_serial_future_source_cannot_beat_withdrawal (finance.tests_independent.v2.test_v2_postgres.H1Concurrency.test_serial_future_source_cannot_beat_withdrawal) ... ok
+test_constraint_and_profile_rejections (finance.tests_independent.v2.test_v2_postgres.Immutability.test_constraint_and_profile_rejections) ... ok
+test_finding_conflicting_engine_event_duplicates_rejected (finance.tests_independent.v2.test_v2_postgres.Immutability.test_finding_conflicting_engine_event_duplicates_rejected) ... FAIL
+test_server_order_and_clock_forced (finance.tests_independent.v2.test_v2_postgres.Immutability.test_server_order_and_clock_forced) ... ok
+test_unclassified_transaction_blocks_account_completeness (finance.tests_independent.v2.test_v2_postgres.Immutability.test_unclassified_transaction_blocks_account_completeness) ... ok
+test_update_delete_truncate_and_cascade_blocked (finance.tests_independent.v2.test_v2_postgres.Immutability.test_update_delete_truncate_and_cascade_blocked) ... ok
+test_acceptance_remainder_passes_with_reviewer_truncate_fix (finance.tests_independent.v2.test_v2_postgres.Migration.test_acceptance_remainder_passes_with_reviewer_truncate_fix)
+Only change: the TRUNCATE probe also accepts the FK-check error PG raises before the trigger. ... ok
+test_clean_apply_then_reapply_refused_without_change (finance.tests_independent.v2.test_v2_postgres.Migration.test_clean_apply_then_reapply_refused_without_change) ... ok
+test_failed_migration_leaves_no_partial_schema (finance.tests_independent.v2.test_v2_postgres.Migration.test_failed_migration_leaves_no_partial_schema) ... ok
+test_finding_author_acceptance_script_passes_on_pg18 (finance.tests_independent.v2.test_v2_postgres.Migration.test_finding_author_acceptance_script_passes_on_pg18) ... FAIL
+test_broker_totals_parity (finance.tests_independent.v2.test_v2_postgres.Parity.test_broker_totals_parity) ... ok
+test_finding_recognition_single_rounding_parity_vector (finance.tests_independent.v2.test_v2_postgres.Parity.test_finding_recognition_single_rounding_parity_vector)
+Whole-second annual service period (+1 s) cut at a month boundary. SQL numeric division rounds at its ... FAIL
+test_q_matches_quantise_including_ties (finance.tests_independent.v2.test_v2_postgres.Parity.test_q_matches_quantise_including_ties) ... ok
+test_recognition_parity_random (finance.tests_independent.v2.test_v2_postgres.Parity.test_recognition_parity_random) ... ok
+test_run_rate_day_parity_random (finance.tests_independent.v2.test_v2_postgres.Parity.test_run_rate_day_parity_random)
+SQL computes finance.q(a/b): numeric division already rounds at a dynamic scale (>=16 significant digits), ... ok
+test_finding_views_are_security_invoker (finance.tests_independent.v2.test_v2_postgres.Privileges.test_finding_views_are_security_invoker) ... FAIL
+test_narrow_writer_cannot_verify_and_needs_undocumented_grants (finance.tests_independent.v2.test_v2_postgres.Privileges.test_narrow_writer_cannot_verify_and_needs_undocumented_grants) ... ok
+test_owner_residuals (finance.tests_independent.v2.test_v2_postgres.Privileges.test_owner_residuals)
+Documents owner power (L3): trigger disable and sequence rewind (duplicate server_order). ... ok
+test_public_has_no_schema_table_or_function_access (finance.tests_independent.v2.test_v2_postgres.Privileges.test_public_has_no_schema_table_or_function_access) ... ok
+test_runner_refuses_non_local_or_external_socket (finance.tests_independent.v2.test_v2_postgres.RunnerIsolation.test_runner_refuses_non_local_or_external_socket) ... ok
+
+======================================================================
+FAIL: test_finding_coverage_of_one_period_survives_assertion_of_the_next (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_coverage_of_one_period_survives_assertion_of_the_next)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 319, in test_finding_coverage_of_one_period_survives_assertion_of_the_next
+    self.assertTrue(self.one('SELECT coverage_complete FROM finance.account_totals(%s,%s,%s)', 'a', S, E),
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    'October lost completeness when November was asserted (latest_coverage/latest_runs key ignores period)')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : October lost completeness when November was asserted (latest_coverage/latest_runs key ignores period)
+
+======================================================================
+FAIL: test_finding_reconciliation_results_must_cover_population (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_reconciliation_results_must_cover_population)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 328, in test_finding_reconciliation_results_must_cover_population
+    self.assertFalse(self.one('SELECT coverage_complete FROM finance.account_totals(%s,%s,%s)', 'a', S, E),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     '3 broker transactions, 1 MATCHED result: reconciliation accepted as complete')
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : 3 broker transactions, 1 MATCHED result: reconciliation accepted as complete
+
+======================================================================
+FAIL: test_finding_sql_exception_resolution_insertable (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_sql_exception_resolution_insertable) (sql='result_id,state,matched_run_id,matched_result_id,reviewed_by')
+resolution_evidence() aliases a table as `old`, which collides with PL/pgSQL OLD: every insert fails.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 340, in test_finding_sql_exception_resolution_insertable
+    self.c.execute(sql)
+    ~~~~~~~~~~~~~~^^^^^
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AmbiguousColumn: column reference "old.run_id" is ambiguous
+LINE 2:  JOIN finance.reconciliation_result old ON old.run_id=NEW.ru...
+                                                   ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  NEW.state='RESOLVED' AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_result n JOIN finance.reconciliation_run nr ON nr.run_id=n.run_id
+ JOIN finance.reconciliation_result old ON old.run_id=NEW.run_id AND old.result_id=NEW.result_id
+ JOIN finance.reconciliation_run oldr ON oldr.run_id=old.run_id
+ WHERE n.run_id=NEW.matched_run_id AND n.result_id=NEW.matched_result_id AND n.state='MATCHED'
+ AND n.trade_id=old.trade_id AND nr.account_key=oldr.account_key AND nr.server_order>oldr.server_order)
+CONTEXT:  PL/pgSQL function resolution_evidence() line 4 at IF
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 342, in test_finding_sql_exception_resolution_insertable
+    self.fail('valid resolution decision rejected: %s' % str(exc).splitlines()[0])
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: valid resolution decision rejected: column reference "old.run_id" is ambiguous
+
+======================================================================
+FAIL: test_finding_sql_exception_resolution_insertable (finance.tests_independent.v2.test_v2_postgres.Economics.test_finding_sql_exception_resolution_insertable) (sql="result_id,state,reviewed_by,evidence_ref) VALUES('d2','old',")
+resolution_evidence() aliases a table as `old`, which collides with PL/pgSQL OLD: every insert fails.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 340, in test_finding_sql_exception_resolution_insertable
+    self.c.execute(sql)
+    ~~~~~~~~~~~~~~^^^^^
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AmbiguousColumn: column reference "old.run_id" is ambiguous
+LINE 2:  JOIN finance.reconciliation_result old ON old.run_id=NEW.ru...
+                                                   ^
+DETAIL:  It could refer to either a PL/pgSQL variable or a table column.
+QUERY:  NEW.state='RESOLVED' AND NOT EXISTS(SELECT 1 FROM finance.reconciliation_result n JOIN finance.reconciliation_run nr ON nr.run_id=n.run_id
+ JOIN finance.reconciliation_result old ON old.run_id=NEW.run_id AND old.result_id=NEW.result_id
+ JOIN finance.reconciliation_run oldr ON oldr.run_id=old.run_id
+ WHERE n.run_id=NEW.matched_run_id AND n.result_id=NEW.matched_result_id AND n.state='MATCHED'
+ AND n.trade_id=old.trade_id AND nr.account_key=oldr.account_key AND nr.server_order>oldr.server_order)
+CONTEXT:  PL/pgSQL function resolution_evidence() line 4 at IF
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 342, in test_finding_sql_exception_resolution_insertable
+    self.fail('valid resolution decision rejected: %s' % str(exc).splitlines()[0])
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: valid resolution decision rejected: column reference "old.run_id" is ambiguous
+
+======================================================================
+FAIL: test_finding_withdrawal_committed_last_is_authoritative_coverage (finance.tests_independent.v2.test_v2_postgres.H1Concurrency.test_finding_withdrawal_committed_last_is_authoritative_coverage)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 258, in test_finding_withdrawal_committed_last_is_authoritative_coverage
+    self.assertIsNone(cash, 'expense coverage withdrawn by the last-committed decision, yet cash_spend=%s' % cash)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Decimal('10.000000000000') is not None : expense coverage withdrawn by the last-committed decision, yet cash_spend=10.000000000000
+
+======================================================================
+FAIL: test_finding_withdrawal_committed_last_is_authoritative_verification (finance.tests_independent.v2.test_v2_postgres.H1Concurrency.test_finding_withdrawal_committed_last_is_authoritative_verification)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 247, in test_finding_withdrawal_committed_last_is_authoritative_verification
+    self.assertEqual(state, 'withdrawn', 'withdrawal (order %s) committed AFTER verification (order %s) but '
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     'latest_verifications returns %r; verified_expenses=%s' % (o_w, o_v, state,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     self.one('SELECT count(*) FROM finance.verified_expenses')))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'invoice_verified' != 'withdrawn'
+- invoice_verified
++ withdrawn
+ : withdrawal (order 3) committed AFTER verification (order 4) but latest_verifications returns 'invoice_verified'; verified_expenses=1
+
+======================================================================
+FAIL: test_finding_conflicting_engine_event_duplicates_rejected (finance.tests_independent.v2.test_v2_postgres.Immutability.test_finding_conflicting_engine_event_duplicates_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 217, in test_finding_conflicting_engine_event_duplicates_rejected
+    with self.assertRaises(self.psycopg.Error, msg='same source_event_id with different content accepted as a second row'):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Error not raised : same source_event_id with different content accepted as a second row
+
+======================================================================
+FAIL: test_finding_author_acceptance_script_passes_on_pg18 (finance.tests_independent.v2.test_v2_postgres.Migration.test_finding_author_acceptance_script_passes_on_pg18)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 144, in test_finding_author_acceptance_script_passes_on_pg18
+    self.c.execute(ACCEPTANCE)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/user/finrev4da/venv/lib/python3.13/site-packages/psycopg/connection.py", line 257, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.FeatureNotSupported: cannot truncate a table referenced in a foreign key constraint
+DETAIL:  Table "expense_verification" references "expense_revision".
+HINT:  Truncate table "expense_verification" at the same time, or use TRUNCATE ... CASCADE.
+CONTEXT:  SQL statement "TRUNCATE finance.expense_revision"
+PL/pgSQL function inline_code_block line 4 at SQL statement
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 146, in test_finding_author_acceptance_script_passes_on_pg18
+    self.fail('candidate postgres_acceptance.sql fails on PostgreSQL 18: %s' % str(exc).splitlines()[0])
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: candidate postgres_acceptance.sql fails on PostgreSQL 18: cannot truncate a table referenced in a foreign key constraint
+
+======================================================================
+FAIL: test_finding_recognition_single_rounding_parity_vector (finance.tests_independent.v2.test_v2_postgres.Parity.test_finding_recognition_single_rounding_parity_vector)
+Whole-second annual service period (+1 s) cut at a month boundary. SQL numeric division rounds at its
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 485, in test_finding_recognition_single_rounding_parity_vector
+    self.assertEqual(sql, py, 'October recognition: SQL %s vs Python %s' % (sql, py))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Decimal('104.853036081601') != Decimal('104.853036081600') : October recognition: SQL 104.853036081601 vs Python 104.853036081600
+
+======================================================================
+FAIL: test_finding_views_are_security_invoker (finance.tests_independent.v2.test_v2_postgres.Privileges.test_finding_views_are_security_invoker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/user/stludaetuc/st-ludaetuc-engine/finance/tests_independent/v2/test_v2_postgres.py", line 390, in test_finding_views_are_security_invoker
+    self.assertEqual(bad, [], 'views without security_invoker: %s' % bad)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: ['effective_expenses', 'latest_verificatio[210 chars]ors'] != []
+
+First list contains 12 additional elements.
+First extra element 0:
+'effective_expenses'
+
++ []
+- ['effective_expenses',
+-  'latest_verifications',
+-  'verified_expenses',
+-  'effective_subscriptions',
+-  'latest_resolutions',
+-  'unresolved_results',
+-  'latest_coverage',
+-  'latest_runs',
+-  'broker_economics',
+-  'monthly_cash_spend',
+-  'weekly_cash_spend',
+-  'order_denominators'] : views without security_invoker: ['effective_expenses', 'latest_verifications', 'verified_expenses', 'effective_subscriptions', 'latest_resolutions', 'unresolved_results', 'latest_coverage', 'latest_runs', 'broker_economics', 'monthly_cash_spend', 'weekly_cash_spend', 'order_denominators']
+
+----------------------------------------------------------------------
+Ran 32 tests in 5.385s
+
+FAILED (failures=10)
