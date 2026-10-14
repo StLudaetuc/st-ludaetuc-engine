@@ -1,1 +1,1 @@
-expense_id,revision,source_key,incurred_at,vendor,description,category,original_amount,currency,fx_to_gbp,fx_source,fx_observed_at,evidence_ref,verification,service,environment,billing_start,billing_end,recurring,correction_reason,verified_by
+expense_id,revision,source_key,incurred_at,vendor,description,category,original_amount,currency,fx_to_gbp,fx_source,fx_observed_at,evidence_ref,verification,service,environment,billing_start,billing_end,recurring,correction_reason,verified_by,paid_at,recognition_policy

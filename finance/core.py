@@ -14,24 +14,9 @@ import re
 STATES = {'invoice_verified', 'manual_verified', 'estimate', 'unverified'}
 CATEGORIES = {'infrastructure', 'api_ai', 'subscriptions', 'rd_testing', 'domains', 'data', 'tooling', 'other'}
 
-def money(value):
-    if not isinstance(value, (str, Decimal)):
-        raise ValueError('money must be a decimal string, never float')
-    result = Decimal(value)
-    if not result.is_finite() or abs(result) >= Decimal('1e18') or result.as_tuple().exponent < -12:
-        raise ValueError('non-finite, excessive magnitude or precision')
-    return result
-
-def instant(value):
-    result = datetime.fromisoformat(value.replace('Z', '+00:00')) if isinstance(value, str) else value
-    if not isinstance(result, datetime) or result.tzinfo is None or result.utcoffset() is None:
-        raise ValueError('timezone required')
-    return result.astimezone(timezone.utc)
-
-def currency(value):
-    if not re.fullmatch('[A-Z]{3}', value):
-        raise ValueError('currency must be uppercase three-letter code')
-    return value
+from .policy import (money, instant, currency, quantise, convert, divide, add,
+                     Scope, Coverage, AuthorityJournal, evidence_ref, sheet_text, elapsed_seconds, multiply, prorate)
+from threading import RLock
 
 @dataclass(frozen=True)
 class Expense:
@@ -56,6 +41,8 @@ class Expense:
     recurring: bool = False
     correction_reason: str = ''
     verified_by: str = ''
+    paid_at: datetime | None = None
+    recognition_policy: str | None = None
 
     def __post_init__(self):
         for key in ('original_amount', 'fx_to_gbp'):
@@ -63,6 +50,10 @@ class Expense:
         for key in ('incurred_at', 'billing_start', 'billing_end', 'fx_observed_at'):
             object.__setattr__(self, key, instant(getattr(self, key)))
         currency(self.currency)
+        if self.paid_at is not None:
+            object.__setattr__(self, 'paid_at', instant(self.paid_at))
+        if self.recognition_policy not in {None, 'straight_line_seconds_v1', 'point_in_time_v1'}:
+            raise ValueError('unapproved recognition policy')
         if self.revision < 1 or not all((self.expense_id, self.source_key, self.vendor, self.description,
                                        self.fx_source, self.evidence_ref, self.service, self.environment)):
             raise ValueError('missing identity or evidence')
@@ -77,16 +68,20 @@ class Expense:
 
     @property
     def gbp(self):
-        with localcontext() as ctx:
-            ctx.prec = 80
-            return self.original_amount * self.fx_to_gbp
+        return convert(self.original_amount, self.fx_to_gbp)
 
 class ExpenseLedger:
     def __init__(self):
+        self._lock = RLock()
+        self.verifications = AuthorityJournal()
         self._history = {}
         self._sources = {}
 
     def append(self, row):
+        with self._lock:
+            return self._append(row)
+
+    def _append(self, row):
         history = self._history.get(row.expense_id, ())
         if row.revision <= len(history):
             if history[row.revision - 1] == row:
@@ -103,13 +98,36 @@ class ExpenseLedger:
         self._history[row.expense_id] = history + (row,)
         return True
 
+    def verify(self, expense_id, revision, state, reviewer, evidence, source_at):
+        evidence_ref(evidence)
+        if state not in STATES | {'withdrawn'} or not reviewer:
+            raise ValueError('reviewed verification decision required')
+        with self._lock:
+            if expense_id not in self._history or self._history[expense_id][-1].revision != revision:
+                raise ValueError('verification must reference current revision')
+            value = ('unverified' if state=='withdrawn' else state, reviewer, revision, evidence)
+            return self.verifications.append('verification', expense_id, value, source_at)
+
     @property
     def history(self):
-        return tuple(row for key in sorted(self._history) for row in self._history[key])
+        with self._lock:
+            return tuple(row for key in sorted(self._history) for row in self._history[key])
 
     @property
     def effective(self):
-        return tuple(self._history[key][-1] for key in sorted(self._history))
+        with self._lock:
+            return self._effective()
+
+    def _effective(self):
+        rows = []
+        for key in sorted(self._history):
+            row = self._history[key][-1]
+            decision = self.verifications.latest('verification', key)
+            if decision is not None:
+                state, reviewer, revision, evidence = decision[3]
+                row = replace(row, verification=state if row.revision==revision else 'unverified', verified_by=reviewer if row.revision==revision else '')
+            rows.append(row)
+        return tuple(rows)
 
     def spend(self, start, end, verified=True):
         start, end = instant(start), instant(end)
@@ -121,19 +139,44 @@ class ExpenseLedger:
                         (not verified or r.verification in {'invoice_verified', 'manual_verified'})), Decimal(0))
 
 def import_expenses(stream, ledger):
-    """Atomic validation: conflicting rows reject the whole batch. CSV money stays text."""
-    candidate = ExpenseLedger()
-    for row in ledger.history:
-        candidate.append(row)
-    count = 0
-    for raw in csv.DictReader(stream):
-        raw['revision'] = int(raw['revision'])
-        if raw['recurring'] not in ('true', 'false'):
-            raise ValueError('recurring must be true/false')
-        raw['recurring'] = raw['recurring'] == 'true'
-        count += candidate.append(Expense(**raw))
-    ledger._history, ledger._sources = candidate._history, candidate._sources
-    return count
+    """Bounded untrusted staging. Verification is a separate trusted review action."""
+    from dataclasses import fields
+    text = stream.read(1048577)
+    if len(text.encode('utf-8')) > 1048576:
+        raise ValueError('CSV exceeds 1 MiB')
+    import io
+    with ledger._lock:
+        candidate = ExpenseLedger()
+        for row in ledger.history:
+            candidate.append(row)
+        reader = csv.DictReader(io.StringIO(text))
+        allowed = {f.name for f in fields(Expense)}
+        required = {f.name for f in fields(Expense) if f.default is __import__('dataclasses').MISSING}
+        if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)) or set(reader.fieldnames) - allowed or not required <= set(reader.fieldnames):
+            raise ValueError('invalid CSV header')
+        count = 0
+        for index, raw in enumerate(reader):
+            if index >= 1000 or None in raw or any(v is None or len(v) > 512 for v in raw.values()):
+                raise ValueError('bounded CSV rows/fields required')
+            if raw['verification'] not in {'estimate', 'unverified'} or raw.get('verified_by'):
+                raise ValueError('import cannot self-verify')
+            for key in ('expense_id','source_key'):
+                if not re.fullmatch(r'[A-Za-z0-9_:.\-]{1,200}', raw[key]):
+                    raise ValueError('unsafe identity')
+            evidence_ref(raw['evidence_ref'])
+            for key in ('vendor','description','fx_source','service','environment','correction_reason'):
+                if key in raw:
+                    raw[key] = sheet_text(raw[key])
+            raw['revision'] = int(raw['revision'])
+            if raw['recurring'] not in ('true', 'false'):
+                raise ValueError('recurring must be true/false')
+            raw['recurring'] = raw['recurring'] == 'true'
+            for key in ('paid_at','recognition_policy'):
+                if key in raw and raw[key] in ('', 'None'):
+                    raw[key] = None
+            count += candidate.append(Expense(**raw))
+        ledger._history, ledger._sources = candidate._history, candidate._sources
+        return count
 
 @dataclass(frozen=True)
 class Subscription:
@@ -149,26 +192,31 @@ class Subscription:
         if self.monthly_gbp < 0 or self.effective_to <= self.effective_from or self.verification not in STATES:
             raise ValueError('invalid subscription')
 
-def run_rate(subscriptions, as_of):
-    """Annualised convention: month * 12, year / 365.25; never actual spend."""
+def run_rate(subscriptions, as_of, coverage):
+    """Known zero, excluded estimates, and UNKNOWN are different states."""
     as_of = instant(as_of)
-    ids = set()
-    with localcontext() as ctx:
-        ctx.prec = 80
-        monthly = Decimal(0)
-        for r in subscriptions:
-            if r.effective_from <= as_of < r.effective_to:
-                if r.subscription_id in ids:
-                    raise ValueError('overlapping subscription schedules')
-                ids.add(r.subscription_id)
-                if r.verification in {'invoice_verified', 'manual_verified'}:
-                    monthly += r.monthly_gbp
-        return {'month': monthly, 'year': monthly * 12, 'day': monthly * 12 / Decimal('365.25')}
+    ids, active, verified = set(), [], []
+    for row in subscriptions:
+        if row.effective_from <= as_of < row.effective_to:
+            if row.subscription_id in ids:
+                raise ValueError('overlapping subscription schedules')
+            ids.add(row.subscription_id); active.append(row)
+            if row.verification in {'invoice_verified','manual_verified'}:
+                verified.append(row)
+    complete = (isinstance(coverage, Coverage) and coverage.supports(coverage.period_start, coverage.period_end, len(active))
+                and len(active) == len(verified) and coverage.period_start <= as_of < coverage.period_end)
+    month = add(r.monthly_gbp for r in verified) if complete else None
+    return {'state': 'VERIFIED' if complete else 'UNKNOWN', 'month': month,
+            'year': multiply(month,Decimal(12)) if month is not None else None,
+            'day': divide(multiply(month,Decimal(12)), Decimal('365.25')) if month is not None else None,
+            'observed_month': add(r.monthly_gbp for r in verified),
+            'excluded_estimates': sum(r.verification=='estimate' for r in active),
+            'unknown_records':sum(r.verification=='unverified' for r in active), 'evidence_count': len(active)}
 
 @dataclass(frozen=True)
 class BrokerComponent:
     account: str
-    environment: str
+    scope: Scope
     transaction_id: str
     component_key: str
     at: datetime
@@ -178,7 +226,7 @@ class BrokerComponent:
     fx_to_gbp: Decimal
     trade_id: str = ''
     def __post_init__(self):
-        if self.environment not in {'practice', 'live'} or self.kind not in {'realised_pnl', 'financing', 'commission', 'conversion', 'other_adjustment', 'capital_transfer'}:
+        if not isinstance(self.scope, Scope) or self.kind not in {'realised_pnl', 'financing', 'commission', 'conversion', 'other_adjustment', 'capital_transfer'}:
             raise ValueError('invalid broker classification')
         if not all((self.account, self.transaction_id, self.component_key)):
             raise ValueError('broker identity required')
@@ -189,97 +237,98 @@ class BrokerComponent:
         if self.fx_to_gbp <= 0 or (self.currency == 'GBP' and self.fx_to_gbp != 1):
             raise ValueError('invalid broker FX')
 
-def broker_totals(components, account, environment, start, end):
+def broker_totals(components, account, scope, start, end, coverage):
     start, end = instant(start), instant(end)
-    if end <= start or environment not in {'practice', 'live'} or not account:
-        raise ValueError('invalid broker scope/period')
-    seen, totals = {}, {k: Decimal(0) for k in ('realised_pnl', 'financing', 'commission', 'conversion', 'other_adjustment', 'capital_transfer')}
-    with localcontext() as ctx:
-        ctx.prec = 80
-        for row in components:
-            if row.account != account or row.environment != environment or not start <= row.at < end:
-                continue
-            key = (row.transaction_id, row.component_key)
-            if key in seen:
-                if seen[key] != row:
-                    raise ValueError('conflicting broker duplicate')
-                continue
-            seen[key] = row
-            totals[row.kind] += row.amount * row.fx_to_gbp
-        totals['net_trading'] = sum((totals[k] for k in ('realised_pnl', 'financing', 'commission', 'conversion', 'other_adjustment')), Decimal(0))
-    return totals
+    if end <= start or not isinstance(scope, Scope) or not account:
+        raise ValueError('explicit broker scope/period required')
+    seen, totals = {}, {k: Decimal(0) for k in ('realised_pnl','financing','commission','conversion','other_adjustment','capital_transfer')}
+    for row in components:
+        if row.account != account or row.scope != scope or not start <= row.at < end:
+            continue
+        key = (row.transaction_id, row.component_key)
+        if key in seen:
+            if seen[key] != row:
+                raise ValueError('conflicting broker duplicate')
+            continue
+        seen[key] = row
+        totals[row.kind] = add([totals[row.kind], convert(row.amount, row.fx_to_gbp)])
+    count = len({key[0] for key in seen})
+    complete = isinstance(coverage, Coverage) and coverage.supports(start, end, count)
+    observed = add(totals[k] for k in ('realised_pnl','financing','commission','conversion','other_adjustment'))
+    return {**totals, 'observed_net_trading': observed, 'net_trading': observed if complete else None,
+            'coverage_complete': complete, 'evidence_count': count, 'scope': scope, 'account': account}
 
-def economics(spend, totals, trades, environment, complete, *, system_environment='PRODUCTION',
-              financial_reality='ACTUAL', financial_state='REALISED', simulation_type=None):
-    """Observed subtotals remain labelled. Incomplete truth suppresses conclusions."""
-    spend = money(spend)
-    if type(complete) is not bool or isinstance(trades, bool) or not isinstance(trades, int) or trades < 0 or environment not in {'practice', 'live'}:
-        raise ValueError('invalid scope or denominator')
-    net = totals['net_trading']
-    with localcontext() as ctx:
-        ctx.prec = 80
-        actual_live = (environment == 'live' and system_environment == 'PRODUCTION' and
-                       financial_reality == 'ACTUAL' and financial_state == 'REALISED' and simulation_type is None)
-        economic = net - spend if complete and actual_live else None
-        return {'observed_spend_gbp': spend, 'observed_net_trading_gbp': net,
-                'complete': complete, 'environment': environment,
-                'net_economic_gbp': economic,
-                'remaining_break_even_gbp': max(-economic, Decimal(0)) if economic is not None else None,
-                'operationally_profitable': economic > 0 if economic is not None else None,
-                'allocated_cost_per_trade_gbp': spend / trades if complete and trades else None,
-                'net_profit_per_trade_gbp': (net - spend) / trades if complete and trades else None,
-                'unit_economics_basis': 'practice_broker_actual' if environment == 'practice' else 'scoped_live'}
 
-def reconcile(broker, opened, outcomes, predictions, as_of, outcome_due_at, account, environment):
-    """Scoped input lists, one account/environment, explicit EOD deadline supplied.
+def expense_totals(ledger, start, end, coverage):
+    """Cash and economic recognition are distinct; policy absence is unavailable."""
+    start, end = instant(start), instant(end)
+    if end <= start:
+        raise ValueError('valid period required')
+    # Coverage count is ALL effective expenditure evidence, not just the paid cohort.
+    rows = list(ledger.effective)
+    verified = [r for r in rows if r.verification in {'invoice_verified','manual_verified'}]
+    complete = isinstance(coverage, Coverage) and coverage.supports(start, end, len(rows)) and len(rows) == len(verified)
+    cash_known = all(r.paid_at is not None for r in verified)
+    cash = add(r.gbp for r in verified if r.paid_at is not None and start <= r.paid_at < end)
+    recognised, unknown = [], []
+    for row in verified:
+        if row.recognition_policy is None:
+            unknown.append(row.expense_id)
+        elif row.recognition_policy == 'point_in_time_v1':
+            if start <= row.incurred_at < end:
+                recognised.append(row.gbp)
+        else:
+            full = elapsed_seconds(row.billing_end-row.billing_start)
+            left = min(full,max(Decimal(0),elapsed_seconds(start-row.billing_start)))
+            right = min(full,max(Decimal(0),elapsed_seconds(end-row.billing_start)))
+            # Difference of cumulative rounded allocations: adjacent periods sum
+            # exactly to the full converted amount, including the final residue.
+            recognised.append(add([prorate(row.gbp,right,full),prorate(row.gbp,left,full).copy_negate()]))
+    return {'cash_spend': cash if complete and cash_known else None,
+            'economic_expense': add(recognised) if complete and not unknown else None,
+            'coverage_complete': complete, 'evidence_count': len(rows), 'policy_missing': tuple(unknown),
+            'observed_cash_spend': cash, 'recognition_policy': 'explicit_per_expense'}
 
-    Broker closure records contain trade_id, realised_pnl (account currency).
-    Opened records use trade_id=broker id and signal_id=Pine id. Outbound adapters
-    must retain account/environment scope, partial-close transactions and evidence.
-    """
-    as_of, outcome_due_at = instant(as_of), instant(outcome_due_at)
-    if not account or environment not in {'practice', 'live'}:
-        raise ValueError('scope required')
-    result = []
-    def index(rows, kind, key='trade_id'):
-        data = {}
-        for row in rows:
-            if row.get('account') != account or row.get('environment') != environment:
-                result.append((kind, '', 'scope_missing'))
-                continue
-            if kind in {'broker','outcome'} and not row.get('currency'):
-                result.append((kind, row.get(key) or '', 'currency_missing'))
-            ident = row.get(key)
-            if not ident:
-                result.append((kind, '', 'missing_identity'))
-                continue
-            if ident in data:
-                result.append((kind, ident, 'duplicate_identity'))
-            data[ident] = row
-        return data
-    b, o, t, p = index(broker, 'broker'), index(opened, 'opened'), index(outcomes, 'outcome'), index(predictions, 'prediction', 'signal_id')
-    for ident in sorted(set(b) | set(o) | set(t)):
-        if ident not in b:
-            result.append(('trade', ident, 'broker_record_missing'))
-        if ident not in o:
-            result.append(('trade', ident, 'opened_missing'))
-        elif not o[ident].get('signal_id') or o[ident]['signal_id'] not in p:
-            result.append(('trade', ident, 'prediction_missing'))
-        if ident in b and type(b[ident].get('closed')) is not bool:
-            result.append(('trade', ident, 'broker_state_missing'))
-        if ident in b and b[ident].get('closed') is True:
-            if ident not in t:
-                result.append(('trade', ident, 'outcome_overdue' if as_of >= outcome_due_at else 'pending_eod'))
-            else:
-                left, right = b[ident].get('realised_pnl'), t[ident].get('realised_pnl')
-                if left is None or right is None:
-                    result.append(('trade', ident, 'pnl_missing'))
-                elif not b[ident].get('currency') or not t[ident].get('currency'):
-                    pass # explicit currency_missing already emitted; do not compare unknown units
-                elif b[ident]['currency'] != t[ident]['currency']:
-                    result.append(('trade',ident,'currency_mismatch'))
-                elif money(left) != money(right):
-                    result.append(('trade', ident, 'pnl_mismatch'))
-        elif ident in t:
-            result.append(('trade', ident, 'outcome_without_broker_closure'))
-    return tuple(sorted(result))
+
+def project_economics(accounts, expenses, account_inventory, start, end, *, trade_count, denominator_basis):
+    """Sum eligible broker cash FIRST, subtract project spend ONCE. No defaults."""
+    if type(trade_count) is not int or trade_count < 0 or denominator_basis not in {'attempted_orders','filled_orders','closed_trades','partial_close_slices','transactions'}:
+        raise ValueError('explicit denominator required')
+    aliases = [r['account'] for r in accounts]
+    if len(set(aliases)) != len(aliases):
+        raise ValueError('duplicate account')
+    if not all(isinstance(r.get('scope'), Scope) for r in accounts):
+        raise ValueError('explicit account dimensions required')
+    eligible = [r for r in accounts if r['scope'].live_cash]
+    inventory_complete = (isinstance(account_inventory,Coverage) and account_inventory.supports(start,end,len(accounts)))
+    broker_complete = inventory_complete and all(r.get('coverage_complete') is True and r.get('net_trading') is not None for r in eligible)
+    net = add(r['net_trading'] for r in eligible) if broker_complete else None
+    cash = expenses.get('cash_spend')
+    economic = expenses.get('economic_expense')
+    complete = broker_complete and expenses.get('coverage_complete') is True and cash is not None
+    cash_result = add([net,cash.copy_negate()]) if complete else None
+    economic_result = add([net,economic.copy_negate()]) if broker_complete and expenses.get('coverage_complete') is True and economic is not None else None
+    valid_denominator = denominator_basis == 'closed_trades' and trade_count > 0 and bool(eligible)
+    return {'scope_level':'PROJECT', 'eligible_accounts':len(eligible), 'coverage_complete':complete,
+            'actual_net_trading_gbp':net, 'cash_spend_gbp':cash, 'economic_expense_gbp':economic,
+            'cash_net_economic_gbp':cash_result, 'net_economic_gbp':economic_result,
+            'remaining_cash_break_even_gbp':quantise(max(cash_result.copy_negate(),Decimal(0))) if cash_result is not None else None,
+            'operationally_profitable':economic_result > 0 if economic_result is not None else None,
+            'allocated_cost_per_trade_gbp':divide(economic,Decimal(trade_count)) if valid_denominator and economic_result is not None else None,
+            'net_profit_per_trade_gbp':divide(economic_result,Decimal(trade_count)) if valid_denominator and economic_result is not None else None,
+            'denominator_basis':denominator_basis, 'trade_count':trade_count,
+            'practice_profit_applied_to_break_even':False}
+
+
+def practice_unit_economics(totals, *, trade_count, denominator_basis):
+    if not isinstance(totals.get('scope'),Scope) or totals['scope'].broker_environment != 'OANDA_PRACTICE':
+        raise ValueError('Practice scope required')
+    if type(trade_count) is not int or trade_count < 0 or denominator_basis != 'closed_trades':
+        raise ValueError('closed-trade denominator required; cancelled attempts excluded')
+    value = totals.get('net_trading')
+    return {'basis':'HYPOTHETICAL_NON_CASH','actual_net_profit':None,
+            'hypothetical_net_per_trade':divide(value,Decimal(trade_count)) if value is not None and trade_count else None,
+            'trade_count':trade_count,'denominator_basis':denominator_basis}
+
+# Re-export governed lifecycle. No row-level parse failure may abort the run.
+from .reconciliation import reconcile, reconcile_run, ReconciliationJournal
