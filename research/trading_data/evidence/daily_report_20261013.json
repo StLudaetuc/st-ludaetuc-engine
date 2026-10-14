@@ -1,0 +1,40 @@
+{
+  "schema_version": "trading_intelligence_research_v1",
+  "reporting_date": "2026-10-13",
+  "timezone": "UTC",
+  "classification": "OBSERVED_INCOMPLETE",
+  "integrity": {
+    "broker_population_verified": false,
+    "bar_times_verified": false,
+    "last_sync_received_at": "2026-10-13T23:30:07.526676104Z",
+    "internal_linked": 18,
+    "internal_closed_observed": 18
+  },
+  "observed_activity": {
+    "evaluated": 68,
+    "approved": 25,
+    "rejected": 43,
+    "order_attempts": 25,
+    "filled_orders": 18,
+    "cancelled_orders": 7,
+    "closed_outcomes": 18,
+    "wins": 10,
+    "losses": 8
+  },
+  "finance_reference": null,
+  "research": {
+    "rejected_replay_status": "BLOCKED_INPUTS",
+    "profit_factor_status": "UNAVAILABLE",
+    "hypotheses": [
+      "Investigate edge rejection cohort after valid bar-time/plan capture",
+      "Measure spread sensitivity under explicit costs and out-of-sample splits"
+    ]
+  },
+  "limitations": [
+    "Counts are existing internal export observations, not OANDA account totals.",
+    "All exported candle event times off-grid; original bar-time validation missing.",
+    "Financing, fees, currency and broker transaction completeness unproved.",
+    "Raw rejected plans and indicator context absent from current export.",
+    "No strategy improvement or profitability conclusion established."
+  ]
+}

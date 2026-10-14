@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DRAFT Trading Intelligence Research Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reporting_date", "timezone", "classification", "integrity", "observed_activity", "finance_reference", "research", "limitations"],
+  "properties": {
+    "schema_version": {"const": "trading_intelligence_research_v1"},
+    "reporting_date": {"type": "string", "format": "date"},
+    "timezone": {"type": "string", "maxLength": 64},
+    "classification": {"enum": ["OBSERVED_INCOMPLETE", "RECONCILED_INPUTS_ONLY"]},
+    "integrity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["broker_population_verified", "bar_times_verified", "last_sync_received_at", "internal_linked", "internal_closed_observed"],
+      "properties": {
+        "broker_population_verified": {"type": "boolean"}, "bar_times_verified": {"type": "boolean"},
+        "last_sync_received_at": {"type": ["string", "null"], "format": "date-time"},
+        "internal_linked": {"type": ["integer", "null"], "minimum": 0},
+        "internal_closed_observed": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "observed_activity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["evaluated", "approved", "rejected", "order_attempts", "filled_orders", "cancelled_orders", "closed_outcomes", "wins", "losses"],
+      "properties": {
+        "evaluated": {"type": ["integer", "null"], "minimum": 0}, "approved": {"type": ["integer", "null"], "minimum": 0},
+        "rejected": {"type": ["integer", "null"], "minimum": 0}, "order_attempts": {"type": ["integer", "null"], "minimum": 0},
+        "filled_orders": {"type": ["integer", "null"], "minimum": 0}, "cancelled_orders": {"type": ["integer", "null"], "minimum": 0},
+        "closed_outcomes": {"type": ["integer", "null"], "minimum": 0}, "wins": {"type": ["integer", "null"], "minimum": 0},
+        "losses": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "finance_reference": {"type": ["string", "null"], "maxLength": 160},
+    "research": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rejected_replay_status", "profit_factor_status", "hypotheses"],
+      "properties": {
+        "rejected_replay_status": {"enum": ["BLOCKED_INPUTS", "HYPOTHETICAL_ONLY"]},
+        "profit_factor_status": {"enum": ["UNAVAILABLE", "FINANCE_VERIFIED_INPUT_REQUIRED"]},
+        "hypotheses": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 256}}
+      }
+    },
+    "limitations": {"type": "array", "minItems": 1, "maxItems": 30, "items": {"type": "string", "maxLength": 512}}
+  }
+}

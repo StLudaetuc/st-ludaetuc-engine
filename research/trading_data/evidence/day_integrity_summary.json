@@ -1,0 +1,91 @@
+{
+  "source": "READ_ONLY_EXISTING_ENGINE_ANALYTICS",
+  "window": {
+    "start": "2026-10-13T00:00:00+00:00",
+    "end": "2026-10-14T00:00:00+00:00"
+  },
+  "generated_at": "2026-10-14T22:28:56.648581+00:00",
+  "errors": {},
+  "day_counts": {
+    "predictions": 68,
+    "trade_opened": 25,
+    "trade_outcomes": 18
+  },
+  "order_status": {
+    "FILLED": 18,
+    "CANCELLED": 7
+  },
+  "decision_status": {
+    "rejected": 43,
+    "approved": 25
+  },
+  "rejections": {
+    "SIGNAL_SCORE_TOO_LOW": 18,
+    "CONTEXT_SCORE_TOO_LOW": 1,
+    "INSUFFICIENT_POST_GATE_EDGE": 22,
+    "SPREAD_TOO_WIDE": 2
+  },
+  "outcome_status": {
+    "win": 10,
+    "loss": 8
+  },
+  "day_bridge_rows": 18,
+  "day_bridge_distinct_broker_ids": 18,
+  "day_bridge_opened_predicted_nonnull": 18,
+  "internal_linkage_percent": "100.0% OF18 OBSERVED INTERNAL OUTCOMES ONLY",
+  "oanda_authoritative_closed_population": null,
+  "financing_complete": false,
+  "official_net_pnl": null,
+  "official_profit_factor": null,
+  "realized_r_nonnull": 0,
+  "preceding_window": {
+    "start": "2026-10-06T00:00:00+00:00",
+    "end": "2026-10-13T00:00:00+00:00"
+  },
+  "preceding_counts": {
+    "predictions": 336,
+    "trade_opened": 151,
+    "trade_outcomes": 111
+  },
+  "database_overview": [
+    {
+      "event_type": "market_data",
+      "n": 162942,
+      "first_event": "2026-10-01T00:30:00+00:00",
+      "last_event": "2026-10-14T22:28:18.291153+00:00"
+    },
+    {
+      "event_type": "prediction",
+      "n": 701,
+      "first_event": "2026-10-01T06:36:00+00:00",
+      "last_event": "2026-10-14T16:06:00+00:00"
+    },
+    {
+      "event_type": "trade_opened",
+      "n": 265,
+      "first_event": "2026-10-02T08:42:06+00:00",
+      "last_event": "2026-10-14T14:50:12+00:00"
+    },
+    {
+      "event_type": "trade_outcome",
+      "n": 220,
+      "first_event": "2026-10-01T00:34:08.918644+00:00",
+      "last_event": "2026-10-13T18:06:51.548229+00:00"
+    }
+  ],
+  "source_export_hashes": {
+    "preceding.json": "c4e3184d7c6b0fd957b0d16b3deeb66e3f342c07521eb908f838bf35ccb97678",
+    "strategy.json": "8c71c6bb088baded95df5e38c6cf5f980bcd39f67d42420fb1a59f78541414be",
+    "XAUUSD.json": "4a54973f6ec59223a6a1401aebeb4d416fb6e193194189acd946fee737d618d0",
+    "health.json": "8d04c7196dc8f17571b45ede8bc86e23f4a86e3baa41c4920b210080e66b8612",
+    "XAGUSD.json": "e2478fc60c00ae311eda731c6a54b9cb74c7aa4b267655ea5e52a16236438fc3",
+    "USDCAD.json": "f8dec11e15dba6c5e3100f39fc978109415cd72057b22f91eefce894f19e379a",
+    "USDJPY.json": "67ba09ee93f5f6874067fbcd0287ebd0ad81d8a5d21c5b136f6cb34efbe2c632",
+    "day.json": "a96135d49a63141c23e68d04173b9921f959875b61184a515c64dbc80710b10b",
+    "AUDUSD.json": "75052e27ecea4fad3100fae24ae8ab1670507609f3ff390ba4a278768d6d6857",
+    "GBPUSD.json": "2d68447b31dd3c15ada3fab9a510d7d0e53e113fa2396c073b7fcd47202e746f",
+    "EURUSD.json": "16bfaad67393b28385b4b08191e8588f18917ba84353db1a1867b084885ad52f"
+  },
+  "raw_source_snapshots_not_published": "private scratch only; obtain redacted signed manifests for independent evidence reproduction",
+  "sheets_headers_count": 637
+}

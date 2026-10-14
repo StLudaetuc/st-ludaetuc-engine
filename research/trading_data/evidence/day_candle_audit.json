@@ -1,0 +1,1006 @@
+[
+  {
+    "symbol": "GBPUSD",
+    "retrieved_at": "2026-10-14T22:29:02.868491+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "GBPUSD",
+          "timeframe": "10m",
+          "rows": 144,
+          "distinct_times": 144,
+          "first": "2026-10-13T00:00:48.535891+00:00",
+          "last": "2026-10-13T23:50:07.435599+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 144,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "GBPUSD",
+          "timeframe": "1m",
+          "rows": 1434,
+          "distinct_times": 1434,
+          "first": "2026-10-13T00:00:22.246976+00:00",
+          "last": "2026-10-13T23:59:01.323573+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1434,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T20:59:03.533380+00:00",
+              "before": "2026-10-13T21:01:09.908328+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:01:09.908328+00:00",
+              "before": "2026-10-13T21:05:03.568805+00:00",
+              "missing_grid_slots": 2
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "GBPUSD",
+          "timeframe": "2m",
+          "rows": 718,
+          "distinct_times": 718,
+          "first": "2026-10-13T00:00:12.533457+00:00",
+          "last": "2026-10-13T23:58:02.514005+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 718,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:00.457848+00:00",
+              "before": "2026-10-13T21:06:07.408199+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "GBPUSD",
+          "timeframe": "3m",
+          "rows": 479,
+          "distinct_times": 479,
+          "first": "2026-10-13T00:00:49.414496+00:00",
+          "last": "2026-10-13T23:57:09.923627+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 479,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "GBPUSD",
+          "timeframe": "5m",
+          "rows": 288,
+          "distinct_times": 288,
+          "first": "2026-10-13T00:00:14.051616+00:00",
+          "last": "2026-10-13T23:55:09.654592+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 288,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  },
+  {
+    "symbol": "EURUSD",
+    "retrieved_at": "2026-10-14T22:29:02.868628+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "EURUSD",
+          "timeframe": "10m",
+          "rows": 144,
+          "distinct_times": 144,
+          "first": "2026-10-13T00:00:13.999378+00:00",
+          "last": "2026-10-13T23:50:11.147415+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 144,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "EURUSD",
+          "timeframe": "1m",
+          "rows": 1427,
+          "distinct_times": 1427,
+          "first": "2026-10-13T00:00:36.412237+00:00",
+          "last": "2026-10-13T23:59:07.103994+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1427,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T20:59:03.776574+00:00",
+              "before": "2026-10-13T21:01:13.725298+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:01:13.725298+00:00",
+              "before": "2026-10-13T21:05:03.247121+00:00",
+              "missing_grid_slots": 2
+            },
+            {
+              "after": "2026-10-13T21:38:00.356547+00:00",
+              "before": "2026-10-13T21:40:00.501810+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:40:00.501810+00:00",
+              "before": "2026-10-13T21:42:29.033169+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "EURUSD",
+          "timeframe": "2m",
+          "rows": 718,
+          "distinct_times": 718,
+          "first": "2026-10-13T00:00:22.341113+00:00",
+          "last": "2026-10-13T23:58:05.307839+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 718,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:01.601729+00:00",
+              "before": "2026-10-13T21:06:04.425740+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "EURUSD",
+          "timeframe": "3m",
+          "rows": 479,
+          "distinct_times": 479,
+          "first": "2026-10-13T00:00:12.166427+00:00",
+          "last": "2026-10-13T23:57:05.868097+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 479,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "EURUSD",
+          "timeframe": "5m",
+          "rows": 288,
+          "distinct_times": 288,
+          "first": "2026-10-13T00:00:30.294988+00:00",
+          "last": "2026-10-13T23:55:06.130574+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 288,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  },
+  {
+    "symbol": "AUDUSD",
+    "retrieved_at": "2026-10-14T22:29:03.032483+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "AUDUSD",
+          "timeframe": "10m",
+          "rows": 144,
+          "distinct_times": 144,
+          "first": "2026-10-13T00:01:07.005372+00:00",
+          "last": "2026-10-13T23:50:13.450946+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 144,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "AUDUSD",
+          "timeframe": "1m",
+          "rows": 1407,
+          "distinct_times": 1407,
+          "first": "2026-10-13T00:00:54.249405+00:00",
+          "last": "2026-10-13T23:59:09.015893+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1407,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:02.375635+00:00",
+              "before": "2026-10-13T21:05:01.919418+00:00",
+              "missing_grid_slots": 2
+            },
+            {
+              "after": "2026-10-13T22:14:00.342956+00:00",
+              "before": "2026-10-13T22:16:00.799706+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T22:22:00.314545+00:00",
+              "before": "2026-10-13T22:24:04.489570+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T22:33:00.319682+00:00",
+              "before": "2026-10-13T22:37:10.568963+00:00",
+              "missing_grid_slots": 3
+            },
+            {
+              "after": "2026-10-13T23:12:00.334951+00:00",
+              "before": "2026-10-13T23:14:05.298842+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T23:25:00.310699+00:00",
+              "before": "2026-10-13T23:27:00.484213+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T23:27:00.484213+00:00",
+              "before": "2026-10-13T23:31:10.193848+00:00",
+              "missing_grid_slots": 3
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "AUDUSD",
+          "timeframe": "2m",
+          "rows": 714,
+          "distinct_times": 714,
+          "first": "2026-10-13T00:00:49.366037+00:00",
+          "last": "2026-10-13T23:58:02.840389+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 714,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:01.870844+00:00",
+              "before": "2026-10-13T21:06:03.369691+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T22:33:00.678866+00:00",
+              "before": "2026-10-13T22:38:26.382467+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T23:27:00.441412+00:00",
+              "before": "2026-10-13T23:32:28.029399+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "AUDUSD",
+          "timeframe": "3m",
+          "rows": 477,
+          "distinct_times": 477,
+          "first": "2026-10-13T00:00:34.100118+00:00",
+          "last": "2026-10-13T23:57:06.593652+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 477,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "AUDUSD",
+          "timeframe": "5m",
+          "rows": 288,
+          "distinct_times": 288,
+          "first": "2026-10-13T00:00:51.664994+00:00",
+          "last": "2026-10-13T23:55:28.207922+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 288,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  },
+  {
+    "symbol": "USDCAD",
+    "retrieved_at": "2026-10-14T22:29:09.099052+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "USDCAD",
+          "timeframe": "10m",
+          "rows": 144,
+          "distinct_times": 144,
+          "first": "2026-10-13T00:00:11.630180+00:00",
+          "last": "2026-10-13T23:50:12.299560+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 144,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDCAD",
+          "timeframe": "1m",
+          "rows": 1434,
+          "distinct_times": 1434,
+          "first": "2026-10-13T00:00:34.295502+00:00",
+          "last": "2026-10-13T23:59:00.793791+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1434,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T20:59:04.589883+00:00",
+              "before": "2026-10-13T21:01:13.958072+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:01:13.958072+00:00",
+              "before": "2026-10-13T21:05:01.958003+00:00",
+              "missing_grid_slots": 2
+            },
+            {
+              "after": "2026-10-13T21:08:00.284639+00:00",
+              "before": "2026-10-13T21:10:00.602015+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDCAD",
+          "timeframe": "2m",
+          "rows": 718,
+          "distinct_times": 718,
+          "first": "2026-10-13T00:00:20.113180+00:00",
+          "last": "2026-10-13T23:58:22.835228+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 718,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:01.965715+00:00",
+              "before": "2026-10-13T21:06:19.143296+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDCAD",
+          "timeframe": "3m",
+          "rows": 479,
+          "distinct_times": 479,
+          "first": "2026-10-13T00:00:18.843658+00:00",
+          "last": "2026-10-13T23:57:05.805572+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 479,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDCAD",
+          "timeframe": "5m",
+          "rows": 288,
+          "distinct_times": 288,
+          "first": "2026-10-13T00:00:09.599242+00:00",
+          "last": "2026-10-13T23:55:05.800946+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 288,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  },
+  {
+    "symbol": "USDJPY",
+    "retrieved_at": "2026-10-14T22:29:09.192359+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "USDJPY",
+          "timeframe": "10m",
+          "rows": 144,
+          "distinct_times": 144,
+          "first": "2026-10-13T00:00:31.102622+00:00",
+          "last": "2026-10-13T23:50:05.526037+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 144,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDJPY",
+          "timeframe": "1m",
+          "rows": 1430,
+          "distinct_times": 1430,
+          "first": "2026-10-13T00:00:34.139492+00:00",
+          "last": "2026-10-13T23:59:00.911426+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1430,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T20:59:03.449282+00:00",
+              "before": "2026-10-13T21:01:10.198056+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:01:10.198056+00:00",
+              "before": "2026-10-13T21:05:02.137221+00:00",
+              "missing_grid_slots": 2
+            },
+            {
+              "after": "2026-10-13T21:07:00.296850+00:00",
+              "before": "2026-10-13T21:09:00.368041+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:09:00.368041+00:00",
+              "before": "2026-10-13T21:11:01.091062+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:11:01.091062+00:00",
+              "before": "2026-10-13T21:13:43.185409+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDJPY",
+          "timeframe": "2m",
+          "rows": 717,
+          "distinct_times": 717,
+          "first": "2026-10-13T00:00:48.543652+00:00",
+          "last": "2026-10-13T23:58:04.285840+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 717,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:09.851423+00:00",
+              "before": "2026-10-13T21:07:00.260950+00:00",
+              "missing_grid_slots": 1
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDJPY",
+          "timeframe": "3m",
+          "rows": 479,
+          "distinct_times": 479,
+          "first": "2026-10-13T00:00:26.702131+00:00",
+          "last": "2026-10-13T23:57:00.666840+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 479,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "USDJPY",
+          "timeframe": "5m",
+          "rows": 288,
+          "distinct_times": 288,
+          "first": "2026-10-13T00:00:16.659952+00:00",
+          "last": "2026-10-13T23:55:10.202736+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 288,
+          "interior_gap_candidates": [],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  },
+  {
+    "symbol": "XAUUSD",
+    "retrieved_at": "2026-10-14T22:29:09.159414+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "XAUUSD",
+          "timeframe": "10m",
+          "rows": 138,
+          "distinct_times": 138,
+          "first": "2026-10-13T00:00:11.672569+00:00",
+          "last": "2026-10-13T23:50:08.037155+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 138,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:13.999123+00:00",
+              "before": "2026-10-13T22:10:04.005496+00:00",
+              "missing_grid_slots": 5
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAUUSD",
+          "timeframe": "1m",
+          "rows": 1376,
+          "distinct_times": 1376,
+          "first": "2026-10-13T00:00:08.426448+00:00",
+          "last": "2026-10-13T23:59:02.513395+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1376,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T20:59:03.451955+00:00",
+              "before": "2026-10-13T21:01:09.890676+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:01:09.890676+00:00",
+              "before": "2026-10-13T22:05:02.618718+00:00",
+              "missing_grid_slots": 62
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAUUSD",
+          "timeframe": "2m",
+          "rows": 688,
+          "distinct_times": 688,
+          "first": "2026-10-13T00:00:10.297956+00:00",
+          "last": "2026-10-13T23:58:01.557274+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 688,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:09.910969+00:00",
+              "before": "2026-10-13T22:06:03.061917+00:00",
+              "missing_grid_slots": 31
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAUUSD",
+          "timeframe": "3m",
+          "rows": 459,
+          "distinct_times": 459,
+          "first": "2026-10-13T00:00:08.367737+00:00",
+          "last": "2026-10-13T23:57:03.790074+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 459,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:08.243678+00:00",
+              "before": "2026-10-13T22:06:03.295250+00:00",
+              "missing_grid_slots": 20
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAUUSD",
+          "timeframe": "5m",
+          "rows": 276,
+          "distinct_times": 276,
+          "first": "2026-10-13T00:00:08.774379+00:00",
+          "last": "2026-10-13T23:55:07.570534+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 276,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:06.240206+00:00",
+              "before": "2026-10-13T22:05:02.443559+00:00",
+              "missing_grid_slots": 11
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  },
+  {
+    "symbol": "XAGUSD",
+    "retrieved_at": "2026-10-14T22:29:15.310681+00:00",
+    "limit": 15000,
+    "errors": {},
+    "audit": {
+      "streams": [
+        {
+          "instrument": "XAGUSD",
+          "timeframe": "10m",
+          "rows": 138,
+          "distinct_times": 138,
+          "first": "2026-10-13T00:00:18.906178+00:00",
+          "last": "2026-10-13T23:50:08.057294+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 138,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:01.780598+00:00",
+              "before": "2026-10-13T22:10:04.540280+00:00",
+              "missing_grid_slots": 5
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAGUSD",
+          "timeframe": "1m",
+          "rows": 1376,
+          "distinct_times": 1376,
+          "first": "2026-10-13T00:00:12.142746+00:00",
+          "last": "2026-10-13T23:59:02.507360+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 1376,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T20:59:03.446042+00:00",
+              "before": "2026-10-13T21:01:04.815554+00:00",
+              "missing_grid_slots": 1
+            },
+            {
+              "after": "2026-10-13T21:01:04.815554+00:00",
+              "before": "2026-10-13T22:05:02.052120+00:00",
+              "missing_grid_slots": 62
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAGUSD",
+          "timeframe": "2m",
+          "rows": 688,
+          "distinct_times": 688,
+          "first": "2026-10-13T00:00:32.392416+00:00",
+          "last": "2026-10-13T23:58:01.867557+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 688,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:15.095192+00:00",
+              "before": "2026-10-13T22:06:03.284596+00:00",
+              "missing_grid_slots": 31
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAGUSD",
+          "timeframe": "3m",
+          "rows": 459,
+          "distinct_times": 459,
+          "first": "2026-10-13T00:00:34.216880+00:00",
+          "last": "2026-10-13T23:57:04.160555+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 459,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:03.662642+00:00",
+              "before": "2026-10-13T22:06:03.008857+00:00",
+              "missing_grid_slots": 20
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        },
+        {
+          "instrument": "XAGUSD",
+          "timeframe": "5m",
+          "rows": 276,
+          "distinct_times": 276,
+          "first": "2026-10-13T00:00:30.527051+00:00",
+          "last": "2026-10-13T23:55:06.388933+00:00",
+          "duplicate_replays": 0,
+          "conflicting_timestamps": 0,
+          "out_of_order_arrivals": 0,
+          "off_grid": 276,
+          "interior_gap_candidates": [
+            {
+              "after": "2026-10-13T21:01:02.137515+00:00",
+              "before": "2026-10-13T22:05:02.046647+00:00",
+              "missing_grid_slots": 11
+            }
+          ],
+          "missing_expected": null,
+          "unexpected_slots": null,
+          "calendar_verified": false,
+          "complete": false,
+          "volume_missing": 0,
+          "received_at_latency": "UNAVAILABLE_UNLESS_SOURCE_EXPORT_INCLUDES_RECEIPT",
+          "indicators": "NOT_EXPOSED_BY_CURRENT_EXPORT"
+        }
+      ],
+      "malformed": [],
+      "source_completeness": "UNPROVED"
+    }
+  }
+]
