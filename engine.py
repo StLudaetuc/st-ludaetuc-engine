@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from analytics_access_control import AnalyticsAccessControl
 from pydantic import BaseModel
 from shadow_scorer import shadow_score_0_100
 
@@ -1316,6 +1317,9 @@ def _build_shadow_features(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 engine = TradingSignalEvaluationEngine()
 app = FastAPI(title="St Ludaetuc Manus Engine", version=ENGINE_VERSION)
+# Contain analytics before legacy handlers; trading routes bypass this middleware.
+app.add_middleware(AnalyticsAccessControl)
+
 
 
 class MarketDataTick(BaseModel):
