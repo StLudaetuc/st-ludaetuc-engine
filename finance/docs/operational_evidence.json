@@ -1,0 +1,23 @@
+{
+  "source_class": "CEO_SUPPLIED_READ_ONLY_VERIFICATION_AND_PREVIOUS_BOUNDED_AUDIT",
+  "market_data_status": "RESOLVED_PENDING_FULL_COVERAGE_VERIFICATION",
+  "latest_window_duration_hours": 7,
+  "latest_market_data_http_200": 6338,
+  "latest_market_data_http_422": 0,
+  "latest_observed_literal_ticker_failures": 0,
+  "preceding_window_duration_hours": 7,
+  "preceding_market_data_http_422": 1049,
+  "exact_market_window_bounds": null,
+  "full_symbol_timeframe_coverage_proven": false,
+  "historical_order_evidence_window": {
+    "start": "2026-10-06T00:00:00Z",
+    "end": "2026-10-13T07:25:00Z",
+    "opened_or_order_records": 155,
+    "filled_records": 112,
+    "cancelled_records": 43,
+    "http_200_is_execution": false
+  },
+  "closure_sync_expectation": "EOD_RECONCILIATION",
+  "event_time_equals_receipt_time": false,
+  "legacy_realised_pnl_is_complete_finance_truth": false
+}

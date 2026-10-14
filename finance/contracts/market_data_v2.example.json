@@ -1,0 +1,22 @@
+{
+  "schema_version": "market_data_v2",
+  "source": "tradingview",
+  "ticker": "GBPUSD",
+  "ticker_id": "OANDA:GBPUSD",
+  "provider": "OANDA",
+  "asset_type": "forex",
+  "base_currency": "GBP",
+  "quote_currency": "USD",
+  "timeframe": "1",
+  "bar_open_time": 1791763200000,
+  "bar_close_time": 1791763260000,
+  "open": 1.32,
+  "high": 1.321,
+  "low": 1.319,
+  "close": 1.3205,
+  "volume": 123,
+  "minimum_tick": 1e-05,
+  "is_confirmed": true,
+  "interval": "1",
+  "time": 1791763200000
+}

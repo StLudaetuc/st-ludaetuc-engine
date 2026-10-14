@@ -1,0 +1,5 @@
+-r requirements.txt
+pglast==8.5
+
+# Optional local disposable runtime validation only
+psycopg[binary]==3.2.9

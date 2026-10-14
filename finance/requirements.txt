@@ -1,0 +1,2 @@
+# Finance-only serializer. Deliberately not in the trading engine requirements.
+jsonschema==4.26.0

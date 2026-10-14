@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:st-ludaetuc:market-data:v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "ticker",
+    "ticker_id",
+    "provider",
+    "asset_type",
+    "base_currency",
+    "quote_currency",
+    "timeframe",
+    "bar_open_time",
+    "bar_close_time",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "minimum_tick",
+    "is_confirmed",
+    "interval",
+    "time"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "market_data_v2"
+    },
+    "source": {
+      "const": "tradingview"
+    },
+    "ticker": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^{}]+$"
+    },
+    "ticker_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^{}]+$"
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^{}]+$"
+    },
+    "asset_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[^{}]+$"
+    },
+    "base_currency": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 12
+    },
+    "quote_currency": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 12
+    },
+    "timeframe": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^[^{}]+$"
+    },
+    "bar_open_time": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "bar_close_time": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "open": {
+      "type": "number"
+    },
+    "high": {
+      "type": "number"
+    },
+    "low": {
+      "type": "number"
+    },
+    "close": {
+      "type": "number"
+    },
+    "volume": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "minimum_tick": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "is_confirmed": {
+      "type": "boolean"
+    },
+    "interval": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^[^{}]+$"
+    },
+    "time": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  }
+}
