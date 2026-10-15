@@ -1,0 +1,33 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"urn:stludaetuc:draft:historical-research-reader-v1",
+  "type":"object","additionalProperties":false,
+  "required":["schema_version","manifest_hash","population_hash","window_status","research_window_complete","rows","next_event_id"],
+  "properties":{
+    "schema_version":{"const":"historical_research_reader_v1"},
+    "manifest_hash":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "population_hash":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "window_status":{"enum":["COMPLETE_CAPTURED_SNAPSHOT","INCOMPLETE_OR_UNPROVED","RECEIPT_SNAPSHOT_ONLY_SOURCE_WINDOW_UNPROVED"]},
+    "research_window_complete":{"type":"boolean"},
+    "next_event_id":{"type":["string","null"],"maxLength":160},
+    "rows":{"type":"array","maxItems":1000,"items":{
+      "type":"object","additionalProperties":false,
+      "required":["event_id","instrument","timeframe","source_id","environment","source_open_utc","source_close_utc","payload_digest","source_version","quality_flags","timing_flags","recovery_state","research_eligible","eligibility","calendar_version","ohlcv","feature_availability"],
+      "properties":{
+        "event_id":{"type":"string","maxLength":160},
+        "instrument":{"type":"string","maxLength":20},"timeframe":{"type":"string","maxLength":10},
+        "source_id":{"type":"string","maxLength":160},"environment":{"enum":["production","shadow","development","test"]},
+        "source_open_utc":{"type":["string","null"]},"source_close_utc":{"type":["string","null"]},
+        "payload_digest":{"type":["string","null"],"pattern":"^[0-9a-f]{64}$"},
+        "source_version":{"type":["string","integer","null"]},
+        "quality_flags":{"type":"array","maxItems":64,"items":{"type":"string","maxLength":80}},
+        "timing_flags":{"type":"array","maxItems":16,"items":{"type":"string","maxLength":80}},
+        "recovery_state":{"enum":["ORIGINAL_TIMESTAMP_VERIFIED","RECOVERABLE_WITH_SOURCE_EVIDENCE","ESTIMATED_NOT_AUTHORITATIVE","UNRECOVERABLE","NOT_YET_ASSESSED"]},
+        "research_eligible":{"type":"boolean"},"eligibility":{"type":"object","maxProperties":6,"additionalProperties":{"type":"string","maxLength":80}},
+        "calendar_version":{"type":["string","null"],"maxLength":160},
+        "ohlcv":{"type":"object","maxProperties":5,"additionalProperties":{"type":"string","maxLength":80}},
+        "feature_availability":{"type":"object","maxProperties":6,"additionalProperties":{"type":"boolean"}}
+      }
+    }}
+  }
+}

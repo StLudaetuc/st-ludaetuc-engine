@@ -1,0 +1,364 @@
+{
+  "schema_version": "historical_population_summary_v1",
+  "source": "CEO_REPORTED_READ_ONLY_POSTGRESQL_SUMMARY_IN_20261015_ASSIGNMENT_NOT_INDEPENDENTLY_REQUERIED",
+  "observed_total": 164209,
+  "reported_iso_time": 121309,
+  "reported_epoch_ms_time_open": 42900,
+  "reported_missing_both": 0,
+  "raw_records_validated": 0,
+  "timestamp_validity": "UNPROVED",
+  "population_completeness": "UNPROVED",
+  "postgres_runtime": "UNPROVED",
+  "streams": [
+    {
+      "instrument": "AUDUSD",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "AUDUSD",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "AUDUSD",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "AUDUSD",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "AUDUSD",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "EURUSD",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "EURUSD",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "EURUSD",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "EURUSD",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "EURUSD",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "GBPUSD",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "GBPUSD",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "GBPUSD",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "GBPUSD",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "GBPUSD",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDCAD",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDCAD",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDCAD",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDCAD",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDCAD",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDJPY",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDJPY",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDJPY",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDJPY",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "USDJPY",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAGUSD",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAGUSD",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAGUSD",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAGUSD",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAGUSD",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAUUSD",
+      "timeframe": "1m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAUUSD",
+      "timeframe": "2m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAUUSD",
+      "timeframe": "3m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAUUSD",
+      "timeframe": "5m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    },
+    {
+      "instrument": "XAUUSD",
+      "timeframe": "10m",
+      "reported_source_field_presence": true,
+      "raw_validated": 0,
+      "invalid_timestamp_count": null,
+      "missing_expected_intervals": null,
+      "recovery_state": "NOT_YET_ASSESSED",
+      "research_readiness": "BLOCKED_ON_ROW_LEVEL_EVIDENCE"
+    }
+  ]
+}

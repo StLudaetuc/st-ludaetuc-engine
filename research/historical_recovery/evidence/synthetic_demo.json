@@ -1,0 +1,513 @@
+{
+  "classification": "SYNTHETIC_ONLY_NOT_PRODUCTION_EVIDENCE",
+  "input_events": [
+    {
+      "event_id": "0000000000000000000000000000000000000000000000000000000000000001",
+      "event_type": "market_data",
+      "origin": "tradingview",
+      "instrument": "GBPUSD",
+      "timeframe": "1m",
+      "event_time": "2026-10-13T00:00:03+00:00",
+      "received_at": "2026-10-13T00:01:02+00:00",
+      "schema_version": "engine-event-v1",
+      "environment": "test",
+      "retry_count": 0,
+      "payload": {
+        "ticker": "GBPUSD",
+        "interval": "1",
+        "schema_version": "legacy-logger-fixture-v1",
+        "source": "tradingview",
+        "confirmed": true,
+        "open": "1.2",
+        "high": "1.3",
+        "low": "1.1",
+        "close": "1.25",
+        "volume": "100",
+        "indicators": {
+          "ema_fast": "1.21",
+          "rsi": "55",
+          "atr": "0.01",
+          "adx": "20",
+          "macd_line": "0.002",
+          "bb_upper": "1.3",
+          "unmapped_source_field": null
+        },
+        "time": "2026-10-13T00:00:00+00:00",
+        "time_close": "2026-10-13T00:01:00+00:00"
+      }
+    },
+    {
+      "event_id": "0000000000000000000000000000000000000000000000000000000000000002",
+      "event_type": "market_data",
+      "origin": "tradingview",
+      "instrument": "GBPUSD",
+      "timeframe": "1m",
+      "event_time": "2026-10-13T00:01:03+00:00",
+      "received_at": "2026-10-13T00:02:02+00:00",
+      "schema_version": "engine-event-v1",
+      "environment": "test",
+      "retry_count": 0,
+      "payload": {
+        "ticker": "GBPUSD",
+        "interval": "1",
+        "schema_version": "v2-logger-fixture-v2",
+        "source": "tradingview",
+        "confirmed": true,
+        "open": "1.2",
+        "high": "1.3",
+        "low": "1.1",
+        "close": "1.25",
+        "volume": "100",
+        "indicators": {
+          "ema_fast": "1.21",
+          "rsi": "55",
+          "atr": "0.01",
+          "adx": "20",
+          "macd_line": "0.002",
+          "bb_upper": "1.3",
+          "unmapped_source_field": null
+        },
+        "time_open": 1791849660000,
+        "time_close": 1791849720000
+      }
+    },
+    {
+      "event_id": "0000000000000000000000000000000000000000000000000000000000000003",
+      "event_type": "market_data",
+      "origin": "tradingview",
+      "instrument": "GBPUSD",
+      "timeframe": "1m",
+      "event_time": "2026-10-13T00:02:03+00:00",
+      "received_at": "2026-10-13T00:03:02+00:00",
+      "schema_version": "engine-event-v1",
+      "environment": "test",
+      "retry_count": 0,
+      "payload": {
+        "ticker": "GBPUSD",
+        "interval": "1",
+        "schema_version": "v2-logger-fixture-v2",
+        "source": "tradingview",
+        "confirmed": true,
+        "open": "1.2",
+        "high": "1.3",
+        "low": "1.1",
+        "close": "1.25",
+        "volume": "100",
+        "indicators": {
+          "ema_fast": "1.21",
+          "rsi": "55",
+          "atr": "0.01",
+          "adx": "20",
+          "macd_line": "0.002",
+          "bb_upper": "1.3",
+          "unmapped_source_field": null
+        },
+        "time_open": 1791849720000,
+        "time_close": 1791849780000
+      }
+    }
+  ],
+  "quality_summary": {
+    "contract": "historical_quality_v1",
+    "window": {
+      "start": "2026-10-13T00:00:00+00:00",
+      "end": "2026-10-13T00:03:00+00:00"
+    },
+    "scope": {
+      "environment": "test",
+      "source_id": "tradingview",
+      "instrument": "GBPUSD",
+      "timeframe": "1m"
+    },
+    "record_count": 3,
+    "normalized_count": 3,
+    "unique_source_candles": 3,
+    "duplicate_bar_groups": [],
+    "conflicting_duplicates": [],
+    "repeated_event_records": 0,
+    "conflicting_event_ids": [],
+    "validation_flag_counts": {},
+    "invalid_timestamp_counts": {},
+    "invalid_ohlcv_count": 0,
+    "timeframe_inconsistency_count": 0,
+    "session_calendar_exception_count": 0,
+    "late_delivery": 0,
+    "source_time_regressions_in_receipt_order": 0,
+    "receipt_order_limitation": "received_at can be replaced on retry; original delivery sequence unproved",
+    "nominal_off_grid_count": 0,
+    "calendar_verified": true,
+    "missing_expected_intervals": [],
+    "unexpected_source_slots": [],
+    "feature_availability": {
+      "EMA": 3,
+      "RSI": 3,
+      "ATR": 3,
+      "ADX": 3,
+      "MACD": 3,
+      "BOLLINGER": 3
+    },
+    "recovery_counts": {
+      "ORIGINAL_TIMESTAMP_VERIFIED": 3
+    },
+    "eligible_record_count": 3,
+    "source_population_status": "COMPLETE_CAPTURED_SNAPSHOT",
+    "calendar_window_status": "COMPLETE_EXPECTED_SLOTS",
+    "dataset_complete_for_research": true,
+    "malformed_records": [],
+    "projection_population_hash": "31b6008f9c09a7ef2c043d391c9ad504f31d7cf910011117812eab4f56b018e4",
+    "manifest_hash": "a6e1ca9c7cced2d952219e4496a5af3d24171eed01d37af51358bce6d90afc1b"
+  },
+  "reader_page": {
+    "schema_version": "historical_research_reader_v1",
+    "manifest_hash": "a6e1ca9c7cced2d952219e4496a5af3d24171eed01d37af51358bce6d90afc1b",
+    "population_hash": "31b6008f9c09a7ef2c043d391c9ad504f31d7cf910011117812eab4f56b018e4",
+    "window_status": "COMPLETE_CAPTURED_SNAPSHOT",
+    "research_window_complete": true,
+    "rows": [
+      {
+        "event_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "instrument": "GBPUSD",
+        "timeframe": "1m",
+        "source_id": "tradingview",
+        "environment": "test",
+        "source_open_utc": "2026-10-13T00:00:00+00:00",
+        "source_close_utc": "2026-10-13T00:01:00+00:00",
+        "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+        "source_version": "legacy-logger-fixture-v1",
+        "quality_flags": [],
+        "timing_flags": [],
+        "recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED",
+        "research_eligible": true,
+        "eligibility": {
+          "descriptive_analysis": "ELIGIBLE",
+          "technical_indicator_research": "ELIGIBLE_SOURCE_FEATURES_ONLY",
+          "signal_candle_linkage": "PENDING_SIGNAL_EVIDENCE",
+          "rejected_trade_replay": "PENDING_COMPLETE_WINDOW_AND_REPLAY_VALIDATION",
+          "backtesting": "PENDING_COMPLETE_WINDOW_AND_EXECUTION_MODEL",
+          "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
+        },
+        "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
+        "ohlcv": {
+          "open": "1.2",
+          "high": "1.3",
+          "low": "1.1",
+          "close": "1.25",
+          "volume": "100"
+        },
+        "feature_availability": {
+          "EMA": true,
+          "RSI": true,
+          "ATR": true,
+          "ADX": true,
+          "MACD": true,
+          "BOLLINGER": true
+        }
+      },
+      {
+        "event_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "instrument": "GBPUSD",
+        "timeframe": "1m",
+        "source_id": "tradingview",
+        "environment": "test",
+        "source_open_utc": "2026-10-13T00:01:00+00:00",
+        "source_close_utc": "2026-10-13T00:02:00+00:00",
+        "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+        "source_version": "v2-logger-fixture-v2",
+        "quality_flags": [],
+        "timing_flags": [],
+        "recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED",
+        "research_eligible": true,
+        "eligibility": {
+          "descriptive_analysis": "ELIGIBLE",
+          "technical_indicator_research": "ELIGIBLE_SOURCE_FEATURES_ONLY",
+          "signal_candle_linkage": "PENDING_SIGNAL_EVIDENCE",
+          "rejected_trade_replay": "PENDING_COMPLETE_WINDOW_AND_REPLAY_VALIDATION",
+          "backtesting": "PENDING_COMPLETE_WINDOW_AND_EXECUTION_MODEL",
+          "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
+        },
+        "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
+        "ohlcv": {
+          "open": "1.2",
+          "high": "1.3",
+          "low": "1.1",
+          "close": "1.25",
+          "volume": "100"
+        },
+        "feature_availability": {
+          "EMA": true,
+          "RSI": true,
+          "ATR": true,
+          "ADX": true,
+          "MACD": true,
+          "BOLLINGER": true
+        }
+      },
+      {
+        "event_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "instrument": "GBPUSD",
+        "timeframe": "1m",
+        "source_id": "tradingview",
+        "environment": "test",
+        "source_open_utc": "2026-10-13T00:02:00+00:00",
+        "source_close_utc": "2026-10-13T00:03:00+00:00",
+        "payload_digest": "625ab86f1e0b131fd9239e8fc0c30f3fb779a8521ad785d4f3971695628bf072",
+        "source_version": "v2-logger-fixture-v2",
+        "quality_flags": [],
+        "timing_flags": [],
+        "recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED",
+        "research_eligible": true,
+        "eligibility": {
+          "descriptive_analysis": "ELIGIBLE",
+          "technical_indicator_research": "ELIGIBLE_SOURCE_FEATURES_ONLY",
+          "signal_candle_linkage": "PENDING_SIGNAL_EVIDENCE",
+          "rejected_trade_replay": "PENDING_COMPLETE_WINDOW_AND_REPLAY_VALIDATION",
+          "backtesting": "PENDING_COMPLETE_WINDOW_AND_EXECUTION_MODEL",
+          "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
+        },
+        "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
+        "ohlcv": {
+          "open": "1.2",
+          "high": "1.3",
+          "low": "1.1",
+          "close": "1.25",
+          "volume": "100"
+        },
+        "feature_availability": {
+          "EMA": true,
+          "RSI": true,
+          "ATR": true,
+          "ADX": true,
+          "MACD": true,
+          "BOLLINGER": true
+        }
+      }
+    ],
+    "next_event_id": null
+  },
+  "normalized_examples": [
+    {
+      "normalizer_version": "historical_normalizer_v1",
+      "digest_encoding": "canonical_json_value_v1",
+      "event_id": "0000000000000000000000000000000000000000000000000000000000000001",
+      "instrument": "GBPUSD",
+      "timeframe": "1m",
+      "source_format": "LEGACY_ISO",
+      "source_version": "legacy-logger-fixture-v1",
+      "source_id": "tradingview",
+      "environment": "test",
+      "provenance_references": [
+        "synthetic-fixture-manifest-v1"
+      ],
+      "quality_flags": [],
+      "timing_flags": [],
+      "eligibility_blockers": [],
+      "event_schema_version": "engine-event-v1",
+      "declared_source_versions": {
+        "schema_version": "legacy-logger-fixture-v1"
+      },
+      "version_evidence_basis": "payload",
+      "receipt_latency_seconds": "2",
+      "stored_time_disagrees": true,
+      "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
+      "calendar_digest": "808b3996532e20dea9f0b4828238798cb0d205e3d230cdcaf44121ca14dce99c",
+      "nominal_grid_aligned": true,
+      "source_open_utc": "2026-10-13T00:00:00+00:00",
+      "source_close_utc": "2026-10-13T00:01:00+00:00",
+      "stored_event_time": "2026-10-13T00:00:03+00:00",
+      "received_at": "2026-10-13T00:01:02+00:00",
+      "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+      "event_evidence_digest": "221eaa30353aba37557bb3599c114ade6a8e2e9f440a2aaaab5de5dee16d8376",
+      "original_event": {
+        "event_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "event_type": "market_data",
+        "origin": "tradingview",
+        "instrument": "GBPUSD",
+        "timeframe": "1m",
+        "event_time": "2026-10-13T00:00:03+00:00",
+        "received_at": "2026-10-13T00:01:02+00:00",
+        "schema_version": "engine-event-v1",
+        "environment": "test",
+        "retry_count": 0,
+        "payload": {
+          "ticker": "GBPUSD",
+          "interval": "1",
+          "schema_version": "legacy-logger-fixture-v1",
+          "source": "tradingview",
+          "confirmed": true,
+          "open": "1.2",
+          "high": "1.3",
+          "low": "1.1",
+          "close": "1.25",
+          "volume": "100",
+          "indicators": {
+            "ema_fast": "1.21",
+            "rsi": "55",
+            "atr": "0.01",
+            "adx": "20",
+            "macd_line": "0.002",
+            "bb_upper": "1.3",
+            "unmapped_source_field": null
+          },
+          "time": "2026-10-13T00:00:00+00:00",
+          "time_close": "2026-10-13T00:01:00+00:00"
+        }
+      },
+      "ohlcv": {
+        "open": "1.2",
+        "high": "1.3",
+        "low": "1.1",
+        "close": "1.25",
+        "volume": "100"
+      },
+      "features": {
+        "original": {
+          "indicators": {
+            "ema_fast": "1.21",
+            "rsi": "55",
+            "atr": "0.01",
+            "adx": "20",
+            "macd_line": "0.002",
+            "bb_upper": "1.3",
+            "unmapped_source_field": null
+          }
+        },
+        "availability": {
+          "EMA": true,
+          "RSI": true,
+          "ATR": true,
+          "ADX": true,
+          "MACD": true,
+          "BOLLINGER": true
+        },
+        "source_timestamp": "2026-10-13T00:00:00+00:00",
+        "source_version": "legacy-logger-fixture-v1",
+        "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+        "method": "PRESERVED_SOURCE_FIELDS_NO_RECOMPUTATION"
+      },
+      "validation_state": "VALIDATED",
+      "recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED",
+      "eligibility": {
+        "descriptive_analysis": "ELIGIBLE",
+        "technical_indicator_research": "ELIGIBLE_SOURCE_FEATURES_ONLY",
+        "signal_candle_linkage": "PENDING_SIGNAL_EVIDENCE",
+        "rejected_trade_replay": "PENDING_COMPLETE_WINDOW_AND_REPLAY_VALIDATION",
+        "backtesting": "PENDING_COMPLETE_WINDOW_AND_EXECUTION_MODEL",
+        "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
+      },
+      "research_eligible": true,
+      "projection_digest": "7a06fd2fe82b84285d5ee5bd576d81530c00004aa2d79411ebb9bd6f1b844bd9"
+    },
+    {
+      "normalizer_version": "historical_normalizer_v1",
+      "digest_encoding": "canonical_json_value_v1",
+      "event_id": "0000000000000000000000000000000000000000000000000000000000000002",
+      "instrument": "GBPUSD",
+      "timeframe": "1m",
+      "source_format": "V2_EPOCH_MS",
+      "source_version": "v2-logger-fixture-v2",
+      "source_id": "tradingview",
+      "environment": "test",
+      "provenance_references": [
+        "synthetic-fixture-manifest-v1"
+      ],
+      "quality_flags": [],
+      "timing_flags": [],
+      "eligibility_blockers": [],
+      "event_schema_version": "engine-event-v1",
+      "declared_source_versions": {
+        "schema_version": "v2-logger-fixture-v2"
+      },
+      "version_evidence_basis": "payload",
+      "receipt_latency_seconds": "2",
+      "stored_time_disagrees": true,
+      "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
+      "calendar_digest": "808b3996532e20dea9f0b4828238798cb0d205e3d230cdcaf44121ca14dce99c",
+      "nominal_grid_aligned": true,
+      "source_open_utc": "2026-10-13T00:01:00+00:00",
+      "source_close_utc": "2026-10-13T00:02:00+00:00",
+      "stored_event_time": "2026-10-13T00:01:03+00:00",
+      "received_at": "2026-10-13T00:02:02+00:00",
+      "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+      "event_evidence_digest": "efebc814aa6477d70a33977bde6a6fa40ef4130286e941e4669ca96a617e9548",
+      "original_event": {
+        "event_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "event_type": "market_data",
+        "origin": "tradingview",
+        "instrument": "GBPUSD",
+        "timeframe": "1m",
+        "event_time": "2026-10-13T00:01:03+00:00",
+        "received_at": "2026-10-13T00:02:02+00:00",
+        "schema_version": "engine-event-v1",
+        "environment": "test",
+        "retry_count": 0,
+        "payload": {
+          "ticker": "GBPUSD",
+          "interval": "1",
+          "schema_version": "v2-logger-fixture-v2",
+          "source": "tradingview",
+          "confirmed": true,
+          "open": "1.2",
+          "high": "1.3",
+          "low": "1.1",
+          "close": "1.25",
+          "volume": "100",
+          "indicators": {
+            "ema_fast": "1.21",
+            "rsi": "55",
+            "atr": "0.01",
+            "adx": "20",
+            "macd_line": "0.002",
+            "bb_upper": "1.3",
+            "unmapped_source_field": null
+          },
+          "time_open": 1791849660000,
+          "time_close": 1791849720000
+        }
+      },
+      "ohlcv": {
+        "open": "1.2",
+        "high": "1.3",
+        "low": "1.1",
+        "close": "1.25",
+        "volume": "100"
+      },
+      "features": {
+        "original": {
+          "indicators": {
+            "ema_fast": "1.21",
+            "rsi": "55",
+            "atr": "0.01",
+            "adx": "20",
+            "macd_line": "0.002",
+            "bb_upper": "1.3",
+            "unmapped_source_field": null
+          }
+        },
+        "availability": {
+          "EMA": true,
+          "RSI": true,
+          "ATR": true,
+          "ADX": true,
+          "MACD": true,
+          "BOLLINGER": true
+        },
+        "source_timestamp": "2026-10-13T00:01:00+00:00",
+        "source_version": "v2-logger-fixture-v2",
+        "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+        "method": "PRESERVED_SOURCE_FIELDS_NO_RECOMPUTATION"
+      },
+      "validation_state": "VALIDATED",
+      "recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED",
+      "eligibility": {
+        "descriptive_analysis": "ELIGIBLE",
+        "technical_indicator_research": "ELIGIBLE_SOURCE_FEATURES_ONLY",
+        "signal_candle_linkage": "PENDING_SIGNAL_EVIDENCE",
+        "rejected_trade_replay": "PENDING_COMPLETE_WINDOW_AND_REPLAY_VALIDATION",
+        "backtesting": "PENDING_COMPLETE_WINDOW_AND_EXECUTION_MODEL",
+        "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
+      },
+      "research_eligible": true,
+      "projection_digest": "4949d22988f8a06b201b2d20d6f2acf35999780bf3645ecec6a50810500be8b0"
+    }
+  ]
+}

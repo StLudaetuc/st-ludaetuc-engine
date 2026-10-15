@@ -1,0 +1,31 @@
+{
+  "contract": "historical_source_inventory_v1",
+  "production_baseline": "2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c",
+  "sources": [
+    {
+      "source": "CEO PostgreSQL population summary",
+      "scope": "164209 market_data rows / 35 reported streams",
+      "raw_query_and_capture_timestamp": "NOT_SUPPLIED",
+      "independent_validation": false,
+      "raw_access_in_this_task": false,
+      "payloads_obtained": 0
+    },
+    {
+      "source": "main engine.py immutable GitHub baseline",
+      "fact": "market_data reads body.time; log_event retains payload, upserts current state",
+      "scope": "code only; script versions and original alert definitions unavailable"
+    },
+    {
+      "source": "prior frozen research 960cd8cd",
+      "fact": "reference only; not imported or advanced",
+      "scope": "prior export evidence omits original source payloads"
+    },
+    {
+      "source": "Render internal Web Shell",
+      "fact": "CEO-demonstrated potential operator route",
+      "scope": "not used by implementation; no credentials or live extraction performed"
+    }
+  ],
+  "roster_basis": "prior observed seven instruments x five timeframes; CEO reports all35 have source fields; exact new snapshot roster/per-stream counts still requested",
+  "raw_snapshot_digest": null
+}
