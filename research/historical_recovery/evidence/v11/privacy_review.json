@@ -1,0 +1,8 @@
+{
+  "scope": "new/modified recovery artifacts; synthetic values only",
+  "pattern_hits": [],
+  "production_credentials_accessed": false,
+  "real_records_copied": false,
+  "known_synthetic_examples": "Tests deliberately contain SYNTHETIC, fake DSN and JWT-shaped fixtures for redaction controls; not real credentials.",
+  "limitation": "No pattern scan proves absence of arbitrary encoded secrets. Human source/artifact review completed; real exports remain private."
+}

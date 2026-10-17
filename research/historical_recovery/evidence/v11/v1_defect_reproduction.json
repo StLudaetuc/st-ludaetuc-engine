@@ -1,0 +1,14 @@
+{
+  "D1_same_instant_hashes_differ": true,
+  "D3_invalid_slot_still_complete": "COMPLETE_EXPECTED_SLOTS",
+  "D4_conflicting_recovery_states": [
+    "ORIGINAL_TIMESTAMP_VERIFIED",
+    "ORIGINAL_TIMESTAMP_VERIFIED"
+  ],
+  "D7_unredacted_key_names": [
+    "passphrase",
+    "api_key",
+    "key",
+    "auth"
+  ]
+}

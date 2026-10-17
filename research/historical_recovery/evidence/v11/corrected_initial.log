@@ -1,0 +1,143 @@
+test_population_schema (test_contracts.Contracts.test_population_schema) ... ok
+test_reader_schema (test_contracts.Contracts.test_reader_schema) ... ERROR
+test_unknown_not_zero (test_contracts.Contracts.test_unknown_not_zero) ... ok
+test_bounds (test_recovery.AcquisitionTests.test_bounds) ... ok
+test_cap_partial (test_recovery.AcquisitionTests.test_cap_partial) ... ok
+test_cross_instrument_contamination (test_recovery.AcquisitionTests.test_cross_instrument_contamination) ... ok
+test_decimal_json_roundtrip (test_recovery.AcquisitionTests.test_decimal_json_roundtrip) ... ok
+test_no_credentials_error_output (test_recovery.AcquisitionTests.test_no_credentials_error_output) ... ok
+test_nonmonotonic_page (test_recovery.AcquisitionTests.test_nonmonotonic_page) ... ok
+test_positive_pagination (test_recovery.AcquisitionTests.test_positive_pagination) ... ok
+test_readwrite_denied (test_recovery.AcquisitionTests.test_readwrite_denied) ... ok
+test_redaction (test_recovery.AcquisitionTests.test_redaction) ... ok
+test_resume_not_full_snapshot (test_recovery.AcquisitionTests.test_resume_not_full_snapshot) ... ok
+test_sql_no_writes (test_recovery.AcquisitionTests.test_sql_no_writes) ... ok
+test_write_private_and_no_overwrite (test_recovery.AcquisitionTests.test_write_private_and_no_overwrite) ... ok
+test_instrument_conflict (test_recovery.AmbiguityTests.test_instrument_conflict) ... ok
+test_multiple_versions_held (test_recovery.AmbiguityTests.test_multiple_versions_held) ... ok
+test_timeframe_conflict (test_recovery.AmbiguityTests.test_timeframe_conflict) ... ok
+test_bounded_window (test_recovery.AuditTests.test_bounded_window) ... ok
+test_complete_positive (test_recovery.AuditTests.test_complete_positive) ... ok
+test_conflicting_indicator (test_recovery.AuditTests.test_conflicting_indicator) ... ok
+test_conflicting_ohlcv (test_recovery.AuditTests.test_conflicting_ohlcv) ... ok
+test_conflicting_same_id (test_recovery.AuditTests.test_conflicting_same_id) ... ok
+test_count_mismatch (test_recovery.AuditTests.test_count_mismatch) ... ok
+test_duplicate_bar_new_event_id (test_recovery.AuditTests.test_duplicate_bar_new_event_id) ... ok
+test_duplicate_event (test_recovery.AuditTests.test_duplicate_event) ... ok
+test_empty_not_complete (test_recovery.AuditTests.test_empty_not_complete) ... ok
+test_export_order_not_receipt_order (test_recovery.AuditTests.test_export_order_not_receipt_order) ... ok
+test_no_calendar_missing_unproved (test_recovery.AuditTests.test_no_calendar_missing_unproved) ... ok
+test_partial_missing_intervals (test_recovery.AuditTests.test_partial_missing_intervals) ... ok
+test_reader_bad_manifest (test_recovery.AuditTests.test_reader_bad_manifest) ... ok
+test_reader_duplicate_ids (test_recovery.AuditTests.test_reader_duplicate_ids) ... ok
+test_reader_pages (test_recovery.AuditTests.test_reader_pages) ... ERROR
+test_reader_tampering (test_recovery.AuditTests.test_reader_tampering) ... ok
+test_reader_unknown_cursor (test_recovery.AuditTests.test_reader_unknown_cursor) ... ok
+test_receipt_order (test_recovery.AuditTests.test_receipt_order) ... ok
+test_snapshot_unproved (test_recovery.AuditTests.test_snapshot_unproved) ... ok
+test_complete_slots_plus_replay_not_research_complete (test_recovery.DuplicateWindowTest.test_complete_slots_plus_replay_not_research_complete) ... ok
+test_manifest_summary_tamper (test_recovery.HardeningTests.test_manifest_summary_tamper) ... ok
+test_non_string_identifiers_isolate (test_recovery.HardeningTests.test_non_string_identifiers_isolate) ... ok
+test_reader_row_bound (test_recovery.HardeningTests.test_reader_row_bound) ... ok
+test_same_clock_determinism_not_walltime (test_recovery.HardeningTests.test_same_clock_determinism_not_walltime) ... ok
+test_unreviewed_empty_calendar (test_recovery.HardeningTests.test_unreviewed_empty_calendar) ... ok
+test_version_object_not_exposed (test_recovery.HardeningTests.test_version_object_not_exposed) ... ok
+test_cross_stream_rejected (test_recovery.MultiStreamTests.test_cross_stream_rejected) ... ok
+test_missing_stream_not_zero (test_recovery.MultiStreamTests.test_missing_stream_not_zero) ... ok
+test_one_stream (test_recovery.MultiStreamTests.test_one_stream) ... ok
+test_close_before_open (test_recovery.NormalizerTests.test_close_before_open) ... ok
+test_confirmation_unknown (test_recovery.NormalizerTests.test_confirmation_unknown) ... ok
+test_cross_symbol (test_recovery.NormalizerTests.test_cross_symbol) ... ok
+test_declared_timeframe (test_recovery.NormalizerTests.test_declared_timeframe) ... ok
+test_delayed_arrival (test_recovery.NormalizerTests.test_delayed_arrival) ... ok
+test_deterministic (test_recovery.NormalizerTests.test_deterministic) ... ok
+test_dst_fall (test_recovery.NormalizerTests.test_dst_fall) ... ok
+test_dst_spring_utc (test_recovery.NormalizerTests.test_dst_spring_utc) ... ok
+test_dual_agreement_held (test_recovery.NormalizerTests.test_dual_agreement_held) ... ok
+test_dual_disagreement (test_recovery.NormalizerTests.test_dual_disagreement) ... ok
+test_envelope_not_script_version (test_recovery.NormalizerTests.test_envelope_not_script_version) ... ok
+test_environment (test_recovery.NormalizerTests.test_environment) ... ok
+test_extreme (test_recovery.NormalizerTests.test_extreme) ... ok
+test_extreme_iso (test_recovery.NormalizerTests.test_extreme_iso) ... ok
+test_float_ms_rejected (test_recovery.NormalizerTests.test_float_ms_rejected) ... ok
+test_fractional_milliseconds (test_recovery.NormalizerTests.test_fractional_milliseconds) ... ok
+test_invalid_ohlcv (test_recovery.NormalizerTests.test_invalid_ohlcv) ... ok
+test_iso_timezone_conversion (test_recovery.NormalizerTests.test_iso_timezone_conversion) ... ok
+test_json_digest_type_collision (test_recovery.NormalizerTests.test_json_digest_type_collision) ... ok
+test_legacy_positive (test_recovery.NormalizerTests.test_legacy_positive) ... ok
+test_long_close (test_recovery.NormalizerTests.test_long_close) ... ok
+test_malformed_source (test_recovery.NormalizerTests.test_malformed_source) ... ok
+test_missing_close (test_recovery.NormalizerTests.test_missing_close) ... ok
+test_missing_indicators_not_fabricated (test_recovery.NormalizerTests.test_missing_indicators_not_fabricated) ... ok
+test_naive (test_recovery.NormalizerTests.test_naive) ... ok
+test_no_calendar_not_false_invalid (test_recovery.NormalizerTests.test_no_calendar_not_false_invalid) ... ok
+test_no_input_mutation (test_recovery.NormalizerTests.test_no_input_mutation) ... ok
+test_no_receipt_fallback (test_recovery.NormalizerTests.test_no_receipt_fallback) ... ok
+test_off_grid_not_rounded (test_recovery.NormalizerTests.test_off_grid_not_rounded) ... ok
+test_original_features_preserved (test_recovery.NormalizerTests.test_original_features_preserved) ... ok
+test_payload_self_verification_ignored (test_recovery.NormalizerTests.test_payload_self_verification_ignored) ... ok
+test_provenance_missing (test_recovery.NormalizerTests.test_provenance_missing) ... ok
+test_receipt_before_open (test_recovery.NormalizerTests.test_receipt_before_open) ... ok
+test_seconds_confusion (test_recovery.NormalizerTests.test_seconds_confusion) ... ok
+test_session_shift_allowed_explicit (test_recovery.NormalizerTests.test_session_shift_allowed_explicit) ... ok
+test_source_identity (test_recovery.NormalizerTests.test_source_identity) ... ok
+test_stored_time_disagreement_preserved (test_recovery.NormalizerTests.test_stored_time_disagreement_preserved) ... ok
+test_unapproved_calendar (test_recovery.NormalizerTests.test_unapproved_calendar) ... ok
+test_unknown_version (test_recovery.NormalizerTests.test_unknown_version) ... ok
+test_v2_positive (test_recovery.NormalizerTests.test_v2_positive) ... ok
+test_wrong_event_type (test_recovery.NormalizerTests.test_wrong_event_type) ... ok
+test_decimal_and_datetime_digest_export (test_recovery.ProjectionTests.test_decimal_and_datetime_digest_export) ... ok
+test_event_digest_provenance_stale (test_recovery.ProjectionTests.test_event_digest_provenance_stale) ... ok
+test_export_project_chain (test_recovery.ProjectionTests.test_export_project_chain) ... ok
+test_export_tamper_denied (test_recovery.ProjectionTests.test_export_tamper_denied) ... ok
+test_future_source_close_rejected (test_recovery.ProjectionTests.test_future_source_close_rejected) ... ok
+test_invalid_row_does_not_abort_population (test_recovery.ProjectionTests.test_invalid_row_does_not_abort_population) ... ok
+test_negative_volume (test_recovery.ProjectionTests.test_negative_volume) ... ok
+test_reader_result_contract (test_recovery.ProjectionTests.test_reader_result_contract) ... ERROR
+test_strict_duplicate_json (test_recovery.ProjectionTests.test_strict_duplicate_json) ... ok
+test_strict_nan_json (test_recovery.ProjectionTests.test_strict_nan_json) ... ok
+test_redacted_payload_retains_original_digest (test_recovery.RawDigestLineageTest.test_redacted_payload_retains_original_digest) ... ok
+
+======================================================================
+ERROR: test_reader_schema (test_contracts.Contracts.test_reader_schema)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/tests/test_contracts.py", line 10, in test_reader_schema
+    schema=json.loads((ROOT/'reader_contract.schema.json').read_text());Draft202012Validator.check_schema(schema);Draft202012Validator(schema).validate(demo()['reader_page'])
+                                                                                                                                                        ^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/demo.py", line 9, in demo
+    return {'classification':'SYNTHETIC_ONLY_NOT_PRODUCTION_EVIDENCE','input_events':rows,'quality_summary':{k:v for k,v in result.items() if k!='normalized_rows'},'reader_page':reader_page(result,manifest_hash=result['manifest_hash']),'normalized_examples':result['normalized_rows'][:2]}
+                                                                                                                                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/auditor.py", line 114, in reader_page
+    if any(r['projection_digest']!=digest({k:v for k,v in r.items() if k!='projection_digest'}) for r in report['normalized_rows']):raise ValueError('ROW_INTEGRITY_MISMATCH')
+                                                                                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: ROW_INTEGRITY_MISMATCH
+
+======================================================================
+ERROR: test_reader_pages (test_recovery.AuditTests.test_reader_pages)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/tests/test_recovery.py", line 141, in test_reader_pages
+    r=self.report([fixture(offset=i) for i in range(3)]);a=reader_page(r,manifest_hash=r['manifest_hash'],limit=2);b=reader_page(r,manifest_hash=r['manifest_hash'],after_event_id=a['next_event_id'],limit=2);self.assertEqual(len(a['rows'])+len(b['rows']),3);self.assertIsNone(b['next_event_id']);self.assertNotIn('original_event',a['rows'][0])
+                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/auditor.py", line 114, in reader_page
+    if any(r['projection_digest']!=digest({k:v for k,v in r.items() if k!='projection_digest'}) for r in report['normalized_rows']):raise ValueError('ROW_INTEGRITY_MISMATCH')
+                                                                                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: ROW_INTEGRITY_MISMATCH
+
+======================================================================
+ERROR: test_reader_result_contract (test_recovery.ProjectionTests.test_reader_result_contract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/tests/test_recovery.py", line 244, in test_reader_result_contract
+    p=reader_page(r,manifest_hash=r['manifest_hash']);self.assertEqual(p['schema_version'],'historical_research_reader_v1');self.assertFalse(p['research_window_complete'])
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/research/historical_recovery/auditor.py", line 114, in reader_page
+    if any(r['projection_digest']!=digest({k:v for k,v in r.items() if k!='projection_digest'}) for r in report['normalized_rows']):raise ValueError('ROW_INTEGRITY_MISMATCH')
+                                                                                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: ROW_INTEGRITY_MISMATCH
+
+----------------------------------------------------------------------
+Ran 99 tests in 0.246s
+
+FAILED (errors=3)

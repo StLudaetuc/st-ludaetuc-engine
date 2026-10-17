@@ -12,13 +12,14 @@ import json
 import os
 from pathlib import Path
 import re
-from .normalizer import iso_time, INSTRUMENTS, TIMEFRAMES, digest
+from .normalizer import iso_time, INSTRUMENTS, TIMEFRAMES, digest, canonical_timestamp
 
 MAX_ROWS=50000
 MAX_EXPORT_BYTES=64*1024*1024
 SELECT_FIELDS='event_id,event_type,origin,instrument,timeframe,event_time,received_at,schema_version,environment,retry_count,payload'
 WHERE="event_type = 'market_data' AND instrument = %s AND timeframe = %s AND environment = %s AND received_at >= %s AND received_at < %s"
-SENSITIVE=re.compile(r'(token|secret|password|authorization|cookie|credential|account|connection|dsn)',re.I)
+SENSITIVE=re.compile(r'(token|secret|password|passphrase|authorization|cookie|credential|account|connection|dsn)|^(key|auth|apikey|privatekey|accesskey|clientsecret)$',re.I)
+SECRET_VALUE=re.compile(r"(?i)(?:bearer\s|postgres(?:ql)?://|(?:^|\s)(?:password|passphrase|sslpassword)\s*=|(?:api[_-]?key|auth|token)\s*[=:]|(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:$|[^A-Za-z0-9_-]))")
 
 # Bounded JSON encoding retains Decimal source numeric values as JSON numbers,
 # not strings. It cannot recover pre-JSONB original HTTP lexical bytes.
@@ -28,7 +29,7 @@ def json_bytes(value):
         if isinstance(v,Decimal):
             if not v.is_finite():raise ValueError('NONFINITE_JSON')
             return str(v)
-        if isinstance(v,datetime):return json.dumps(v.isoformat())
+        if isinstance(v,datetime):return json.dumps(canonical_timestamp(v))
         if isinstance(v,dict):
             if not all(isinstance(k,str) for k in v):raise ValueError('NONSTRING_KEY')
             return '{'+','.join(json.dumps(k)+':'+encode(x) for k,x in sorted(v.items()))+'}'
@@ -41,11 +42,11 @@ def redact(value,path='$',removed=None):
     if isinstance(value,dict):
         clean={}
         for k,v in value.items():
-            if SENSITIVE.search(k):removed.append(path+'.'+k);clean[k]='[REDACTED]'
+            if SENSITIVE.search(re.sub(r'[^a-z0-9]','',k.lower())):removed.append(path+'.[sensitive-key]');clean[k]='[REDACTED]'
             else:clean[k]=redact(v,path+'.'+k,removed)[0]
         return clean,removed
     if isinstance(value,list):return [redact(v,path+'[]',removed)[0] for v in value],removed
-    if isinstance(value,str) and (re.search(r'(?i)(bearer\s|postgres(?:ql)?://|https?://|api[_-]?key[=:])',value)):
+    if isinstance(value,str) and (SECRET_VALUE.search(value)):
         removed.append(path);return '[REDACTED]',removed
     return deepcopy(value),removed
 
@@ -108,13 +109,16 @@ def acquire(conn,*,instrument,timeframe,environment,start,end,batch_size=250,max
         clean['acquisition_source_payload_digest']=digest(row['payload'])
         clean['acquisition_redacted_event_digest']=digest({k:v for k,v in clean.items() if not k.startswith('acquisition_')})
         redacted.append(clean)
-    manifest={'contract':'historical_acquisition_v1','acquired_at':datetime.now(timezone.utc).isoformat(),'database_identity':identity,'scope':{'instrument':instrument,'timeframe':timeframe,'environment':environment},'window_basis':'received_at_UTC_not_source_bar_time','window':{'start':a.isoformat(),'end':b.isoformat()},'source_count':original_count,'exported_count':len(rows),'complete_captured_snapshot':captured,'historical_source_completeness':'UNPROVED','snapshot':snapshot,'isolation':'repeatable read / read only','pages':pages,'resume_after_event_id':last if not captured else None,'prior_cursor':after_event_id,'redacted_field_paths':sorted(set(paths)),'redaction_policy':'market_keys_and_value_patterns_v1','unredacted_population_digest':digest(raw_digests),'redacted_population_digest':digest(redacted),'raw_transport_bytes_retained':False,'redaction_notice':'Private-only export. Key/pattern filtering is defense in depth, not a guarantee that arbitrary source text contains no secrets. Operator must review before sharing.'}
+    manifest={'contract':'historical_acquisition_v1.1','digest_encoding':'canonical_json_value_v2_utc6','timestamp_encoding':'utc6_z_v1','operator_identity_reference':identity,'acquired_at':datetime.now(timezone.utc).isoformat(),'database_identity':identity,'scope':{'instrument':instrument,'timeframe':timeframe,'environment':environment},'window_basis':'received_at_UTC_not_source_bar_time','window':{'start':a.isoformat(),'end':b.isoformat()},'source_count':original_count,'exported_count':len(rows),'complete_captured_snapshot':captured,'historical_source_completeness':'UNPROVED','snapshot':snapshot,'isolation':'repeatable read / read only','pages':pages,'resume_after_event_id':last if not captured else None,'prior_cursor':after_event_id,'redacted_field_paths':sorted(set(paths)),'redaction_policy':'structured_secret_redaction_v2','unredacted_population_digest':digest(raw_digests),'redacted_population_digest':digest(redacted),'raw_transport_bytes_retained':False,'redaction_notice':'Private-only export. Key/pattern filtering is defense in depth, not a guarantee that arbitrary source text contains no secrets. Operator must review before sharing.'}
     manifest['manifest_hash']=digest(manifest)
     return redacted,manifest
 
 def write_export(directory,rows,manifest):
     """New private directory only; never overwrite existing evidence."""
     directory=Path(directory)
+    if not directory.is_absolute() or '..' in directory.parts:raise ValueError('ABSOLUTE_PRIVATE_DESTINATION_REQUIRED')
+    for parent in directory.parents:
+        if parent.is_symlink():raise ValueError('SYMLINK_DESTINATION_REJECTED')
     directory.mkdir(mode=0o700,parents=False,exist_ok=False)
     try:
         for filename,data in [('events.jsonl',b''.join(json_bytes(r)+b'\n' for r in rows)),('manifest.json',json_bytes(manifest)+b'\n')]:
@@ -127,21 +131,46 @@ def write_export(directory,rows,manifest):
         # Preserve partial files for investigation; never silently claim complete.
         raise ValueError('EXPORT_WRITE_FAILED_PARTIAL_FILES_MAY_EXIST') from None
 
+def verify_reader_identity(conn,expected_login):
+    """Future CLI preflight; no role/grant changes. Not a full privilege audit."""
+    if not isinstance(expected_login,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',expected_login):raise ValueError('APPROVED_READER_LOGIN_REQUIRED')
+    conn.set_session(readonly=True,isolation_level='REPEATABLE READ',autocommit=False)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT current_user, r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls,
+              has_table_privilege(current_user,'public.events','SELECT'),
+              has_table_privilege(current_user,'public.events','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES'),
+              has_database_privilege(current_user,current_database(),'CREATE'),
+              has_schema_privilege(current_user,'public','CREATE'),
+              EXISTS (SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER')
+                AND (inherited.rolsuper OR inherited.rolcreaterole OR inherited.rolcreatedb OR inherited.rolreplication OR inherited.rolbypassrls
+                  OR has_table_privilege(inherited.rolname,'public.events','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES')))
+              FROM pg_roles r WHERE r.rolname=current_user""")
+            identity,elevated,can_select,can_write,can_create_db,can_create_schema,member_write=cur.fetchone()
+            if identity!=expected_login or elevated or not can_select or can_write or can_create_db or can_create_schema or member_write:raise ValueError('DEDICATED_SELECT_ONLY_IDENTITY_REQUIRED')
+    finally:conn.rollback()
+    return {'identity':identity,'check':'ROLE_FLAGS_EVENTS_TABLE_DDL_MEMBERSHIP','residual':'Operator must separately review function execution, other objects and network/custody policy.'}
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     for k in ('instrument','timeframe','environment','start','end','output'):parser.add_argument('--'+k,required=True)
-    parser.add_argument('--batch-size',type=int,default=250);parser.add_argument('--max-rows',type=int,default=5000);parser.add_argument('--after-event-id')
-    args=vars(parser.parse_args(argv));output=args.pop('output')
+    parser.add_argument('--batch-size',type=int,default=250);parser.add_argument('--max-rows',type=int,default=5000);parser.add_argument('--after-event-id');parser.add_argument('--approved-reader-login');parser.add_argument('--approved-execution-context')
+    args=vars(parser.parse_args(argv));output=args.pop('output');reader=args.pop('approved_reader_login');execution_context=args.pop('approved_execution_context')
     conn=None
     try:
         validate_bounds(**{k:v for k,v in args.items() if k!='after_event_id'})
+        if not reader or not execution_context or not re.fullmatch(r'[A-Za-z0-9_.-]{1,160}',execution_context):raise ValueError('APPROVED_ISOLATED_EXECUTION_CONTEXT_REQUIRED')
         if not os.environ.get('PGSERVICE'):raise ValueError('PGSERVICE_REQUIRED')
         import psycopg2
         conn=psycopg2.connect(connect_timeout=5)
         from psycopg2.extras import register_default_jsonb
         from decimal import Decimal
         register_default_jsonb(conn,loads=lambda text: json.loads(text,parse_float=Decimal,parse_constant=lambda x: (_ for _ in ()).throw(ValueError('NONFINITE_SOURCE_JSON'))))
-        rows,manifest=acquire(conn,**args);write_export(output,rows,manifest)
+        identity_check=verify_reader_identity(conn,reader)
+        rows,manifest=acquire(conn,**args)
+        manifest['reader_identity_check']=identity_check;manifest['approved_execution_context']=execution_context
+        manifest['manifest_hash']=digest({k:v for k,v in manifest.items() if k!='manifest_hash'})
+        write_export(output,rows,manifest)
         print(json.dumps({'status':'COMPLETE_CAPTURED_SNAPSHOT' if manifest['complete_captured_snapshot'] else 'PARTIAL','exported_count':len(rows),'manifest_hash':manifest['manifest_hash']}))
         return 0
     except Exception:

@@ -1,0 +1,49 @@
+{
+  "original99_reproduced": [
+    "Python3.12.14",
+    "Python3.13.16"
+  ],
+  "current_suite": 142,
+  "new_tests": 43,
+  "author_tests_not_independent_assurance": true,
+  "runs": [
+    {
+      "run": "final_py312_run1",
+      "tests": 142,
+      "passes": 142,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "exit_code": 0
+    },
+    {
+      "run": "final_py312_run2",
+      "tests": 142,
+      "passes": 142,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "exit_code": 0
+    },
+    {
+      "run": "final_py313_run1",
+      "tests": 142,
+      "passes": 142,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "exit_code": 0
+    },
+    {
+      "run": "final_py313_run2",
+      "tests": 142,
+      "passes": 142,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "exit_code": 0
+    }
+  ],
+  "postgres18": "UNPROVED",
+  "complete_D1_D9_review_package": "UNAVAILABLE"
+}

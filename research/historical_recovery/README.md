@@ -1,4 +1,4 @@
-# Historical Market Recovery v1 — DRAFT, NOT APPROVED
+# Historical Market Recovery v1.1 — DRAFT, NOT APPROVED
 
 Isolated offline proposal. No production imports, HTTP reader, ledger, migration,
 indicator computation or trading authority. Parent is production baseline
@@ -55,7 +55,7 @@ indicator structures remain preserved even if the alias registry cannot classify
 them. Real field-name/version mapping remains an evidence dependency.
 
 The original event, stored event_time and received_at stay unchanged in private
-projections. canonical_json_value_v1 hashes typed JSON values (including Decimal
+projections. canonical_json_value_v2_utc6 hashes typed JSON values (including Decimal
 numbers), not original HTTP bytes: JSONB cannot reproduce wire lexical order or
 whitespace. Hashes detect changes; they do not establish authenticity. Independent
 operator acquisition review must bind exact event digests to trusted provenance.
@@ -107,3 +107,26 @@ or authenticated Reader service. It does not modify the frozen security candidat
 A future authorised service must bind service identity to environment/source/
 instrument/timeframe and dataset digest, audit reads/denials, enforce egress and
 redact responses. Do not mount the Python function as a public endpoint.
+
+## v1.1 correction boundary
+
+Read FINDINGS_V11.md and ANCHOR_SPEC.md first. The complete independent D1–D9
+report is unavailable: D5/D6/D8/D9 cannot be asserted resolved under those IDs.
+Known D1/D2/D3/D4/D7 and separately listed contract issues are corrected/tested.
+PostgreSQL 18 execution remains UNPROVED. No actual historical records processed.
+
+The old writer-bearing Render Web Shell is **not** a permitted acquisition route.
+Only a future CEO-approved isolated host and dedicated SELECT-only login may run
+the proposed CLI. No resources/credentials are provisioned here.
+
+Internal checksums are distinguished from independently anchored expectations.
+project_export verifies export_audit.json and can require a separate TrustedAnchor;
+without it, authenticity and row provenance stay UNPROVED regardless of supplied
+Context. Fixed UTC six-digit timestamps make record hashing session-timezone
+independent in Python; true PostgreSQL execution is still a review dependency.
+
+Calendar presence is separate from valid-slot coverage. Invalid/conflicting/
+unproved slots never satisfy COMPLETE_EXPECTED_SLOTS. Unresolved duplicates are
+demoted in aggregate recovery reporting while original timestamps, OHLCV and
+indicator values remain inspectable. Rich readiness_summary and slot sets are
+shadow-only offline products; training remains blocked pending label/split policy.

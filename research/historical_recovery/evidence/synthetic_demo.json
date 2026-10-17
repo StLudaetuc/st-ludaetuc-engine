@@ -108,7 +108,7 @@
     }
   ],
   "quality_summary": {
-    "contract": "historical_quality_v1",
+    "contract": "historical_quality_v1.1",
     "window": {
       "start": "2026-10-13T00:00:00+00:00",
       "end": "2026-10-13T00:03:00+00:00"
@@ -154,13 +154,36 @@
     "calendar_window_status": "COMPLETE_EXPECTED_SLOTS",
     "dataset_complete_for_research": true,
     "malformed_records": [],
-    "projection_population_hash": "31b6008f9c09a7ef2c043d391c9ad504f31d7cf910011117812eab4f56b018e4",
-    "manifest_hash": "a6e1ca9c7cced2d952219e4496a5af3d24171eed01d37af51358bce6d90afc1b"
+    "observed_calendar_window_status": "ALL_EXPECTED_TIMES_OBSERVED_NOT_VALIDATED",
+    "valid_expected_slots": [
+      "2026-10-13T00:00:00+00:00",
+      "2026-10-13T00:01:00+00:00",
+      "2026-10-13T00:02:00+00:00"
+    ],
+    "invalid_expected_slots": [],
+    "conflicting_expected_slots": [],
+    "unproved_expected_slots": [],
+    "research_missing_or_ineligible_slots": [],
+    "readiness_summary": {
+      "records_received": 3,
+      "source_timestamps_present": 3,
+      "parseable_source_times": 3,
+      "valid_ohlcv": 3,
+      "invalid_observations": 0,
+      "late_observations": 0,
+      "eligible_candles": 3,
+      "research_ready_count": 3,
+      "training_readiness": "BLOCKED_LABEL_LINEAGE_SPLITS_AND_APPROVAL",
+      "calendar_coverage": "PROVED_BY_CONTEXT",
+      "remaining_blockers": []
+    },
+    "projection_population_hash": "18ac2a6170172662c6b3c5632cb5ea6dc6f793c91296b6cd0495e481962b8e17",
+    "manifest_hash": "70fce1298e568a700e5291bdb90ff9f95051c2381a2bcb42b1d3488d62ec2312"
   },
   "reader_page": {
     "schema_version": "historical_research_reader_v1",
-    "manifest_hash": "a6e1ca9c7cced2d952219e4496a5af3d24171eed01d37af51358bce6d90afc1b",
-    "population_hash": "31b6008f9c09a7ef2c043d391c9ad504f31d7cf910011117812eab4f56b018e4",
+    "manifest_hash": "70fce1298e568a700e5291bdb90ff9f95051c2381a2bcb42b1d3488d62ec2312",
+    "population_hash": "18ac2a6170172662c6b3c5632cb5ea6dc6f793c91296b6cd0495e481962b8e17",
     "window_status": "COMPLETE_CAPTURED_SNAPSHOT",
     "research_window_complete": true,
     "rows": [
@@ -286,8 +309,8 @@
   },
   "normalized_examples": [
     {
-      "normalizer_version": "historical_normalizer_v1",
-      "digest_encoding": "canonical_json_value_v1",
+      "normalizer_version": "historical_normalizer_v1.1",
+      "digest_encoding": "canonical_json_value_v2_utc6",
       "event_id": "0000000000000000000000000000000000000000000000000000000000000001",
       "instrument": "GBPUSD",
       "timeframe": "1m",
@@ -309,7 +332,7 @@
       "receipt_latency_seconds": "2",
       "stored_time_disagrees": true,
       "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
-      "calendar_digest": "808b3996532e20dea9f0b4828238798cb0d205e3d230cdcaf44121ca14dce99c",
+      "calendar_digest": "90e4f4f058deffe898cc3dcf6c3fc51f200987e42b0b81ea9e49ee19aa22bb53",
       "nominal_grid_aligned": true,
       "source_open_utc": "2026-10-13T00:00:00+00:00",
       "source_close_utc": "2026-10-13T00:01:00+00:00",
@@ -379,6 +402,101 @@
           "MACD": true,
           "BOLLINGER": true
         },
+        "source_field_paths": [
+          {
+            "path": "$.indicators.ema_fast",
+            "group": "EMA",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          },
+          {
+            "path": "$.indicators.rsi",
+            "group": "RSI",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          },
+          {
+            "path": "$.indicators.atr",
+            "group": "ATR",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          },
+          {
+            "path": "$.indicators.adx",
+            "group": "ADX",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          },
+          {
+            "path": "$.indicators.macd_line",
+            "group": "MACD",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          },
+          {
+            "path": "$.indicators.bb_upper",
+            "group": "BOLLINGER",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          },
+          {
+            "path": "$.indicators.unmapped_source_field",
+            "group": null,
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d"
+          }
+        ],
+        "field_provenance": {
+          "ema_fast": {
+            "group": "EMA",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "rsi": {
+            "group": "RSI",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "atr": {
+            "group": "ATR",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "adx": {
+            "group": "ADX",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "macd_line": {
+            "group": "MACD",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "bb_upper": {
+            "group": "BOLLINGER",
+            "source_timestamp": "2026-10-13T00:00:00+00:00",
+            "source_version": "legacy-logger-fixture-v1",
+            "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          }
+        },
         "source_timestamp": "2026-10-13T00:00:00+00:00",
         "source_version": "legacy-logger-fixture-v1",
         "payload_digest": "2d0f37352b69b7cc54ab9b53dbf9911e739837acd71a8d16efb0e92a96c2fb3d",
@@ -395,11 +513,12 @@
         "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
       },
       "research_eligible": true,
-      "projection_digest": "7a06fd2fe82b84285d5ee5bd576d81530c00004aa2d79411ebb9bd6f1b844bd9"
+      "projection_digest": "58cea0f5493749914106c9d7924f0d35b22355cc2c463485cdba19d62e078386",
+      "source_timestamp_recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED"
     },
     {
-      "normalizer_version": "historical_normalizer_v1",
-      "digest_encoding": "canonical_json_value_v1",
+      "normalizer_version": "historical_normalizer_v1.1",
+      "digest_encoding": "canonical_json_value_v2_utc6",
       "event_id": "0000000000000000000000000000000000000000000000000000000000000002",
       "instrument": "GBPUSD",
       "timeframe": "1m",
@@ -421,7 +540,7 @@
       "receipt_latency_seconds": "2",
       "stored_time_disagrees": true,
       "calendar_version": "SYNTHETIC_UTC_CALENDAR_v1",
-      "calendar_digest": "808b3996532e20dea9f0b4828238798cb0d205e3d230cdcaf44121ca14dce99c",
+      "calendar_digest": "90e4f4f058deffe898cc3dcf6c3fc51f200987e42b0b81ea9e49ee19aa22bb53",
       "nominal_grid_aligned": true,
       "source_open_utc": "2026-10-13T00:01:00+00:00",
       "source_close_utc": "2026-10-13T00:02:00+00:00",
@@ -491,6 +610,101 @@
           "MACD": true,
           "BOLLINGER": true
         },
+        "source_field_paths": [
+          {
+            "path": "$.indicators.ema_fast",
+            "group": "EMA",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          },
+          {
+            "path": "$.indicators.rsi",
+            "group": "RSI",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          },
+          {
+            "path": "$.indicators.atr",
+            "group": "ATR",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          },
+          {
+            "path": "$.indicators.adx",
+            "group": "ADX",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          },
+          {
+            "path": "$.indicators.macd_line",
+            "group": "MACD",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          },
+          {
+            "path": "$.indicators.bb_upper",
+            "group": "BOLLINGER",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          },
+          {
+            "path": "$.indicators.unmapped_source_field",
+            "group": null,
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d"
+          }
+        ],
+        "field_provenance": {
+          "ema_fast": {
+            "group": "EMA",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "rsi": {
+            "group": "RSI",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "atr": {
+            "group": "ATR",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "adx": {
+            "group": "ADX",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "macd_line": {
+            "group": "MACD",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          },
+          "bb_upper": {
+            "group": "BOLLINGER",
+            "source_timestamp": "2026-10-13T00:01:00+00:00",
+            "source_version": "v2-logger-fixture-v2",
+            "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
+            "value_validation": "NOT_FORMULA_OR_SEMANTIC_VERIFICATION"
+          }
+        },
         "source_timestamp": "2026-10-13T00:01:00+00:00",
         "source_version": "v2-logger-fixture-v2",
         "payload_digest": "0e77fab5d1c6772cb3fd6c008351f0269f7db16ef56cab41b11bd7b1c3f7263d",
@@ -507,7 +721,8 @@
         "training_datasets": "PENDING_LABEL_LINEAGE_AND_SPLIT_VALIDATION"
       },
       "research_eligible": true,
-      "projection_digest": "4949d22988f8a06b201b2d20d6f2acf35999780bf3645ecec6a50810500be8b0"
+      "projection_digest": "3dd98162955cb3090476b9413ffb8565d9f39ef1b8a3f69faefad1e30ac3d47a",
+      "source_timestamp_recovery_state": "ORIGINAL_TIMESTAMP_VERIFIED"
     }
   ]
 }

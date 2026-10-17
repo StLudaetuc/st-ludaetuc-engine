@@ -1,114 +1,95 @@
-# Bounded evidence acquisition — operator-only proposal
+# Future isolated SELECT-only acquisition — v1.1 DRAFT, NOT AUTHORISED TO RUN
 
-DRAFT — NOT APPROVED. This tool was not run against production. The CEO-reported
-working internal Render Web Shell is a potential operator route, not a new grant
-of database privileges. Keep external PostgreSQL networking unchanged.
+**Do not use the existing Render engine Web Shell.** The independent reviewer
+reports it contains production writer credentials. This task neither accessed
+that shell nor provisioned a replacement identity/environment. No live extraction
+is authorised. PostgreSQL external networking must remain unchanged.
 
-## Preconditions
+## Future design subject to CEO approval
 
-1. A named data owner authorises each instrument/timeframe/environment/receipt
-   window, row cap and retention destination. Use existing approved read-only
-   identity/PGSERVICE and libpq password/service files on the internal host. No
-   credentials appear in a command, report or GitHub. Do not create/change accounts,
-   roles, credentials, environment variables or service files under this task.
-2. Operator checks current_user/privileges: read-only transaction mode protects
-   this tool, but does not turn a privileged role into least privilege. No role or
-   grant is provisioned by this proposal. If only an execution-writer identity is
-   available, request an approved read identity rather than using it silently.
-3. Review exact frozen recovery SHA, install dependencies only in an isolated
-   authorised operator environment, not the running engine image. Do not import
-   engine.py or start its application; startup performs DDL.
-4. Approve a private destination with enough space. The output is still private
-   market evidence despite defensive redaction. Never commit raw exports.
+Use a separate isolated internal execution environment and a dedicated login with
+SELECT on the approved market-data source only, no table writes/DDL/elevated role
+flags or writable membership, and no trading credential inheritance. A data owner
+must review effective grants, SET ROLE memberships, SECURITY DEFINER/function
+execution, other object privileges and network egress. Read-only transaction mode
+alone does not turn an engine writer identity into least privilege. Provisioning
+and independent privilege validation are separate future work, not performed here.
 
-## Exact commands
+After approval, operators install reviewed code/dependencies in the isolated host,
+use an already provisioned libpq PGSERVICE/password-service mechanism and a private
+destination. No DSN/credential is accepted on this tool's command line or printed.
 
-On the operator-approved internal environment, from the checked-out repository
-root, with an **already configured** PGSERVICE pointing to an authorised reader:
+Proposed command, not permission to execute:
 
 ```
 python -m research.historical_recovery.extract \
   --instrument GBPUSD --timeframe 1m --environment production \
   --start 2026-10-13T00:00:00Z --end 2026-10-14T00:00:00Z \
-  --batch-size 250 --max-rows 5000 --output /approved/private/gbpusd_1m_receipts_20261013
+  --batch-size 250 --max-rows 5000 \
+  --approved-reader-login dedicated_market_reader \
+  --approved-execution-context CEO_APPROVED_ISOLATED_JOB_REFERENCE \
+  --output /approved/private/gbpusd_1m_export
 ```
 
-`/approved/private` is an operator-chosen example, not an existing approved path.
-The final directory must not exist. Files are created mode 0600, directory 0700.
-Maximum acquisition interval seven days, batch <=1000, total <=50000 records,
-encoded event <=512 KiB, total encoded source rows <=64 MiB. Byte cap violations
-abort without claiming complete evidence. Statement timeout 10s, lock timeout 1s
-are connection-local settings inside the read-only transaction, never persisted.
-Each SELECT is instrument/timeframe/system-environment constrained and parameterised.
-Only market_data is selected; no account, prediction, open/outcome or broker queries.
+These names/paths are placeholders, not created resources or approved identities.
+The CLI requires both explicit references; verifies current_user matches; rejects
+superuser/create-role/create-db/replication/bypass-RLS, write/table/create privileges
+and reachable write-capable role memberships before extraction. This SQL preflight
+is code-reviewed and mock-tested but **PostgreSQL runtime UNPROVED**. It does not
+prove every effective permission; operator security review remains mandatory.
+Direct low-level acquire() is a bounded library helper, not a privileged-service
+access boundary. Do not expose it to untrusted callers or use it to bypass CLI
+preflight. No account data or financial ledger is queried.
 
-Window basis is **received_at**, not claimed source time or stored event_time.
-This deliberately acquires raw timestamp evidence without using a suspect stored
-bar time as truth. A complete receipt snapshot still cannot prove all source bars
-or first-arrival times: production retry upserts replace received_at. Source-bar
-coverage needs independently reviewed expected slots, capture-start/outage history
-and delayed-arrival catch-up evidence. The tool exposes this distinction.
+## Bounds, snapshots and output
 
-The tool uses one connection/REPEATABLE READ READ ONLY snapshot for count/pages,
-verifies transaction mode, paginates event_id using C collation and finally rolls
-back. It never commits or applies DDL. Early row cap -> PARTIAL with remaining
-cursor; running again with --after-event-id starts a **new snapshot**, never a
-continuation claimed complete. Exact replay/comparison requires retained manifests
-and matching row digests. Snapshot IDs alone do not authenticate source identity.
+Explicit seven-symbol/five-timeframe registry; exact system environment; <=7-day
+UTC receipt window, <=1000 rows/page, <=50000 rows, <=64 MiB source output, <=512 KiB
+encoded row. SQL parameters are bound, no arbitrary query input. All pages/counts
+use one read-only REPEATABLE READ transaction and C-collation event-ID pagination.
+Statement/lock timeouts are transaction-local; rollback always ends acquisition.
+Byte/row/ordering/scope failures never become complete exports. Max-row cap yields
+partial status. Resume starts a **new** snapshot and is not falsely complete.
 
-## Export contents and privacy
+Destination must be absolute, new, private, with no traversal/symlink ancestors;
+directory 0700/files 0600, exclusive creation. Partial write failures preserve
+files for diagnosis and return a fixed failure code. Do not reuse those as complete
+exports. Paths already writable by hostile users are not safe even with mode checks.
+Private copies remain subject to access/retention and human review.
 
-- events.jsonl: copied event envelope and original market payload, with explicit
-  redactions; original/redacted event digests are separate.
-- manifest.json: scope, source count, pages, cursor, snapshot, identity, timestamps,
-  bounded-completeness labels and digests; no DSN/password.
-- export_audit.json: actual file SHA-256 digests and capture status. No credentials.
+Timestamps serialize as canonical UTC fixed six digits with Z; payload original
+strings remain original. Hash encoding is versioned v2 and incompatible with v1.
+Original/redacted record and original-payload digests remain distinct. PostgreSQL
+JSONB does not preserve exact original HTTP JSON bytes.
 
-Sensitive key patterns and obvious bearer/URL/connection-value patterns are
-redacted recursively; source payload digests preserve evidence of removed values.
-This is defence in depth, **not a universal detector of secrets hidden in arbitrary
-market fields**. All exports remain private and require human review before any
-sharing. Never claim a redacted copy is byte-identical to the original. Full raw
-payload remains authoritative in PostgreSQL; when redaction removes a required
-source field, trust/eligibility stays unproved. CLI errors are fixed sanitized
-messages and do not print psycopg2 exceptions or connection strings.
+## Redaction and evidence
 
-## Offline recovery projection
+Structured, case-insensitive key matching covers token/secret/password/passphrase,
+api_key/key/auth and connection/credential families, recursively in objects/arrays.
+Known bearer/JWT/password-bearing DSN/connection strings are redacted. Legitimate
+OHLCV/indicator numeric values are retained. Redaction paths do not echo detected
+sensitive key text. No finite pattern list can detect every secret disguised as an
+ordinary feature value: exports remain private, require human review and must not
+be committed to GitHub. Only synthetic fixtures were used in this task.
 
-Transfer only approved redacted copies into a restricted offline environment:
+Producer-generated manifest, file audit and record hashes are internally checked,
+but do not establish authenticity. The independently retained expected TrustedAnchor
+must pin manifest, audit, ordered IDs/digests/counts/scope/window/operator/version.
+The producer tool cannot issue/approve a real anchor. Obtain it from a separately
+approved custodian and pass it outside the export directory. See ANCHOR_SPEC.md.
+Absent anchor means UNPROVED; --require-anchor fails. An expected-hash match is not
+cryptographic proof that custody was independent. Custody/authentication policy is
+an outstanding approval dependency.
 
-```
-python -m research.historical_recovery.project \
-  --export /approved/private/gbpusd_1m_receipts_20261013 \
-  --start 2026-10-13T00:00:00Z --end 2026-10-14T00:00:00Z \
-  --output /approved/private/gbpusd_1m_source_projection.json
-```
+Receipt-window completeness does not establish source-bar coverage: current rows
+can have received_at replaced on retry, late records may fall outside the window,
+and historical capture may be incomplete. Require source calendar/collection-start/
+outage/catch-up evidence. No nominal 24-hour gap filling or rounding is permitted.
 
-Defaults: no approved calendar, no known source versions, no independently bound
-event evidence; records remain unproved. No source trust is inferred from a hash.
-The optional --reviewed-context JSON must be separately approved, not sourced from
-payloads; contract historical_context_v1, environment, source_id, provenance_reference,
-known_versions, verified_event_digests, and calendar with version/instrument/timeframe/
-start/end/slots/approved/reviewed_empty. Each digest binds the exact redacted bare
-event supplied to normalizer, excluding acquisition_* metadata. Reconcile its
-source digest with the acquisition manifest through independent operator evidence;
-do not simply copy all source digests into a trusted list. A redaction changes the
-covered representation and must be explicitly acknowledged.
+## First real acquisition prerequisites
 
-Projection writes a new private file only, keeps original_event/raw indicators and
-does not write to any DB. It verifies all manifest and row hashes before processing.
-It deliberately marks source-window completeness false even for complete receipt
-snapshots. Controlled supplementary evidence is required to close that gap.
-
-## Evidence requested next
-
-Obtain samples across all 35 streams with original time/time_open/time_close,
-original indicators, provider/ticker ID, script/schema versions, confirmation and
-original event/receipt/retry metadata. Include start/middle/end of day and both
-sides of session breaks and format-change boundaries. Start with one bounded
-stream/day; validate export/privacy then approve the remaining 34 stream jobs.
-Ask for exact CEO snapshot query, captured-at time, per-stream counts and format
-counts, overlap query and bounds. Obtain old/new logger source and active-alert
-definitions/version-effective times from the independent source investigation.
-No OANDA credentials, trading changes, database networking changes or public
-analytics extraction is needed or authorised here.
+Fresh independent code review; complete historical D1–D9 review package; disposable
+PG18 runtime validation; CEO approval of dedicated identity/host/egress/retention;
+independent expected-anchor custody; original logger/provider/version evidence and
+approved session calendars. Then separately approve one stream/day pilot export.
+Do not extract tonight and do not activate training or live features from this work.

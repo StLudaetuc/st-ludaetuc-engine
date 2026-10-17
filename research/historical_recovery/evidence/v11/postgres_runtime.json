@@ -1,0 +1,15 @@
+{
+  "postgres18_execution": "UNPROVED",
+  "postgres_binary": null,
+  "initdb_binary": null,
+  "docker_binary": null,
+  "uid": 0,
+  "uid_map": "0          0          1",
+  "os": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "source_database_connections": 0,
+  "local_postgres_connections": 0,
+  "reviewer_51_pg_checks": "REPORTED_NOT_REPRODUCED",
+  "reason": "No postgres/initdb binaries; namespace maps only root. PostgreSQL refuses root execution; no safety bypass, shared DB, cloud DB or writer shell used.",
+  "ordinary_unprivileged_identity_switch_exit": 1,
+  "ordinary_unprivileged_identity_switch_error": "EINVAL"
+}

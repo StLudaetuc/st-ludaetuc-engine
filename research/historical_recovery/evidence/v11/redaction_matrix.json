@@ -1,0 +1,29 @@
+{
+  "synthetic_only": true,
+  "key_cases": [
+    "passphrase",
+    "api_key",
+    "key",
+    "auth",
+    "API-Key",
+    "PaSsWoRd",
+    "access_token",
+    "client_secret",
+    "connectionString"
+  ],
+  "value_cases": [
+    "password-bearing DSN",
+    "postgres URI",
+    "bearer",
+    "JWT"
+  ],
+  "positive_controls": [
+    "OHLCV",
+    "Decimal volume",
+    "source MACD",
+    "monkey/non-secret name"
+  ],
+  "tests": "RedactionV11",
+  "result": "PASS",
+  "limits": "Private output and human review remain mandatory; no universal secret detector."
+}

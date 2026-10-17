@@ -20,6 +20,15 @@ NAME = re.compile(r'^[A-Za-z0-9_.:/-]{1,160}$')
 MAX_PAYLOAD_BYTES = 262144
 FEATURE_GROUPS = {'EMA':('ema','ema_fast','ema_slow','ema_trend'), 'RSI':('rsi',), 'ATR':('atr','atr_percent_of_price'), 'ADX':('adx','di_plus','di_minus'), 'MACD':('macd','macd_line','macd_signal','macd_hist','macd_histogram'), 'BOLLINGER':('bb','bb_basis','bb_upper','bb_lower','bb_width','bollinger_bands')}
 
+def canonical_timestamp(value):
+    """Digest/export timestamp contract v2: UTC, fixed six fractional digits, Z.
+
+    A timestamptz retains an instant, not the originally submitted timezone.
+    The raw source payload string is preserved verbatim, not reinterpreted here.
+    """
+    if not isinstance(value,datetime) or value.tzinfo is None:raise ValueError('AWARE_TIMESTAMP_REQUIRED')
+    return value.astimezone(UTC).isoformat(timespec='microseconds').replace('+00:00','Z')
+
 def canonical(value):
     """Versioned JSON-value digest encoding, not original transport-byte hashing.
 
@@ -32,7 +41,7 @@ def canonical(value):
         if isinstance(x,Decimal):
             if not x.is_finite():raise ValueError('nonfinite decimal')
             return ['decimal',str(x)]
-        if isinstance(x,datetime):return ['string',x.isoformat()]
+        if isinstance(x,datetime):return ['string',canonical_timestamp(x)]
         if isinstance(x,str):return ['string',x]
         if isinstance(x,int):return ['integer',str(x)]
         if isinstance(x,float):
@@ -50,6 +59,7 @@ def digest(value):return sha256(canonical(value)).hexdigest()
 
 def iso_time(value):
     if not isinstance(value,str) or len(value)>40:raise ValueError('ISO_TIME_REQUIRED')
+    if re.search(r'[.,][0-9]{7,}',value):raise ValueError('SUBMICROSECOND_PRECISION_UNSUPPORTED')
     try:d=datetime.fromisoformat(value.replace('Z','+00:00'))
     except ValueError:raise ValueError('MALFORMED_ISO_TIME') from None
     if d.tzinfo is None:raise ValueError('NAIVE_SOURCE_TIME')
@@ -60,6 +70,8 @@ def iso_time(value):
 def epoch_ms(value):
     if isinstance(value,bool) or not isinstance(value,(str,int,Decimal)):raise ValueError('INTEGER_MILLISECONDS_REQUIRED')
     if len(str(value))>20:raise ValueError('EXTREME_SOURCE_TIME')
+    if isinstance(value,str) and not re.fullmatch(r'[0-9]+',value):raise ValueError('INTEGER_MILLISECONDS_REQUIRED')
+    if isinstance(value,Decimal) and ('e' in str(value).lower() or '.' in str(value)):raise ValueError('INTEGER_MILLISECONDS_REQUIRED')
     try:n=Decimal(str(value))
     except InvalidOperation:raise ValueError('MALFORMED_MILLISECONDS') from None
     if not n.is_finite() or n!=n.to_integral_value():raise ValueError('INTEGER_MILLISECONDS_REQUIRED')
@@ -122,20 +134,35 @@ class Context:
     calendar: Calendar | None = None
     max_receipt_lead_seconds: int = 5
     late_after_seconds: int = 300
+    expected_instrument: str | None = None
+    expected_timeframe: str | None = None
 
     def __post_init__(self):
         if self.environment not in {'production','shadow','test','development'} or not NAME.fullmatch(self.source_id) or not NAME.fullmatch(self.provenance_reference):raise ValueError('INVALID_CONTEXT')
+        if self.expected_instrument is not None and self.expected_instrument not in INSTRUMENTS:raise ValueError('INVALID_CONTEXT_STREAM')
+        if self.expected_timeframe is not None and self.expected_timeframe not in TIMEFRAMES:raise ValueError('INVALID_CONTEXT_STREAM')
+        if any(not isinstance(v,str) or not NAME.fullmatch(v) for v in self.known_versions):raise ValueError('INVALID_VERSION_REGISTRY')
         if not 0<=self.max_receipt_lead_seconds<=60 or not 0<=self.late_after_seconds<=86400:raise ValueError('INVALID_CONTEXT_TIMING')
+
+def feature_group(name):
+    key=re.sub(r'[^a-z0-9]','',name.lower())
+    patterns={'EMA':r'ema(?:fast|slow|trend)?[0-9]*','RSI':r'rsi[0-9]*','ATR':r'atr(?:percentofprice)?[0-9]*','ADX':r'adx[0-9]*','MACD':r'macd(?:line|signal|hist|histogram)?[0-9]*','BOLLINGER':r'(?:bb(?:basis|upper|lower|width)?|bollinger(?:bands)?)[0-9]*'}
+    for group,pattern in patterns.items():
+        if re.fullmatch(pattern,key):return group
+    return None
 
 def features(payload, source_time, source_version, payload_digest):
     nested=payload.get('indicators')
     originals={'indicators':deepcopy(nested)} if 'indicators' in payload else {}
     for k,v in payload.items():
-        if any(k.lower() in names or k.lower().startswith('ema_') or k.lower().startswith('bb_') for names in FEATURE_GROUPS.values()):originals[k]=deepcopy(v)
+        if feature_group(k) is not None or any(k.lower() in names for names in FEATURE_GROUPS.values()):originals[k]=deepcopy(v)
     leaves={k.lower():v for k,v in payload.items()}
     if isinstance(nested,dict):leaves.update({k.lower():v for k,v in nested.items()})
-    availability={group:any(k in leaves and leaves[k] is not None for k in names) for group,names in FEATURE_GROUPS.items()}
-    return {'original':originals,'availability':availability,'source_timestamp':source_time,'source_version':source_version,'payload_digest':payload_digest,'method':'PRESERVED_SOURCE_FIELDS_NO_RECOMPUTATION'}
+    availability={group:any((feature_group(k)==group or k in names) and v is not None for k,v in leaves.items()) for group,names in FEATURE_GROUPS.items()}
+    field_provenance={k:{'group':feature_group(k),'source_timestamp':source_time,'source_version':source_version,'payload_digest':payload_digest,'value_validation':'NOT_FORMULA_OR_SEMANTIC_VERIFICATION'} for k in leaves if feature_group(k) is not None}
+    source_field_paths=[{'path':'$.'+k,'group':feature_group(k),'source_timestamp':source_time,'source_version':source_version,'payload_digest':payload_digest} for k in payload if feature_group(k) is not None]
+    if isinstance(nested,dict):source_field_paths.extend({'path':'$.indicators.'+k,'group':feature_group(k),'source_timestamp':source_time,'source_version':source_version,'payload_digest':payload_digest} for k in nested)
+    return {'original':originals,'availability':availability,'source_field_paths':source_field_paths,'field_provenance':field_provenance,'source_timestamp':source_time,'source_version':source_version,'payload_digest':payload_digest,'method':'PRESERVED_SOURCE_FIELDS_NO_RECOMPUTATION'}
 
 def normalize(event,context):
     """Return a projection; leave the supplied event/payload unchanged.
@@ -145,7 +172,7 @@ def normalize(event,context):
     flags do not influence trust.
     """
     flags=[];block=[];timing=[];opened=closed=stored=received=None;ohlcv={};raw={};event_hash=None;payload_hash=None
-    out={'normalizer_version':'historical_normalizer_v1','digest_encoding':'canonical_json_value_v1','event_id':None,'instrument':None,'timeframe':None,'source_format':'UNKNOWN','source_version':None,'source_id':context.source_id,'environment':context.environment,'provenance_references':[context.provenance_reference],'quality_flags':flags,'timing_flags':timing,'eligibility_blockers':block}
+    out={'normalizer_version':'historical_normalizer_v1.1','digest_encoding':'canonical_json_value_v2_utc6','event_id':None,'instrument':None,'timeframe':None,'source_format':'UNKNOWN','source_version':None,'source_id':context.source_id,'environment':context.environment,'provenance_references':[context.provenance_reference],'quality_flags':flags,'timing_flags':timing,'eligibility_blockers':block}
     if not isinstance(event,dict):event={};flags.append('MALFORMED_EVENT')
     original=deepcopy(event)
     out['event_id']=event.get('event_id');out['instrument']=event.get('instrument');out['timeframe']=event.get('timeframe')
@@ -154,6 +181,8 @@ def normalize(event,context):
             flags.append('INVALID_'+k.upper());out[k]=None
     if out.get('instrument') not in INSTRUMENTS:flags.append('UNSUPPORTED_INSTRUMENT')
     if out.get('timeframe') not in TIMEFRAMES:flags.append('UNSUPPORTED_TIMEFRAME')
+    if context.expected_instrument is not None and out['instrument']!=context.expected_instrument:flags.append('CONTEXT_INSTRUMENT_MISMATCH')
+    if context.expected_timeframe is not None and out['timeframe']!=context.expected_timeframe:flags.append('CONTEXT_TIMEFRAME_MISMATCH')
     if event.get('event_type')!='market_data':flags.append('WRONG_EVENT_TYPE')
     if event.get('environment')!=context.environment:flags.append('ENVIRONMENT_MISMATCH')
     if event.get('origin')!=context.source_id:flags.append('SOURCE_IDENTITY_MISMATCH')
@@ -173,7 +202,7 @@ def normalize(event,context):
     if len(out['declared_source_versions'])>1:block.append('MULTIPLE_VERSION_DECLARATIONS_REQUIRE_MAPPING')
     out['version_evidence_basis']='payload' if any(k in raw for k in ('schema_version','version','script_version')) else 'event_envelope_only'
     if out['version_evidence_basis']=='event_envelope_only':block.append('SOURCE_SCRIPT_VERSION_UNPROVED')
-    if not isinstance(version,(str,int)) or isinstance(version,bool) or str(version) not in context.known_versions:block.append('SOURCE_VERSION_UNPROVED')
+    if not isinstance(version,str) or not NAME.fullmatch(version) or version not in context.known_versions:block.append('SOURCE_VERSION_UNPROVED')
     # Exact aliases only; no silent removal of provider prefixes or underscores.
     symbol=raw.get('ticker',raw.get('symbol'))
     if symbol!=out['instrument']:flags.append('PAYLOAD_INSTRUMENT_MISMATCH')
@@ -217,8 +246,8 @@ def normalize(event,context):
     if opened and stored and opened!=stored:out['stored_time_disagrees']=True
     else:out['stored_time_disagrees']=False
     cal=context.calendar;calendar_ok=False
-    if cal is None or not cal.approved:block.append('CALENDAR_UNPROVED')
-    elif cal.instrument!=out['instrument'] or cal.timeframe!=out['timeframe']:flags.append('CALENDAR_STREAM_MISMATCH')
+    if cal is not None and (cal.instrument!=out['instrument'] or cal.timeframe!=out['timeframe']):flags.append('CALENDAR_STREAM_MISMATCH')
+    elif cal is None or not cal.approved:block.append('CALENDAR_UNPROVED')
     elif opened and not cal.start<=opened<cal.end:block.append('CALENDAR_WINDOW_UNCOVERED')
     elif opened:
         expected=dict(cal.slots)

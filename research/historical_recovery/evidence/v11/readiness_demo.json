@@ -1,0 +1,306 @@
+{
+  "classification": "SYNTHETIC_ONLY_NOT_REAL_POPULATION",
+  "scenarios": {
+    "valid": {
+      "contract": "historical_quality_v1.1",
+      "window": {
+        "start": "2026-10-13T00:00:00+00:00",
+        "end": "2026-10-13T00:03:00+00:00"
+      },
+      "scope": {
+        "environment": "test",
+        "source_id": "tradingview",
+        "instrument": "GBPUSD",
+        "timeframe": "1m"
+      },
+      "record_count": 3,
+      "normalized_count": 3,
+      "unique_source_candles": 3,
+      "repeated_event_records": 0,
+      "conflicting_event_ids": [],
+      "validation_flag_counts": {},
+      "invalid_timestamp_counts": {},
+      "invalid_ohlcv_count": 0,
+      "timeframe_inconsistency_count": 0,
+      "session_calendar_exception_count": 0,
+      "late_delivery": 0,
+      "source_time_regressions_in_receipt_order": 0,
+      "receipt_order_limitation": "received_at can be replaced on retry; original delivery sequence unproved",
+      "nominal_off_grid_count": 0,
+      "calendar_verified": true,
+      "missing_expected_intervals": [],
+      "unexpected_source_slots": [],
+      "feature_availability": {
+        "EMA": 3,
+        "RSI": 3,
+        "ATR": 3,
+        "ADX": 3,
+        "MACD": 3,
+        "BOLLINGER": 3
+      },
+      "recovery_counts": {
+        "ORIGINAL_TIMESTAMP_VERIFIED": 3
+      },
+      "eligible_record_count": 3,
+      "source_population_status": "COMPLETE_CAPTURED_SNAPSHOT",
+      "calendar_window_status": "COMPLETE_EXPECTED_SLOTS",
+      "dataset_complete_for_research": true,
+      "malformed_records": [],
+      "observed_calendar_window_status": "ALL_EXPECTED_TIMES_OBSERVED_NOT_VALIDATED",
+      "valid_expected_slots": [
+        "2026-10-13T00:00:00+00:00",
+        "2026-10-13T00:01:00+00:00",
+        "2026-10-13T00:02:00+00:00"
+      ],
+      "invalid_expected_slots": [],
+      "conflicting_expected_slots": [],
+      "unproved_expected_slots": [],
+      "research_missing_or_ineligible_slots": [],
+      "readiness_summary": {
+        "records_received": 3,
+        "source_timestamps_present": 3,
+        "parseable_source_times": 3,
+        "valid_ohlcv": 3,
+        "invalid_observations": 0,
+        "late_observations": 0,
+        "eligible_candles": 3,
+        "research_ready_count": 3,
+        "training_readiness": "BLOCKED_LABEL_LINEAGE_SPLITS_AND_APPROVAL",
+        "calendar_coverage": "PROVED_BY_CONTEXT",
+        "remaining_blockers": []
+      },
+      "projection_population_hash": "b6cca05922b6cc2cac01ce1f4c297edee6c2e844fb622249334ee60b466b655a",
+      "manifest_hash": "0da4e6701fbfad3346e5f8ca78049afe9e401a6a8d822b7134b838c390dc8114"
+    },
+    "invalid": {
+      "contract": "historical_quality_v1.1",
+      "window": {
+        "start": "2026-10-13T00:00:00+00:00",
+        "end": "2026-10-13T00:03:00+00:00"
+      },
+      "scope": {
+        "environment": "test",
+        "source_id": "tradingview",
+        "instrument": "GBPUSD",
+        "timeframe": "1m"
+      },
+      "record_count": 3,
+      "normalized_count": 3,
+      "unique_source_candles": 3,
+      "repeated_event_records": 0,
+      "conflicting_event_ids": [],
+      "validation_flag_counts": {
+        "INVALID_OHLCV": 1
+      },
+      "invalid_timestamp_counts": {},
+      "invalid_ohlcv_count": 1,
+      "timeframe_inconsistency_count": 0,
+      "session_calendar_exception_count": 0,
+      "late_delivery": 0,
+      "source_time_regressions_in_receipt_order": 0,
+      "receipt_order_limitation": "received_at can be replaced on retry; original delivery sequence unproved",
+      "nominal_off_grid_count": 0,
+      "calendar_verified": true,
+      "missing_expected_intervals": [],
+      "unexpected_source_slots": [],
+      "feature_availability": {
+        "EMA": 3,
+        "RSI": 3,
+        "ATR": 3,
+        "ADX": 3,
+        "MACD": 3,
+        "BOLLINGER": 3
+      },
+      "recovery_counts": {
+        "ORIGINAL_TIMESTAMP_VERIFIED": 3
+      },
+      "eligible_record_count": 2,
+      "source_population_status": "COMPLETE_CAPTURED_SNAPSHOT",
+      "calendar_window_status": "INCOMPLETE_OR_UNPROVED",
+      "dataset_complete_for_research": false,
+      "malformed_records": [],
+      "observed_calendar_window_status": "ALL_EXPECTED_TIMES_OBSERVED_NOT_VALIDATED",
+      "valid_expected_slots": [
+        "2026-10-13T00:01:00+00:00",
+        "2026-10-13T00:02:00+00:00"
+      ],
+      "invalid_expected_slots": [
+        "2026-10-13T00:00:00+00:00"
+      ],
+      "conflicting_expected_slots": [],
+      "unproved_expected_slots": [],
+      "research_missing_or_ineligible_slots": [
+        "2026-10-13T00:00:00+00:00"
+      ],
+      "readiness_summary": {
+        "records_received": 3,
+        "source_timestamps_present": 3,
+        "parseable_source_times": 3,
+        "valid_ohlcv": 2,
+        "invalid_observations": 1,
+        "late_observations": 0,
+        "eligible_candles": 2,
+        "research_ready_count": 0,
+        "training_readiness": "BLOCKED_LABEL_LINEAGE_SPLITS_AND_APPROVAL",
+        "calendar_coverage": "PROVED_BY_CONTEXT",
+        "remaining_blockers": []
+      },
+      "projection_population_hash": "684fc8802cf240260668cfb774d1e1da99d0ad672179bd5721ea0a2918713571",
+      "manifest_hash": "25e73e36ba58ff79ad767594165782f800cd1a5b68abfffe560ef3866e7aa3a7"
+    },
+    "conflicting": {
+      "contract": "historical_quality_v1.1",
+      "window": {
+        "start": "2026-10-13T00:00:00+00:00",
+        "end": "2026-10-13T00:03:00+00:00"
+      },
+      "scope": {
+        "environment": "test",
+        "source_id": "tradingview",
+        "instrument": "GBPUSD",
+        "timeframe": "1m"
+      },
+      "record_count": 4,
+      "normalized_count": 4,
+      "unique_source_candles": 3,
+      "repeated_event_records": 0,
+      "conflicting_event_ids": [],
+      "validation_flag_counts": {
+        "DATASET_DUPLICATE_CONFLICT": 2
+      },
+      "invalid_timestamp_counts": {},
+      "invalid_ohlcv_count": 0,
+      "timeframe_inconsistency_count": 0,
+      "session_calendar_exception_count": 0,
+      "late_delivery": 0,
+      "source_time_regressions_in_receipt_order": 0,
+      "receipt_order_limitation": "received_at can be replaced on retry; original delivery sequence unproved",
+      "nominal_off_grid_count": 0,
+      "calendar_verified": true,
+      "missing_expected_intervals": [],
+      "unexpected_source_slots": [],
+      "feature_availability": {
+        "EMA": 4,
+        "RSI": 4,
+        "ATR": 4,
+        "ADX": 4,
+        "MACD": 4,
+        "BOLLINGER": 4
+      },
+      "recovery_counts": {
+        "RECOVERABLE_WITH_SOURCE_EVIDENCE": 2,
+        "ORIGINAL_TIMESTAMP_VERIFIED": 2
+      },
+      "eligible_record_count": 2,
+      "source_population_status": "COMPLETE_CAPTURED_SNAPSHOT",
+      "calendar_window_status": "INCOMPLETE_OR_UNPROVED",
+      "dataset_complete_for_research": false,
+      "malformed_records": [],
+      "observed_calendar_window_status": "ALL_EXPECTED_TIMES_OBSERVED_NOT_VALIDATED",
+      "valid_expected_slots": [
+        "2026-10-13T00:01:00+00:00",
+        "2026-10-13T00:02:00+00:00"
+      ],
+      "invalid_expected_slots": [],
+      "conflicting_expected_slots": [
+        "2026-10-13T00:00:00+00:00"
+      ],
+      "unproved_expected_slots": [],
+      "research_missing_or_ineligible_slots": [
+        "2026-10-13T00:00:00+00:00"
+      ],
+      "readiness_summary": {
+        "records_received": 4,
+        "source_timestamps_present": 4,
+        "parseable_source_times": 4,
+        "valid_ohlcv": 4,
+        "invalid_observations": 2,
+        "late_observations": 0,
+        "eligible_candles": 2,
+        "research_ready_count": 0,
+        "training_readiness": "BLOCKED_LABEL_LINEAGE_SPLITS_AND_APPROVAL",
+        "calendar_coverage": "PROVED_BY_CONTEXT",
+        "remaining_blockers": []
+      },
+      "projection_population_hash": "584fb900f8fbc2fa4eb3d586f74aa17894f53fe9a127a3cce52e132c2ea0ecb4",
+      "manifest_hash": "beebce8f6409db543574512188243d6a290dd225e168748f5675f504e680c19d"
+    },
+    "unproved": {
+      "contract": "historical_quality_v1.1",
+      "window": {
+        "start": "2026-10-13T00:00:00+00:00",
+        "end": "2026-10-13T00:03:00+00:00"
+      },
+      "scope": {
+        "environment": "test",
+        "source_id": "tradingview",
+        "instrument": "GBPUSD",
+        "timeframe": "1m"
+      },
+      "record_count": 3,
+      "normalized_count": 3,
+      "unique_source_candles": 3,
+      "repeated_event_records": 0,
+      "conflicting_event_ids": [],
+      "validation_flag_counts": {},
+      "invalid_timestamp_counts": {},
+      "invalid_ohlcv_count": 0,
+      "timeframe_inconsistency_count": 0,
+      "session_calendar_exception_count": 0,
+      "late_delivery": 0,
+      "source_time_regressions_in_receipt_order": 0,
+      "receipt_order_limitation": "received_at can be replaced on retry; original delivery sequence unproved",
+      "nominal_off_grid_count": 0,
+      "calendar_verified": true,
+      "missing_expected_intervals": [],
+      "unexpected_source_slots": [],
+      "feature_availability": {
+        "EMA": 3,
+        "RSI": 3,
+        "ATR": 3,
+        "ADX": 3,
+        "MACD": 3,
+        "BOLLINGER": 3
+      },
+      "recovery_counts": {
+        "NOT_YET_ASSESSED": 3
+      },
+      "eligible_record_count": 0,
+      "source_population_status": "COMPLETE_CAPTURED_SNAPSHOT",
+      "calendar_window_status": "INCOMPLETE_OR_UNPROVED",
+      "dataset_complete_for_research": false,
+      "malformed_records": [],
+      "observed_calendar_window_status": "ALL_EXPECTED_TIMES_OBSERVED_NOT_VALIDATED",
+      "valid_expected_slots": [],
+      "invalid_expected_slots": [],
+      "conflicting_expected_slots": [],
+      "unproved_expected_slots": [
+        "2026-10-13T00:00:00+00:00",
+        "2026-10-13T00:01:00+00:00",
+        "2026-10-13T00:02:00+00:00"
+      ],
+      "research_missing_or_ineligible_slots": [
+        "2026-10-13T00:00:00+00:00",
+        "2026-10-13T00:01:00+00:00",
+        "2026-10-13T00:02:00+00:00"
+      ],
+      "readiness_summary": {
+        "records_received": 3,
+        "source_timestamps_present": 3,
+        "parseable_source_times": 3,
+        "valid_ohlcv": 3,
+        "invalid_observations": 0,
+        "late_observations": 0,
+        "eligible_candles": 0,
+        "research_ready_count": 0,
+        "training_readiness": "BLOCKED_LABEL_LINEAGE_SPLITS_AND_APPROVAL",
+        "calendar_coverage": "PROVED_BY_CONTEXT",
+        "remaining_blockers": [
+          "PROVENANCE_UNPROVED"
+        ]
+      },
+      "projection_population_hash": "08ff48e25f4d3c6013d9cae495caed2bf6f0092d2f6e5d3d98a1bfb9c0ee4e42",
+      "manifest_hash": "0c41f067f95d4ee2e9daaa48755b0aa62ea7370a4e28ac9ccd2a1bcfc002eeec"
+    }
+  }
+}

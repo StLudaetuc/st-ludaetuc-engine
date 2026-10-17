@@ -1,0 +1,35 @@
+{
+  "command": [
+    "/workspace/scratch/3ed8d790c2bf/historical_v11_validation/repo/../venv312/bin/python",
+    "-W",
+    "default",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "research/historical_recovery/tests",
+    "-v"
+  ],
+  "exit_code": 0,
+  "started_at": "2026-10-17T22:15:10.896961+00:00",
+  "ended_at": "2026-10-17T22:15:12.107198+00:00",
+  "os": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "environment_keys": [
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE"
+  ],
+  "production_environment_inherited": false,
+  "source_sha256": {
+    "research/historical_recovery/auditor.py": "b6380056ad7bef7716780a6bac1a3090aec1f6a546ad9f9cb3746bec4a3e73ef",
+    "research/historical_recovery/anchors.py": "fcca9b654dbe6aba240f4acc6ca16bb890506304ec786926f286ed900f169552",
+    "research/historical_recovery/extract.py": "ebe135f7a861454a4fe6a675f6c2ebc472cd2438ace6747cccb566e1a231ddab",
+    "research/historical_recovery/normalizer.py": "d4054a24b2c35ff0d9e8e9fdf206ab4505c1ec3bbfee81ca4f778aa356062afb",
+    "research/historical_recovery/__init__.py": "85345986409942715825df6cc44e8e13c9f6706bab39fce7d54bf7d58663e496",
+    "research/historical_recovery/project.py": "cc445a04b3e633d0d2a203bb950269e01af5afd77d299223cce0d4de2b2cfe8a",
+    "research/historical_recovery/demo.py": "12f38147a36aa03260edb9b1c97e7cbaf402942f73c3faf7840018c25e405b8f",
+    "research/historical_recovery/tests/test_recovery.py": "9d8b9c4076a54ea53622e5d59e7b3e1d0d6df22f4cd4f4f538a6bc24b6636c8a",
+    "research/historical_recovery/tests/test_v11.py": "c0fe66dbcca2ac78397f66296bb3c51d0f526b52cb7f7e24d9867682eb2bd5da",
+    "research/historical_recovery/tests/test_contracts.py": "41fe25b87b4a4d4b6bea594fcdceca8dc66a160dcc9631c75f0c6c958c6705e9",
+    "research/historical_recovery/evidence/v11/run_suite.py": "9777418cbef757ae23bac959db14c667e4e4b20775cc42e18ba16a0a5db1b94d"
+  }
+}
