@@ -9,7 +9,7 @@ SCOPE={'account_alias':'practice-A','environment':'production','broker_environme
 CONFIG={'version':1,'identities':[{'key_id':'reader-1','service_id':'research-reader','token_sha256':hashlib.sha256(SECRET.encode()).hexdigest(),'permissions':['analytics:status','analytics:export','analytics:strategy-report','analytics:prediction-accuracy'],'scopes':[SCOPE],'expires_at':'2026-11-01T00:00:00Z'}]}
 class Tests(unittest.TestCase):
  def setUp(self):self.events=[];self.calls=[]
- def request(self,path='/analytics/export',auth=True,query=None,method='GET',headers=None,sink=None,config=None):
+ def request(self,path='/analytics/export',auth=True,query=None,method='GET',headers=None,sink=None,config=None,root_path=''):
   sent=[]
   async def downstream(scope,receive,send):
    self.calls.append(scope['path']);await send({'type':'http.response.start','status':200,'headers':[]});await send({'type':'http.response.body','body':b'untouched'})
@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
   async def send(m):sent.append(m)
   h=headers if headers is not None else [(b'authorization',('Bearer reader-1.'+SECRET).encode())] if auth else []
   q=query if query is not None else dict(SCOPE,start='2026-10-13T00:00:00Z',end='2026-10-14T00:00:00Z',limit='1000')
-  asyncio.run(app({'type':'http','path':path,'method':method,'headers':h,'query_string':urlencode(q,doseq=True).encode()},receive,send))
+  asyncio.run(app({'type':'http','path':path,'root_path':root_path,'method':method,'headers':h,'query_string':urlencode(q,doseq=True).encode()},receive,send))
   return sent[0]['status'],sent[-1].get('body',b''),dict(sent[0]['headers'])
  def test_status_positive(self):
   s,b,h=self.request('/analytics/access-status',query=SCOPE);self.assertEqual(s,200);self.assertEqual(json.loads(b)['scope'],SCOPE);self.assertEqual(h[b'cache-control'],b'no-store');self.assertFalse(self.calls)
@@ -68,6 +68,22 @@ class Tests(unittest.TestCase):
  def test_methods(self):
   for m in ['POST','PUT','DELETE','OPTIONS']:self.assertEqual(self.request(method=m)[0],405)
   self.assertEqual(self.request(method='HEAD')[1],b'')
+ def test_root_path_unauthenticated_containment(self):
+  # Uvicorn's root_path may be prepended to path while Starlette strips it.
+  for root in ('/api','/x'):
+   for p in ('/analytics/export','/analytics/strategy-report','/analytics/prediction-accuracy'):
+    self.assertEqual(self.request(path=root+p,root_path=root,auth=False)[0],401)
+  self.assertFalse(self.calls)
+ def test_root_path_authenticated_containment(self):
+  for p in ('/analytics/export','/analytics/strategy-report','/analytics/prediction-accuracy'):
+   self.assertEqual(self.request(path='/api'+p,root_path='/api')[0],503)
+  self.assertFalse(self.calls)
+ def test_root_path_unrelated_routes_unchanged(self):
+  self.assertEqual(self.request(path='/api/health',root_path='/api',auth=False)[1],b'untouched')
+  self.assertEqual(self.calls,['/api/health'])
+ def test_root_path_requires_prefix_boundary(self):
+  # A root_path which only shares a partial textual prefix must not be stripped.
+  self.assertEqual(self.request(path='/apix/health',root_path='/api',auth=False)[1],b'untouched')
  def test_trading_passthrough(self):
   for p in ['/evaluate','/market-data','/trade-opened','/trade-outcome','/health']:
    self.assertEqual(self.request(p,auth=False,method='POST')[1],b'untouched')
