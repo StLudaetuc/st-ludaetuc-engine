@@ -1,4 +1,4 @@
-import asyncio,ast,hashlib,json,unittest
+import asyncio,ast,hashlib,json,subprocess,unittest
 from datetime import datetime,timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -98,5 +98,10 @@ class Tests(unittest.TestCase):
  def test_engine_ast_unchanged(self):
   b=ast.parse(Path('engine.py').read_text())
   b.body=[n for n in b.body if not (isinstance(n,ast.ImportFrom) and n.module=='analytics_access_control') and not (isinstance(n,ast.Expr) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='add_middleware')]
-  self.assertEqual(hashlib.sha256(ast.dump(b).encode()).hexdigest(),Path('security/analytics_access_control/baseline_engine_ast.sha256').read_text().strip())
+  # Compare within the executing interpreter: ast.dump varies by Python version.
+  baseline = subprocess.run(
+   ['git','show','2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c:engine.py'],
+   check=True,capture_output=True,text=True,
+  ).stdout
+  self.assertEqual(ast.dump(b),ast.dump(ast.parse(baseline)))
 if __name__=='__main__':unittest.main(verbosity=2)
