@@ -98,10 +98,23 @@ class AnalyticsAccessControl:
 
     async def __call__(self, scope, receive, send):
         path = scope.get('path','')
-        # Decoded ASGI path is the same path used by the router. Also contain
-        # duplicate-slash/case variants, without rewriting unrelated routes.
-        normalized = '/' + '/'.join(part for part in path.split('/') if part)
-        protected = normalized.casefold() == '/analytics' or normalized.casefold().startswith('/analytics/')
+        # Protect both the incoming ASGI path and the route path after an ASGI
+        # root_path prefix. Uvicorn can prepend root_path to scope['path'], while
+        # Starlette removes that prefix before matching application routes.
+        # Matching only scope['path'] can silently bypass containment.
+        root_path = scope.get('root_path') or ''
+        route_path = path
+        if isinstance(root_path, str) and root_path and path.startswith(root_path):
+            remainder = path[len(root_path):]
+            if not remainder or remainder.startswith('/'):
+                route_path = remainder or '/'
+        def is_analytics(candidate):
+            if not isinstance(candidate, str):
+                return False
+            normalized = '/' + '/'.join(part for part in candidate.split('/') if part)
+            folded = normalized.casefold()
+            return folded == '/analytics' or folded.startswith('/analytics/')
+        protected = is_analytics(path) or is_analytics(route_path)
         if scope['type'] not in ('http','websocket') or not protected:
             await self.app(scope, receive, send)
             return
