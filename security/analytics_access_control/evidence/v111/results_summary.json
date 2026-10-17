@@ -1,0 +1,91 @@
+{
+  "author_testing_not_independent_assurance": true,
+  "mandatory_test_count": 42,
+  "runs": [
+    {
+      "run": "corrected_py312_run1",
+      "tests": 42,
+      "passed": 42,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "full_log": "corrected_py312_run1.log",
+      "diagnostic_trace_present": false
+    },
+    {
+      "run": "corrected_py312_run2",
+      "tests": 42,
+      "passed": 42,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "full_log": "corrected_py312_run2.log",
+      "diagnostic_trace_present": false
+    },
+    {
+      "run": "corrected_py313_run1",
+      "tests": 42,
+      "passed": 42,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "full_log": "corrected_py313_run1.log",
+      "diagnostic_trace_present": false
+    },
+    {
+      "run": "corrected_py313_run2",
+      "tests": 42,
+      "passed": 42,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "full_log": "corrected_py313_run2.log",
+      "diagnostic_trace_present": false
+    },
+    {
+      "run": "equivalent_py312",
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "full_log": "equivalent_py312.log",
+      "diagnostic_trace_present": false
+    },
+    {
+      "run": "equivalent_py313",
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "full_log": "equivalent_py313.log",
+      "diagnostic_trace_present": false
+    },
+    {
+      "run": "uvicorn_py312",
+      "candidate_probes": 33,
+      "old_v1_negative_controls": 3,
+      "candidate_handler_calls": 0,
+      "candidate_pool_calls": 0,
+      "exit_code": 0,
+      "full_log": "uvicorn_py312.log"
+    },
+    {
+      "run": "uvicorn_py313",
+      "candidate_probes": 33,
+      "old_v1_negative_controls": 3,
+      "candidate_handler_calls": 0,
+      "candidate_pool_calls": 0,
+      "exit_code": 0,
+      "full_log": "uvicorn_py313.log"
+    }
+  ],
+  "original_reviewer_32_suite": "NOT_AVAILABLE; report reviewed, source package not located; equivalents are author-written"
+}

@@ -1,111 +1,237 @@
-# ST LUDAETUC CLOUD V1.0 — ANALYTICS ACCESS-CONTROL CORRECTION
+# ST LUDAETUC CLOUD V1.0 — ANALYTICS SECURITY v1.1.1
 
-DRAFT — NOT APPROVED. Independent-review candidate; not deployed.
+DRAFT — NOT APPROVED. Author engineering evidence, not independent assurance.
+No merge, deployment, credential provisioning or production action is authorised.
 
-## Outcome and availability decision
+## A. Executive summary
 
-The candidate contains the legacy analytics API at an ASGI boundary. Unauthenticated requests are denied. Valid authenticated identities may obtain scoped access-status metadata, but all three legacy data routes return `503 analytics_scope_unavailable` before any handler or database query runs. This is an intentional containment release, **not a functional scoped analytics reader**.
+N-01 is corrected in `test_root_path_authenticated_containment`: export and
+strategy-report receive valid dates/limit; prediction-accuracy receives its own
+bounded since_hours/lookahead_minutes/max_predictions query. Assertions now cover
+empty, /api and /x roots for all three routes, require HTTP 503 **and** exact
+`analytics_scope_unavailable`, and assert no downstream handler executes.
+Nothing was weakened to accept the previous HTTP 400.
 
-It is unsafe to enable the shared-table legacy queries merely by adding a bearer token: the historical events and master_trading_log do not establish a verified account/environment security partition. Blocking these data routes is the smallest reliable correction that meets isolation without changing financial calculations, migrating storage, inferring account ownership or altering trading ingestion. There is no environment variable, wildcard permission or administrator bypass that re-enables them. Restoring authorised analytics reads requires a separately reviewed scoped reader and evidence-backed historical ownership mapping. Availability restoration is a named residual, not a hidden success claim.
+**Both runtime files remain byte-identical to v1.1.** This is a fixture, evidence
+and documentation correction only. All 42 mandatory tests pass twice in each of
+two clean, hash-locked environments: Python 3.12.14 and Python 3.13.16. Additional
+author-written 32-case real-engine checks pass on both, and real loopback Uvicorn
+probes observe no candidate analytics handler or pool access. The earlier v1
+negative control does reach legacy handlers under /api, showing sensitivity.
 
-Baseline: `2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c`.
-Branch: `security/analytics-access-control-v1`.
-The final exact commit is provided in the engineering handover; review the branch by that immutable SHA.
+The complete original reviewer 32-test source was not located. The available
+original REPORT.md was read; its findings and the CEO-reported v1.1 delta verdict
+are distinguished below from newly executed author results. Our equivalent suite
+is **not** an unchanged reproduction of Claude's suite and is not independent.
 
-## Exact findings
+## B. Exact branch and provenance
 
-| Finding | Evidence / severity | Disposition |
+- Repository: `StLudaetuc/st-ludaetuc-engine`.
+- Production baseline: `2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c`.
+- Original v1: `c035f9d2d74c3eb0d7f2dc1086f2e1095b3bea44`.
+- Exact starting v1.1: `7aeadda5dab83607355952ffbb21c06f68da8a20`.
+- Successor branch: `security/analytics-access-control-v1-1-1`.
+- Exact new frozen SHA: supplied in the final handover; it cannot be embedded in
+  its own commit without changing that commit. Review the immutable SHA, not a
+  moving branch label. Its sole parent must be the exact starting v1.1 SHA.
+
+The repository was cloned with full baseline history because the unchanged v1.1
+AST test invokes `git show <production-baseline>:engine.py`. A file-only download
+or shallow clone without that object is insufficient. No history replacement or
+synthetic commit object was used. No main/frozen branch was advanced.
+
+## Historical finding preservation
+
+| Stage / finding | Evidence and disposition |
+|---|---|
+| v1 unauthenticated containment | Earlier 38-test author result remains historical; full old result preserved in evidence/v111/historical_v1_test_results.txt and original immutable commit |
+| F-01 high root-path bypass | Original v1 checked scope.path but not Starlette's root-path-stripped route. Reviewer reported disclosure under Uvicorn root_path; this task reproduces old-v1 legacy-handler/pool-tripwire access for all three routes in loopback negative controls, without any real database |
+| v1.1 runtime fix | Exact v1.1 protects both incoming and prefix-boundary-stripped route paths and authorises using stripped identity. No v1.1.1 runtime change |
+| F-02 Python-specific AST hash | v1.1 compares baseline/candidate AST within the running interpreter via git show. It passes on both tested minors; baseline_engine_ast.sha256 remains historical and is no longer the active comparison |
+| v1.1 N-01 | Reproduced: 42 tests, 41 pass, sole failure HTTP 400 != 503 on both clean environments. Prediction-accuracy was incorrectly given export query parameters |
+| v1.1 stale handover/logs | Original files still described 38 tests. This handover and regenerated logs supersede that current claim while preserving history |
+| v1.1.1 | Only endpoint-specific fixture and evidence/docs updated; 42/42 twice per environment, unchanged runtime |
+
+The available original REPORT.md describes F-01 and its scratch proof-of-fix; it
+is not the complete v1.1 delta package. The CEO reports Claude's v1.1 32/32 and
+trading/database differential passed. Those particular independent runs remain
+**reviewer-reported**, not reproduced unchanged here.
+
+## C. Complete changed-file list
+
+Current changes are confined to security/analytics_access_control/:
+
+1. `test_access_control.py` — N-01 fixture and stronger root/status/body/no-handler assertions.
+2. `HANDOVER.md` — this updated handover.
+3. `test_results.txt` — generated concatenation of four full corrected-suite logs.
+4. `test_environment.json` — actual two-environment, four-run metadata.
+5. `evidence/v111/*` — self-contained locks, resolved packages, full unedited before/
+   after/supplemental logs, their commands/exit metadata, fixture diff, runtime
+   blob comparison, reproduction scripts, historical log, summary and hash manifest.
+
+`evidence/v111/changed_files.json` enumerates **every** path, including each evidence
+file; use it alongside the Git delta. No production requirements, engine/runtime,
+Pine, integration, database, Finance, Chief, historical recovery or other research
+file is changed.
+
+## D. Runtime blob comparison
+
+| File | v1.1 Git blob | v1.1.1 Git blob |
 |---|---|---|
-| Export exposes predictions without authentication | Confirmed bounded prior public GET, HTTP 200; internal identifiers and decision fields | All analytics paths intercepted before legacy handler |
-| All three analytics routes lack route identity/permission checks | Verified source at baseline | Fail-closed service registry and explicit per-route permission |
-| Strategy report aggregates all events and reads unscoped master view | Verified SQL | Route contained, no SQL executed |
-| Export selects events without account/environment predicate | Verified SQL; legacy environment defaults to production | Route contained; production is never interpreted as live broker scope |
-| Accuracy reads shared predictions and market payloads | Verified SQL | Route contained; hypothetical scoring unchanged and inaccessible |
-| Caller limits and dates were insufficiently constrained | Export accepts unbounded limit; forgiving timestamps; report no window; accuracy caller bounds | Hard request caps; invalid/missing scope or dates rejected |
-| Exception text can disclose database/schema/internal details | Export/report errors use str(exc); accuracy initial error interpolates exception | Legacy error generation cannot execute; middleware responses use fixed codes only |
-| No analytics-specific access/denial audit | Verified source | Structured server-generated audit events emitted to stdout; operator must verify log capture/retention |
-| Sensitive raw plan/internal identifiers in responses | Existing export final_trade_plan; report SELECT * bridge; accuracy scored details | No legacy data response, status metadata only |
-| Complete historical account attribution unavailable | Prior raw DB route blocked; no population/account mapping | Never guess scope or call shared history isolated |
+| analytics_access_control.py | 9f1f84985d92f2cb16df55351f3c2e0bd9dc877a | identical |
+| engine.py | 5fbf9ae9eeeba63fa8d2e2be5d61e611a058033e | identical |
 
-Only `/analytics/export` exposure was verified by the bounded public data probe. The vulnerabilities in the other two handlers are source-confirmed, not separate live exploitation tests. No further production payload was fetched for this correction.
+Byte equality, SHA-256 and length are recorded in runtime_blob_comparison.json.
+The final Git tree check independently verifies those blob IDs. Engine AST equality
+with production-minus-middleware registration passes under both Python minors.
+No runtime defect requiring a protected-file change was discovered by this task.
 
-## Production integration inspection and compatibility
+## E. Test results and reproducibility
 
-Read-only Render inspection reconfirmed live deployment `dep-db2b0n0473hc739cejd0` at the baseline SHA. Service runs `uvicorn engine:app --host 0.0.0.0 --port $PORT`, root directory empty, build `pip install -r requirements.txt`, auto-deploy enabled on main, public web-service ingress. PostgreSQL's protected external allowlist is unchanged.
+| Environment | Framework stack | Run 1 | Run 2 |
+|---|---|---|---|
+| Python 3.12.14 | FastAPI 0.115.12 / Starlette 0.46.2 / Uvicorn 0.35.0 | 42 pass, 0 fail/error/skip, exit 0 | same |
+| Python 3.13.16 | FastAPI 0.143.3 / Starlette 1.8.0 / Uvicorn 0.54.0 | 42 pass, 0 fail/error/skip, exit 0 | same |
 
-Baseline repository tree contains engine.py, app.py wrapper, shadow scorer, requirements and seven Pine sources; no AGENTS.md. Engine source declares exactly the three analytics data routes. No analytics call is present in the engine's four trading ingestion/execution routes. The app.py wrapper re-exports the same app, so it receives containment too. Shadow scorer is computation-only; no runtime analytics dependency established. Existing code comments explicitly identify external Claude research use. Previous GPTWork research evidence acquisition also used export/report. Exact inventory of external authorised research jobs, schedules and identities is **not independently complete**. No Make blueprint was available to establish other consumers.
+httpx 0.28.1 and pydantic 2.14.1 were resolved in both; every dependency/version is
+in environment-py312.json / environment-py313.json and hashed requirements locks.
+These are actual tested environments, not a claim of production parity. Python
+3.12's Uvicorn version differs from the original reviewer's reported 0.54.0; the
+3.13 stack tests 0.54.0. OS: Linux 6.18.55 x86_64, glibc 2.39. Container image digest
+is not exposed and remains UNPROVED.
 
-Compatibility: `/evaluate`, `/market-data`, `/trade-opened`, `/trade-outcome`, `/health` and startup code remain unchanged. Trading/model/calculation AST is identical after removing the new import and middleware registration. Analytics callers will break intentionally: public requests become 401; valid scoped data requests become 503. No silent empty/zero response. HEAD/OPTIONS and mutation requests cannot bypass the boundary. CORS is not used as authentication. The OpenAPI schema remains available and discloses route shapes, not records; authenticated status is middleware-owned rather than advertised as a legacy data route.
-
-Research-reader migration: inventory each operator-approved caller first; assign distinct expiring service key IDs and exact scope/permissions; migrate callers to Authorization header and explicit account_alias/system environment/broker environment; use access-status to test identity; stop treating 503 as an empty dataset. Keep legacy research evidence labelled provisional. Authorised readers cannot retrieve legacy data with this containment release. A reviewed scoped acquisition replacement or existing operator-controlled internal export is required before research read availability is restored. Do not share an operator key with an LLM or put credentials in URLs, Pine alerts, spreadsheets, GitHub or reports.
-
-## Configuration and credential provisioning — operator only
-
-No production credential or Render variable was created. Configuration is optional for containment: absent registry still denies everyone and protects all analytics. Registry is read on each protected request; invalid registry fails closed without stopping trading. The sole variable is `ANALYTICS_SERVICE_IDENTITIES_JSON` with strict shape:
-
-```json
-{
-  "version": 1,
-  "identities": [
-    {
-      "key_id": "research-reader-v1",
-      "service_id": "approved-research-service",
-      "token_sha256": "REPLACE_WITH_OPERATOR_GENERATED_64_LOWERCASE_HEX_DIGEST",
-      "permissions": ["analytics:status", "analytics:export"],
-      "scopes": [
-        {"account_alias": "approved-practice-alias", "environment": "production", "broker_environment": "practice"}
-      ],
-      "expires_at": "REPLACE_WITH_EXPLICIT_FUTURE_UTC_TIMESTAMP"
-    }
-  ]
-}
-```
-
-This example deliberately fails validation until provisioned. Operators generate at least 32 cryptographically random bytes and encode as unpadded URL-safe base64 (43+ characters), retain token only in the caller's approved secret store, and store SHA-256 of the token in the engine registry. Request header: `Authorization: Bearer <key_id>.<token>`. No cookie, query, forwarded identity or IP is accepted as authentication. Digest comparison uses hmac.compare_digest. IDs/aliases are bounded safe strings; no wildcard permission/scope is permitted. Expired or unknown keys fail 401. Duplicate identity/digest/config keys fail closed. Key rotation uses a separate key ID, approved overlap, then removal/revocation; no shared credential is necessary.
-
-Environment is explicitly one of production/shadow/development/test; broker_environment is practice/live/none. These are separate exact-match labels, never a financial-reality assertion. Scope membership grants metadata access only until a separately reviewed data implementation exists.
-
-Request query always includes account_alias, environment, broker_environment. Export/report additionally require explicit timezone-aware start/end. Dates form a positive half-open window of at most 31 days; end cannot exceed server now by more than five minutes. Row limit 1–1000. Accuracy caps since_hours 744, lookahead_minutes 1440, max_predictions 100. Query bytes max 2048, fields max 20, duplicate/unknown fields rejected. Configuration max 64 KiB, max 32 identities and 16 scopes per identity. These caps govern request acceptance; because data handlers are contained, this release executes zero SQL or row scans. Future data readers must enforce limits again in SQL, not reuse validation as proof of bounded query work.
-
-## Auditing and disclosure
-
-Every analytics decision includes generated request UUID, server timestamp, configured service identity where validated, approved scope where selected, known route or fixed unknown-route label, outcome and HTTP status. No token/digest, raw query, IP, broker account ID, user payload or exception string is logged. Headers enforce no-store, pragma no-cache, Vary Authorization and nosniff; request IDs are generated, never trusted from callers.
-
-Structured audit lines are written/flushed under a lock to stdout, avoiding silent logger-level filtering. A failed audit write suppresses success and returns sanitized 503 audit_unavailable. A completely unavailable sink cannot preserve a durable denial record; operator alerting is required. Render capture, retention, durable export and operator access policy must be verified before production approval. This release does not create an audit database or alter logging configuration, and does not claim tamper-proof durable storage. Any future forwarding middleware must retain this boundary as the outermost analytics control.
-
-## Executed tests
-
-38 tests pass: 29 direct ASGI/security/source checks and 9 real FastAPI/TestClient integration tests. Full names/results are in test_results.txt. Tests exercise authenticated access-status, all legacy route containment, missing/wrong/expired identities, malformed/duplicate/oversized configuration, explicit permissions, account/system/broker scope denials, missing/invalid/timezone/date/future bounds, numeric/row/accuracy bounds, duplicate/unknown/oversized query fields, injection filters, encoded paths, slash variants, method and websocket bypass attempts, secret/error redaction, audit failures and unchanged trading passthrough.
-
-AST equivalence test confirms engine functions/model code/startup remain identical to baseline; real integration tests use a separate FastAPI app with hostile data handlers and prove those handlers never execute. No engine import, startup DDL, production credentials, network request or database connection occurs in the test suite.
-
-Test environment: Python 3.12; isolated fastapi 0.115.12, httpx 0.28.1 and installed dependency versions in test_environment.json. Existing production requirements are unchanged; framework version drift must be checked during approved staging validation. No PostgreSQL runtime test needed for this zero-SQL middleware; database privileges/migrations were not touched. Production load behaviour and durable audit capture are not validated by unit tests.
-
-Reproduce from repository root in an isolated virtual environment:
+Command from full repository root, for each interpreter, twice:
 
 ```
-python -m pip install fastapi==0.115.12 httpx==0.28.1
-python -m unittest discover -s security/analytics_access_control -p 'test_*.py' -v
+<isolated-venv>/bin/python -W default -m unittest discover \
+  -s security/analytics_access_control -p 'test_*.py' -v
 ```
 
-The AST comparison test's baseline fixture is included in baseline_engine_ast.sha256: it hashes baseline AST independently of comments/line offsets; no frozen branch checkout is required.
+Tests launch with a freshly constructed environment containing only PATH,
+HOME (private scratch) and PYTHONDONTWRITEBYTECODE. No DATABASE_URL, service registry,
+OANDA credentials, cloud tokens or production variables are inherited. Network
+package downloads occurred during setup; tests use no production or external HTTP
+endpoint. The Uvicorn probes bind/connect only to loopback ephemeral sockets.
+No real PostgreSQL instance is needed or contacted; engine pool access is a tripwire.
 
-## Safe deployment and rollback plan — not executed
+Full unedited logs remain under evidence/v111/, with commands, timestamps and exit
+codes in matching *.metadata.json. test_results.txt is a generated concatenation
+of the four corrected logs, with source-log headings, not manually edited test output.
+Warnings about deprecated FastAPI startup/TestClient APIs are retained, not hidden.
+Bootstrap mislaunch logs are also retained: an initial runner followed a virtualenv
+symlink to the base interpreter and lacked dependencies. These are labelled setup
+failures, not valid 42-case runs; the corrected recorder preserves the venv path.
+All required final runs use the actual venv interpreters and pass.
 
-1. Independent security reviewer checks exact frozen SHA and availability trade-off; owner approves containment, reader outage/migration and audit retention requirements.
-2. In isolated staging, use synthetic records and identities, production-compatible framework versions, verify middleware registration, import and route responses, log capture and normal trading-route behaviour. No actual financial import.
-3. Operator performs authorised release/configuration change only after explicit approval. Main auto-deploy makes merge a production action: do not merge from this task. No deployment, key or Render change has been made.
-4. Verify unauthenticated analytics 401, authorised status 200 when registry provisioned, authorised legacy reads 503, all trading paths healthy and no sensitive/error body leakage. Verify structured audit arrival and retention.
-5. Rollback must preserve containment. Removing the registry disables identity acceptance but cannot reopen data routes; this is safe credential/config rollback. Reverting engine to the baseline reopens the confirmed exposure and is **unsafe** without an independently approved path-level block. Avoid whole-service suspension/network denial: it would disrupt trading ingress. Prefer a reviewed fix-forward containment release if middleware integration fails. Preserve security audit evidence through any operator-controlled rollback.
+## F. F-01 and compatibility regression evidence
 
-## Immediate containment options requiring operator approval
+- The corrected 42-test suite retains v1.1 root coverage; authenticated regression
+  now explicitly tests all three roots with valid per-route requests.
+- equivalent_assurance.py: **32 author-written real engine.app tests**, passed on
+  both environments. Tests add handler/pool tripwires in memory, check unauthenticated
+  401, scoped authenticated 503/error, real health, prefix boundaries and access-status.
+  Trading endpoints use synthetic stand-ins to test routing passthrough. They do
+  not repeat the reviewer's 115-request algorithm/database differential.
+- uvicorn_probe.py: **33 candidate HTTP probes per environment**, across root_path
+  empty, /api and /x. Each has six analytics requests (3 routes x unauth/auth), one
+  real health and four synthetic trading requests. Candidate legacy handler and
+  pool calls: **zero**. All requests passed their response/effect assertions.
+- Negative sensitivity control: the old immutable v1 middleware is loaded in an
+  isolated process memory context only; /api requests hit all three real legacy
+  handler wrappers and pool tripwires. No source/runtime file is overwritten and
+  no real DB connection occurs. It returns the handler's sanitized pool-unavailable
+  error, not actual private data; this proves boundary reachability, not new live
+  exfiltration. Controls are expected-positive findings on old v1, not current defects.
 
-Deploy this reviewed deny-all legacy analytics boundary; or install an independently verified path-specific edge/reverse-proxy deny rule for /analytics while preserving trading routes, if the operator actually has a supported edge mechanism. Render metadata did not establish such a mechanism, so this is conditional, not an instruction to invent/configure one. Do not suspend the service, restrict all inbound traffic or weaken PostgreSQL networking. No immediate containment has been enacted; production exposure remains until an approved action.
+The original full reviewer 32-test package is unavailable in the checked repository
+refs/available Library evidence. A fresh reviewer should obtain and run that suite
+unchanged. Equivalent author tests are clearly labelled and never counted as an
+independent PASS. Actual algorithm compatibility follows unchanged engine bytes
+and same-interpreter AST checks; no new production-trade or database differential
+claim is made.
 
-## Independent review instructions and remaining residuals
+## G. Remaining findings and unproved requirements
 
-Review the exact new SHA, compare only engine.py plus analytics_access_control.py and security/analytics_access_control/* against baseline. Verify no Finance/research/Chief branch or code changes. Attempt bypass through methods, encoded paths, duplicate headers/parameters, routes added beneath /analytics, expired/config-corrupt keys and unrelated trading routes. Confirm that configuration cannot unlock unsafe historical queries. Run all tests with no DATABASE_URL and validate on approved staging before deployment.
+Containment intentionally leaves all legacy analytics data unavailable, even to
+valid identities. This is not a scoped analytics reader. No configuration grants
+access to unsafe legacy queries through the tested routing boundary.
 
-Named residuals: R1 legacy analytics availability intentionally blocked; R2 complete research-consumer inventory unavailable; R3 verified historical account/environment mapping unavailable; R4 durable log capture/retention requires operator evidence; R5 production framework/load validation not executed; R6 production remains uncorrected because deployment is prohibited. Rate limiting and sophisticated identity issuer integration are separate later hardening, not claimed implemented. No production credentials, deploy, merge, database migration or network weakening.
+Residuals retained from review, not fixed by this narrow assignment:
 
-ANALYTICS_SECURITY_CORRECTION_READY_FOR_INDEPENDENT_REVIEW
+- F-03: well-formed unauthenticated tokens can distinguish missing registry (503)
+  from configured invalid credentials (401); registry parsing cost remains bounded.
+- F-05: production requirements are unpinned; reviewed build parity needs separately
+  authorised pinning or exact build-version evidence. No requirements file changed.
+- F-06: provisioner must ensure real token entropy; rate limiting and durable audit
+  retention/export are not verified or added. Failed stdout audit returns 503, but
+  cannot guarantee a durable denial record while its sink is unavailable.
+- F-07 pre-existing: trading ingestion/execution routes are unauthenticated in baseline
+  and candidate. Out of scope here; no credentials/integration changes were made.
+- Consumer inventory, legacy account/environment attribution and operational load
+  validation remain incomplete. Containment blocks historical data rather than
+  asserting an account boundary it cannot prove.
+- Render's **current** live SHA, Python/build versions, start command, environment
+  variables including UVICORN_*, root-path/proxy settings and audit retention were
+  not inspected in this task. Earlier author metadata checks and reviewer reports
+  are historical evidence only. No secret-bearing environment dump was requested.
+
+## H. Secure deployment and rollback prerequisites — not executed
+
+Independent review must approve the exact successor SHA, followed by an explicit
+CEO deployment decision. Main auto-deploy means merging can deploy; this task does
+neither. Before any approved release, operator verifies actual routing/root-path/
+proxy settings, dependency versions, approved fallback target, analytics-consumer
+outage acceptance and audit capture/retention. Confirm middleware registration and
+root-path checks on the deployed dependency build.
+
+No credential is required for containment: leave ANALYTICS_SERVICE_IDENTITIES_JSON
+unset unless separately authorised scoped status access is needed. Never place
+secrets in URLs/logs/Pine/Make/spreadsheets/LLM context. Provisioning and service
+configuration changes require separate authority; no production key was created.
+
+Approved operator validation should use bounded non-sensitive 401 probes for all
+three data routes, including effective root-path forms; health/trading continuity
+checks; deployed-SHA confirmation; audit arrival and dependency evidence. If status
+identities are provisioned later, valid access-status may return 200; do not alert
+on every analytics 200 without distinguishing that route. Legacy data routes must
+never return data.
+
+**Never roll back to production baseline or old v1:** baseline exposes analytics
+and v1 has F-01. Removing the registry is a safe identity-acceptance rollback; it
+does not reopen data. Prepare an independently approved root-path-safe containment
+fallback or fix forward. Do not suspend trading service, block all ingress or weaken
+PostgreSQL networking to compensate. Preserve audit/deploy evidence through rollback.
+
+## I. Fresh independent delta review instructions
+
+1. Fetch exact new SHA and `7aeadda5...`; verify sole parent and strict changed-path
+   list. Compare both protected blobs to table D. Main and prior candidates must
+   remain unchanged; do not merge/deploy during review.
+2. Read fixture.diff and the corrected method: validate each endpoint's real query
+   allowlist, all 9 auth/root/route cases, required 503/error and zero downstream calls.
+3. Verify evidence hashes, then create clean Python 3.12/3.13 venvs using locks and
+   full baseline Git history. Repeat the complete 42-test command twice per stack.
+4. Run author equivalent/real Uvicorn scripts, inspect tripwires/stand-in limitations,
+   and obtain the original reviewer suite for an unchanged 32-test reproduction.
+5. Check old-v1 sensitivity controls reach handlers, current candidate does not;
+   review parser/routing consistency with each tested Starlette/Uvicorn version.
+6. Inspect environment metadata, unedited logs, warnings and setup-failure labels.
+   Author results do not establish independent assurance. Report any new runtime
+   defect without modifying protected files under this assignment.
+
+Full commands are in evidence/v111/REPRODUCE.md. Exact Git delta can be obtained
+with `git diff 7aeadda5dab83607355952ffbb21c06f68da8a20 <new-sha>`; fixture.diff is the
+complete behavioural source change. New evidence/docs are included as files with
+hashes rather than recursively embedding a patch of itself.
+
+## J. Exact next CEO decision
+
+Commission a fresh independent Claude Code delta assurance review of the exact
+v1.1.1 SHA, supplying the original reviewer suite if available. After a satisfactory
+independent verdict and operator verification of deployment prerequisites, the CEO
+may make a separate, explicit containment-release decision. This handover grants
+no production deployment, merge, Stage 1 activation or Effective Authority.
+
+Once frozen, implementation stops pending independent review.
+
+ANALYTICS_SECURITY_V1_1_1_READY_FOR_INDEPENDENT_REVIEW

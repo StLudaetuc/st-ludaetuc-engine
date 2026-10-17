@@ -1,0 +1,27 @@
+{
+  "label": "corrected_py312_run1",
+  "started_at": "2026-10-17T21:35:56Z",
+  "finished_at": "2026-10-17T21:35:58Z",
+  "command": [
+    "/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/repo/../venv312/bin/python",
+    "-W",
+    "default",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "security/analytics_access_control",
+    "-p",
+    "test_*.py",
+    "-v"
+  ],
+  "cwd": "repository_root",
+  "exit_code": 0,
+  "environment_keys": [
+    "HOME",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE"
+  ],
+  "production_environment_inherited": false,
+  "os": "Linux-6.18.55-x86_64-with-glibc2.39"
+}

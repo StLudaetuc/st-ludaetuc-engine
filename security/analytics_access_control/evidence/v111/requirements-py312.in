@@ -1,0 +1,6 @@
+# Historical framework stack; test-only, production requirements unchanged.
+fastapi==0.115.12
+starlette==0.46.2
+httpx==0.28.1
+uvicorn==0.35.0
+psycopg2-binary==2.9.11

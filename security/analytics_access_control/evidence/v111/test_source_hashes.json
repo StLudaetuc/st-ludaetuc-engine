@@ -1,0 +1,25 @@
+{
+  "mandatory_discovery_count_from_source": 42,
+  "sources": {
+    "analytics_access_control.py": {
+      "sha256": "277004e09ed4a1033dc27371f6cbe7fca25faea071eeb0c11a0b7793efb5ef6e",
+      "git_blob": "9f1f84985d92f2cb16df55351f3c2e0bd9dc877a",
+      "bytes": 11386
+    },
+    "engine.py": {
+      "sha256": "186eaa894d2baad6e73ab684b15b79b9202ea24b6a00a455079eb8b7cdea79dd",
+      "git_blob": "5fbf9ae9eeeba63fa8d2e2be5d61e611a058033e",
+      "bytes": 116021
+    },
+    "security/analytics_access_control/test_access_control.py": {
+      "sha256": "441f84a157991444b6ca2e8f410f4616ecf1fc522fa2a78833d384ad568b1c78",
+      "git_blob": "09c499d311ab6179f46c9f95f0bc8795a6827be9",
+      "bytes": 9408
+    },
+    "security/analytics_access_control/test_fastapi_integration.py": {
+      "sha256": "537dea90770550e0396cc2cb5006cd9e2706ad96a19a533c24b49d2c65a99385",
+      "git_blob": "8ed9f9610da3e316030ed6c2bccd2b09b256d4d2",
+      "bytes": 2709
+    }
+  }
+}

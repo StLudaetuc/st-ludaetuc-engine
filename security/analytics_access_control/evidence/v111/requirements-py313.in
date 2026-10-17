@@ -1,0 +1,6 @@
+# Production requirement names plus test client, resolved at execution time.
+fastapi
+uvicorn
+pydantic
+psycopg2-binary
+httpx==0.28.1

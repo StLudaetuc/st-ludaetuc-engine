@@ -1,0 +1,423 @@
+/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/repo/engine.py:1462: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/venv312/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  return self.router.on_event(event_type)
+{
+  "schema": "author_uvicorn_regression_v111",
+  "uvicorn": "0.35.0",
+  "candidate_probe_count": 33,
+  "old_candidate_negative_controls": 3,
+  "candidate_cases": [
+    {
+      "root_path": "",
+      "wire_path": "/analytics/export",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/analytics/export",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/health",
+      "authenticated": false,
+      "method": "GET",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "",
+      "wire_path": "/evaluate",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "",
+      "wire_path": "/market-data",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "",
+      "wire_path": "/trade-opened",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "",
+      "wire_path": "/trade-outcome",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/export",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/export",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/health",
+      "authenticated": false,
+      "method": "GET",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/evaluate",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/market-data",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/trade-opened",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/trade-outcome",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/analytics/export",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/analytics/export",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": false,
+      "method": "GET",
+      "status": 401,
+      "error": "unauthorized",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": true,
+      "method": "GET",
+      "status": 503,
+      "error": "analytics_scope_unavailable",
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/health",
+      "authenticated": false,
+      "method": "GET",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/evaluate",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/market-data",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/trade-opened",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    },
+    {
+      "root_path": "/x",
+      "wire_path": "/trade-outcome",
+      "authenticated": false,
+      "method": "POST",
+      "status": 200,
+      "error": null,
+      "legacy_handler_calls": 0,
+      "pool_calls": 0,
+      "synthetic_trading_effects": 1
+    }
+  ],
+  "negative_control_cases": [
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/export",
+      "authenticated": false,
+      "method": "GET",
+      "status": 503,
+      "error": "DATABASE_URL not configured or Postgres pool unavailable",
+      "legacy_handler_calls": 1,
+      "pool_calls": 1,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/strategy-report",
+      "authenticated": false,
+      "method": "GET",
+      "status": 503,
+      "error": "DATABASE_URL not configured or Postgres pool unavailable",
+      "legacy_handler_calls": 1,
+      "pool_calls": 1,
+      "synthetic_trading_effects": 0
+    },
+    {
+      "root_path": "/api",
+      "wire_path": "/analytics/prediction-accuracy",
+      "authenticated": false,
+      "method": "GET",
+      "status": 503,
+      "error": "DATABASE_URL not configured or Postgres pool unavailable",
+      "legacy_handler_calls": 1,
+      "pool_calls": 1,
+      "synthetic_trading_effects": 0
+    }
+  ],
+  "candidate_legacy_handler_calls": 0,
+  "candidate_pool_calls": 0,
+  "claim": "loopback real ASGI/HTTP, synthetic trading standins, no real DB or production dependency verification"
+}

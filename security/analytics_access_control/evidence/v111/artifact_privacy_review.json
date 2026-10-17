@@ -1,0 +1,8 @@
+{
+  "scope": "only new/modified v1.1.1 candidate artifacts; no external credential system accessed",
+  "scanned_files": 49,
+  "pattern_hits_metadata_only": [],
+  "review": "Source and logs contain explicitly synthetic x*48 tokens, test aliases and fake exception examples only. No production environment was inherited, queried or copied. Pattern scan cannot prove absence of arbitrarily encoded secrets.",
+  "active_credentials_found": false,
+  "private_operational_payloads_copied": false
+}

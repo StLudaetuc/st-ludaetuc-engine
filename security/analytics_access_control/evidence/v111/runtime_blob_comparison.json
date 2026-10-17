@@ -1,0 +1,18 @@
+{
+  "analytics_access_control.py": {
+    "starting_git_blob": "9f1f84985d92f2cb16df55351f3c2e0bd9dc877a",
+    "working_git_blob": "9f1f84985d92f2cb16df55351f3c2e0bd9dc877a",
+    "before_sha256": "277004e09ed4a1033dc27371f6cbe7fca25faea071eeb0c11a0b7793efb5ef6e",
+    "after_sha256": "277004e09ed4a1033dc27371f6cbe7fca25faea071eeb0c11a0b7793efb5ef6e",
+    "byte_identical": true,
+    "bytes": 11386
+  },
+  "engine.py": {
+    "starting_git_blob": "5fbf9ae9eeeba63fa8d2e2be5d61e611a058033e",
+    "working_git_blob": "5fbf9ae9eeeba63fa8d2e2be5d61e611a058033e",
+    "before_sha256": "186eaa894d2baad6e73ab684b15b79b9202ea24b6a00a455079eb8b7cdea79dd",
+    "after_sha256": "186eaa894d2baad6e73ab684b15b79b9202ea24b6a00a455079eb8b7cdea79dd",
+    "byte_identical": true,
+    "bytes": 116021
+  }
+}

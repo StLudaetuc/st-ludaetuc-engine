@@ -1,0 +1,20 @@
+{
+  "label": "uvicorn_py313",
+  "started_at": "2026-10-17T21:39:13Z",
+  "finished_at": "2026-10-17T21:39:20Z",
+  "command": [
+    "/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/repo/../venv313/bin/python",
+    "-W",
+    "default",
+    "security/analytics_access_control/evidence/v111/uvicorn_probe.py"
+  ],
+  "cwd": "repository_root",
+  "exit_code": 0,
+  "environment_keys": [
+    "HOME",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE"
+  ],
+  "production_environment_inherited": false,
+  "os": "Linux-6.18.55-x86_64-with-glibc2.39"
+}

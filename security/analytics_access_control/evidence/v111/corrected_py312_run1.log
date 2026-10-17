@@ -1,0 +1,49 @@
+/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/venv312/lib/python3.12/site-packages/starlette/testclient.py:37: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+  _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+test_accuracy_bounds (test_access_control.Tests.test_accuracy_bounds) ... ok
+test_all_unauthenticated (test_access_control.Tests.test_all_unauthenticated) ... ok
+test_audit (test_access_control.Tests.test_audit) ... ok
+test_audit_failure (test_access_control.Tests.test_audit_failure) ... ok
+test_auth_adversarial (test_access_control.Tests.test_auth_adversarial) ... ok
+test_containment (test_access_control.Tests.test_containment) ... ok
+test_duplicate_identity (test_access_control.Tests.test_duplicate_identity) ... ok
+test_duplicate_query (test_access_control.Tests.test_duplicate_query) ... ok
+test_engine_ast_unchanged (test_access_control.Tests.test_engine_ast_unchanged) ... ok
+test_expired (test_access_control.Tests.test_expired) ... ok
+test_injection_filter (test_access_control.Tests.test_injection_filter) ... ok
+test_invalid_configs (test_access_control.Tests.test_invalid_configs) ... ok
+test_large_query (test_access_control.Tests.test_large_query) ... ok
+test_limit_bounds (test_access_control.Tests.test_limit_bounds) ... ok
+test_methods (test_access_control.Tests.test_methods) ... ok
+test_missing_scope (test_access_control.Tests.test_missing_scope) ... ok
+test_missing_window (test_access_control.Tests.test_missing_window) ... ok
+test_no_secrets (test_access_control.Tests.test_no_secrets) ... ok
+test_permission_denied (test_access_control.Tests.test_permission_denied) ... ok
+test_query_token_not_auth (test_access_control.Tests.test_query_token_not_auth) ... ok
+test_root_path_authenticated_containment (test_access_control.Tests.test_root_path_authenticated_containment) ... ok
+test_root_path_requires_prefix_boundary (test_access_control.Tests.test_root_path_requires_prefix_boundary) ... ok
+test_root_path_unauthenticated_containment (test_access_control.Tests.test_root_path_unauthenticated_containment) ... ok
+test_root_path_unrelated_routes_unchanged (test_access_control.Tests.test_root_path_unrelated_routes_unchanged) ... ok
+test_scope_account (test_access_control.Tests.test_scope_account) ... ok
+test_scope_broker_environment (test_access_control.Tests.test_scope_broker_environment) ... ok
+test_scope_system_environment (test_access_control.Tests.test_scope_system_environment) ... ok
+test_status_positive (test_access_control.Tests.test_status_positive) ... ok
+test_trading_passthrough (test_access_control.Tests.test_trading_passthrough) ... ok
+test_unknown_permission_config (test_access_control.Tests.test_unknown_permission_config) ... ok
+test_unknown_query (test_access_control.Tests.test_unknown_query) ... ok
+test_variants (test_access_control.Tests.test_variants) ... ok
+test_windows (test_access_control.Tests.test_windows) ... ok
+test_authorized_status (test_fastapi_integration.FastAPITests.test_authorized_status) ... ok
+test_encoded_path (test_fastapi_integration.FastAPITests.test_encoded_path) ... ok
+test_host_and_forwarded_headers_not_identity (test_fastapi_integration.FastAPITests.test_host_and_forwarded_headers_not_identity) ... ok
+test_no_handler_on_authorized_export (test_fastapi_integration.FastAPITests.test_no_handler_on_authorized_export) ... ok
+test_openapi_does_not_execute_data (test_fastapi_integration.FastAPITests.test_openapi_does_not_execute_data) ... ok
+test_trading_request (test_fastapi_integration.FastAPITests.test_trading_request) ... ok
+test_trailing_slash_no_redirect (test_fastapi_integration.FastAPITests.test_trailing_slash_no_redirect) ... ok
+test_unauthenticated_all_routes (test_fastapi_integration.FastAPITests.test_unauthenticated_all_routes) ... ok
+test_websocket_denied (test_fastapi_integration.FastAPITests.test_websocket_denied) ... ok
+
+----------------------------------------------------------------------
+Ran 42 tests in 0.356s
+
+OK

@@ -75,8 +75,20 @@ class Tests(unittest.TestCase):
     self.assertEqual(self.request(path=root+p,root_path=root,auth=False)[0],401)
   self.assertFalse(self.calls)
  def test_root_path_authenticated_containment(self):
-  for p in ('/analytics/export','/analytics/strategy-report','/analytics/prediction-accuracy'):
-   self.assertEqual(self.request(path='/api'+p,root_path='/api')[0],503)
+  # Accuracy accepts its own bounded lookahead query, not export dates/limit.
+  queries={
+   '/analytics/export':dict(SCOPE,start='2026-10-13T00:00:00Z',end='2026-10-14T00:00:00Z',limit='1000'),
+   '/analytics/strategy-report':dict(SCOPE,start='2026-10-13T00:00:00Z',end='2026-10-14T00:00:00Z',limit='1000'),
+   '/analytics/prediction-accuracy':dict(SCOPE,since_hours='720',lookahead_minutes='240',max_predictions='100'),
+  }
+  for root in ('','/api','/x'):
+   for path,query in queries.items():
+    with self.subTest(root_path=root,route=path):
+     status,body,_=self.request(path=root+path,root_path=root,query=query)
+     self.assertEqual(status,503)
+     self.assertEqual(json.loads(body)['error'],'analytics_scope_unavailable')
+     # Reaching downstream would execute a legacy handler; none may run.
+     self.assertFalse(self.calls)
   self.assertFalse(self.calls)
  def test_root_path_unrelated_routes_unchanged(self):
   self.assertEqual(self.request(path='/api/health',root_path='/api',auth=False)[1],b'untouched')

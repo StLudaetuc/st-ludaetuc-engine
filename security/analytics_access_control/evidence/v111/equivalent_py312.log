@@ -1,0 +1,92 @@
+/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/venv312/lib/python3.12/site-packages/starlette/testclient.py:37: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+  _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/repo/engine.py:1462: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+/workspace/scratch/3ed8d790c2bf/analytics_v111_validation/venv312/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  return self.router.on_event(event_type)
+test_30_no_registered_analytics_handler_access (__main__.EquivalentAssurance.test_30_no_registered_analytics_handler_access) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "dd812c88-b5fb-46bf-8020-fee60f9ef3b3", "result": "unauthorized", "route": "/analytics/export", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "16f65d1d-7c61-42af-bc70-3e6164314c44", "result": "analytics_scope_unavailable", "route": "/analytics/export", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "785e1020-adfe-4864-96ea-f5091e02d2b2", "result": "unauthorized", "route": "/analytics/strategy-report", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "63ea18d9-3f17-43ef-8046-dab26703204e", "result": "analytics_scope_unavailable", "route": "/analytics/strategy-report", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "49ec4417-e5c5-4cbf-bc5e-7ee469beeeb4", "result": "unauthorized", "route": "/analytics/prediction-accuracy", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "dbdd66fb-0479-475c-87f1-c5bf2d49f3a6", "result": "analytics_scope_unavailable", "route": "/analytics/prediction-accuracy", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "6790fdcb-3e29-4557-9530-a73a9f531867", "result": "unauthorized", "route": "/analytics/export", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "39d174ff-dcb5-463f-8771-b7caa70ca651", "result": "analytics_scope_unavailable", "route": "/analytics/export", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "5c78c390-17f6-4c85-bb40-e28948306909", "result": "unauthorized", "route": "/analytics/strategy-report", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "42b02b54-3747-498d-be48-3227feb3e3f6", "result": "analytics_scope_unavailable", "route": "/analytics/strategy-report", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "f92daf93-917d-4524-b25e-fee0b971611e", "result": "unauthorized", "route": "/analytics/prediction-accuracy", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "56f215ef-3a1b-4987-bb4d-8b3446ea14bb", "result": "analytics_scope_unavailable", "route": "/analytics/prediction-accuracy", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "391dcf79-5cef-4ed4-af46-98796a3b935a", "result": "unauthorized", "route": "/analytics/export", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "6f096628-bce8-4115-a696-7b2186c7c46f", "result": "analytics_scope_unavailable", "route": "/analytics/export", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "36bd59ba-a7ff-4cbc-bdff-f3e23fe9b3a1", "result": "unauthorized", "route": "/analytics/strategy-report", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "1c117664-fe22-497e-b244-21311ef888d2", "result": "analytics_scope_unavailable", "route": "/analytics/strategy-report", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "0895d4f6-e0b9-46de-82aa-c2fb243fd13c", "result": "unauthorized", "route": "/analytics/prediction-accuracy", "scope": null, "service_id": null}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "82eba4b3-d168-48d0-9204-668c841e0e85", "result": "analytics_scope_unavailable", "route": "/analytics/prediction-accuracy", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_31_prefix_boundary_unrelated (__main__.EquivalentAssurance.test_31_prefix_boundary_unrelated) ... ok
+test_32_status_all_roots (__main__.EquivalentAssurance.test_32_status_all_roots) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 200, "request_id": "085aecee-2c1b-499a-a928-79da3750e6fd", "result": "access_status", "route": "/analytics/access-status", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 200, "request_id": "1963b37d-db77-420e-a23c-ffc51a6f75b6", "result": "access_status", "route": "/analytics/access-status", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+{"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 200, "request_id": "b5004e20-aade-471a-8bde-0390848fd54c", "result": "access_status", "route": "/analytics/access-status", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_health_0 (__main__.EquivalentAssurance.test_health_0) ... ok
+test_health_1 (__main__.EquivalentAssurance.test_health_1) ... ok
+test_health_2 (__main__.EquivalentAssurance.test_health_2) ... ok
+test_route_0_0_0 (__main__.EquivalentAssurance.test_route_0_0_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "2f4b50ca-b19a-4ee9-be58-372e0d1866ff", "result": "unauthorized", "route": "/analytics/export", "scope": null, "service_id": null}
+ok
+test_route_0_0_1 (__main__.EquivalentAssurance.test_route_0_0_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "b38f4b8c-aa97-4772-bfd3-21e96b03a4a8", "result": "analytics_scope_unavailable", "route": "/analytics/export", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_0_1_0 (__main__.EquivalentAssurance.test_route_0_1_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "69cbf230-9bd1-4a99-981e-4948bc786d3b", "result": "unauthorized", "route": "/analytics/strategy-report", "scope": null, "service_id": null}
+ok
+test_route_0_1_1 (__main__.EquivalentAssurance.test_route_0_1_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "2adea5de-4fc2-4f0f-bbc1-6ea784bbef72", "result": "analytics_scope_unavailable", "route": "/analytics/strategy-report", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_0_2_0 (__main__.EquivalentAssurance.test_route_0_2_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "409ee256-17d0-4af2-bde2-969136288613", "result": "unauthorized", "route": "/analytics/prediction-accuracy", "scope": null, "service_id": null}
+ok
+test_route_0_2_1 (__main__.EquivalentAssurance.test_route_0_2_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "18f2a0fc-123f-4087-899b-625d4043e8b0", "result": "analytics_scope_unavailable", "route": "/analytics/prediction-accuracy", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_1_0_0 (__main__.EquivalentAssurance.test_route_1_0_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "967bf9cf-9881-42c5-a78f-dcf018a75aa5", "result": "unauthorized", "route": "/analytics/export", "scope": null, "service_id": null}
+ok
+test_route_1_0_1 (__main__.EquivalentAssurance.test_route_1_0_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "21909213-1306-4ba6-897a-cf56505be893", "result": "analytics_scope_unavailable", "route": "/analytics/export", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_1_1_0 (__main__.EquivalentAssurance.test_route_1_1_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "3a18835e-11db-4851-8bb9-754b0296325e", "result": "unauthorized", "route": "/analytics/strategy-report", "scope": null, "service_id": null}
+ok
+test_route_1_1_1 (__main__.EquivalentAssurance.test_route_1_1_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "635e11e6-f453-45d9-9211-b4b659cf5836", "result": "analytics_scope_unavailable", "route": "/analytics/strategy-report", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_1_2_0 (__main__.EquivalentAssurance.test_route_1_2_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "941927ae-7f07-4ee5-8df7-40f87109b904", "result": "unauthorized", "route": "/analytics/prediction-accuracy", "scope": null, "service_id": null}
+ok
+test_route_1_2_1 (__main__.EquivalentAssurance.test_route_1_2_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "f6852295-8026-47b3-b190-542e88e824ae", "result": "analytics_scope_unavailable", "route": "/analytics/prediction-accuracy", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_2_0_0 (__main__.EquivalentAssurance.test_route_2_0_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "77fb1be4-f386-4524-b848-5fac17b624a5", "result": "unauthorized", "route": "/analytics/export", "scope": null, "service_id": null}
+ok
+test_route_2_0_1 (__main__.EquivalentAssurance.test_route_2_0_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "f6edee00-25d4-40ac-8ee3-fcee4355c304", "result": "analytics_scope_unavailable", "route": "/analytics/export", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_2_1_0 (__main__.EquivalentAssurance.test_route_2_1_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "11ce6036-b81d-4c7b-a8ba-f58a2ddead88", "result": "unauthorized", "route": "/analytics/strategy-report", "scope": null, "service_id": null}
+ok
+test_route_2_1_1 (__main__.EquivalentAssurance.test_route_2_1_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "ab71a41b-bfcf-427d-8726-cf8b043bca1a", "result": "analytics_scope_unavailable", "route": "/analytics/strategy-report", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_route_2_2_0 (__main__.EquivalentAssurance.test_route_2_2_0) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 401, "request_id": "20b85f36-2275-45ac-99b2-a098ee3e2412", "result": "unauthorized", "route": "/analytics/prediction-accuracy", "scope": null, "service_id": null}
+ok
+test_route_2_2_1 (__main__.EquivalentAssurance.test_route_2_2_1) ... {"at": "2026-10-17T00:00:00+00:00", "event": "analytics_access", "http_status": 503, "request_id": "0985a38a-477f-4800-b3e4-1bfa13d43d65", "result": "analytics_scope_unavailable", "route": "/analytics/prediction-accuracy", "scope": {"account_alias": "practice-A", "broker_environment": "practice", "environment": "production"}, "service_id": "synthetic-assurance"}
+ok
+test_trading_0_0 (__main__.EquivalentAssurance.test_trading_0_0) ... ok
+test_trading_0_1 (__main__.EquivalentAssurance.test_trading_0_1) ... ok
+test_trading_0_2 (__main__.EquivalentAssurance.test_trading_0_2) ... ok
+test_trading_0_3 (__main__.EquivalentAssurance.test_trading_0_3) ... ok
+test_trading_1_0 (__main__.EquivalentAssurance.test_trading_1_0) ... ok
+test_trading_1_1 (__main__.EquivalentAssurance.test_trading_1_1) ... ok
+test_trading_1_2 (__main__.EquivalentAssurance.test_trading_1_2) ... ok
+test_trading_1_3 (__main__.EquivalentAssurance.test_trading_1_3) ... ok
+
+----------------------------------------------------------------------
+Ran 32 tests in 20.146s
+
+OK
