@@ -118,6 +118,9 @@ class AnalyticsAccessControl:
         if scope['type'] not in ('http','websocket') or not protected:
             await self.app(scope, receive, send)
             return
+        # Use the same root-path-stripped route identity for authorization.
+        # Otherwise authenticated requests would be incorrectly classified 404.
+        path = route_path
         request_id = str(uuid.uuid4())
         subject = None
         selected_scope = None
