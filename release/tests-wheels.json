@@ -1,0 +1,61 @@
+[
+  {
+    "bytes": 134093,
+    "name": "certifi",
+    "requires_dist": [],
+    "requires_python": ">=3.7",
+    "sha256": "73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62",
+    "source_built": false,
+    "tags": [
+      "py3-none-any"
+    ],
+    "version": "2026.10.18",
+    "wheel": "certifi-2026.10.18-py3-none-any.whl"
+  },
+  {
+    "bytes": 78784,
+    "name": "httpcore",
+    "requires_dist": [
+      "certifi",
+      "h11>=0.16",
+      "anyio<5.0,>=4.0; extra == 'asyncio'",
+      "h2<5,>=3; extra == 'http2'",
+      "socksio==1.*; extra == 'socks'",
+      "trio<1.0,>=0.22.0; extra == 'trio'"
+    ],
+    "requires_python": ">=3.8",
+    "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+    "source_built": false,
+    "tags": [
+      "py3-none-any"
+    ],
+    "version": "1.0.9",
+    "wheel": "httpcore-1.0.9-py3-none-any.whl"
+  },
+  {
+    "bytes": 73517,
+    "name": "httpx",
+    "requires_dist": [
+      "anyio",
+      "certifi",
+      "httpcore==1.*",
+      "idna",
+      "brotli; (platform_python_implementation == 'CPython') and extra == 'brotli'",
+      "brotlicffi; (platform_python_implementation != 'CPython') and extra == 'brotli'",
+      "click==8.*; extra == 'cli'",
+      "pygments==2.*; extra == 'cli'",
+      "rich<14,>=10; extra == 'cli'",
+      "h2<5,>=3; extra == 'http2'",
+      "socksio==1.*; extra == 'socks'",
+      "zstandard>=0.18.0; extra == 'zstd'"
+    ],
+    "requires_python": ">=3.8",
+    "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad",
+    "source_built": false,
+    "tags": [
+      "py3-none-any"
+    ],
+    "version": "0.28.1",
+    "wheel": "httpx-0.28.1-py3-none-any.whl"
+  }
+]

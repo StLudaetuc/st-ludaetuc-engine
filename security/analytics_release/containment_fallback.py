@@ -5,6 +5,8 @@ be used only through the explicit fallback_app entrypoint after CEO approval.
 Preserves every non-analytics ASGI scope untouched.
 """
 import json
+import sys
+from datetime import datetime, timezone
 from uuid import uuid4
 
 
@@ -38,10 +40,21 @@ class ContainmentOnly:
         if not _protected(scope.get("path"), scope.get("root_path")):
             await self.app(scope, receive, send)
             return
+        request_id = str(uuid4())
+        # Fixed route class only: never serialize untrusted request material.
+        event = {"event": "analytics_containment", "request_id": request_id,
+                 "route_class": "analytics_or_malformed",
+                 "status": 1008 if kind == "websocket" else 503,
+                 "at": datetime.now(timezone.utc).isoformat()}
+        try:
+            sys.stderr.write(json.dumps(event, sort_keys=True) + "\n")
+            sys.stderr.flush()
+        except Exception:
+            # Audit transport failure cannot bypass the denial boundary.
+            pass
         if kind == "websocket":
             await send({"type": "websocket.close", "code": 1008})
             return
-        request_id = str(uuid4())
         body = json.dumps({"error": "analytics_containment_active", "request_id": request_id}).encode("utf-8")
         headers = [
             (b"content-type", b"application/json"),
