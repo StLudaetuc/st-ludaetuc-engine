@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-18",
+  "references": [
+    {
+      "url": "https://render.com/docs/deploys.md",
+      "bytes": 26485,
+      "sha256": "1231a1aea4fbb6f0ad71750a9aa8b84b6225625667af2dd0b4396868d06aa5c6",
+      "retrieved": true
+    },
+    {
+      "url": "https://render.com/docs/rollbacks.md",
+      "bytes": 5345,
+      "sha256": "a5c47a4479347451963f1e4fb35ac30fca69e565fbbfb121a26b0cab2509e823",
+      "retrieved": true
+    },
+    {
+      "url": "https://render.com/docs/health-checks.md",
+      "bytes": 6220,
+      "sha256": "cc7f71b3d42326594ce72f87500bf3963312031b44a178dffe5ca76dc3364fdd",
+      "retrieved": true
+    },
+    {
+      "url": "https://render.com/docs/logging.md",
+      "bytes": 9372,
+      "sha256": "443f7525672354f1e94681ceee86749bad3c4296ca2efe7f595f6e521cfd5d42",
+      "retrieved": true
+    },
+    {
+      "url": "https://render.com/docs/metrics.md",
+      "retrieved": false,
+      "error": "HTTPError"
+    },
+    {
+      "url": "https://render.com/docs/metrics",
+      "retrieved": false,
+      "status": "HTML fallback failed; no metrics-document claim; connector metrics observed separately"
+    }
+  ],
+  "scope": "deploys/rollbacks/health/logging retrieved and read; metrics documentation unavailable; account settings not inferred"
+}

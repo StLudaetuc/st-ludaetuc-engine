@@ -1,0 +1,21 @@
+test_author_not_independent (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_author_not_independent) ... ok
+test_bad_status_unknown (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_bad_status_unknown) ... ok
+test_conflicting_log_identity_unknown (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_conflicting_log_identity_unknown) ... ok
+test_data_200_incident (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_data_200_incident) ... ok
+test_distinct_identical_requests_count (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_distinct_identical_requests_count) ... ok
+test_empty_not_verified_zero (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_empty_not_verified_zero) ... ok
+test_end_excluded (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_end_excluded) ... ok
+test_false_publication_rejected (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_false_publication_rejected) ... ok
+test_forbidden_recovery (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_forbidden_recovery) ... ok
+test_good_record_not_authority (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_good_record_not_authority) ... ok
+test_invalid_time_unknown (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_invalid_time_unknown) ... ok
+test_merge_sha_not_branch_sha (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_merge_sha_not_branch_sha) ... ok
+test_missing_fallback_rejected (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_missing_fallback_rejected) ... ok
+test_pagination_duplicate_id (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_pagination_duplicate_id) ... ok
+test_partial_not_full (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_partial_not_full) ... ok
+test_status_200_separate (operations.analytics_release_evidence_closure.test_evidence_checks.Checks.test_status_200_separate) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.001s
+
+OK

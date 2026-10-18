@@ -1,0 +1,13 @@
+# Evidence publication — DRAFT / author evidence only
+
+The assigned private assurance repository and Drive publication contract were read. Repository metadata confirms the assurance repository now exists privately, while the Drive contract still contains older “not yet created” language. This discrepancy is recorded privately; no shared index/document/tracker was edited. The new fallback report was read from its assigned destination without copying or altering it. Original reviewer archive reconciliation remains assigned to its reviewer/publisher/Chief.
+
+Public engine branch: sanitized engineering documents, dependency proposals, offline verification code, synthetic fixtures/results, file hashes. No private consumer inventory, source-account links, current operational telemetry, credentials, independent report body or raw production data is committed here.
+
+Private author evidence: consumer inventory, owner acknowledgement register, bounded observation records, collection/source references, publication manifest and wheel bundle. Proposed permanent archive destination is the already assigned restricted Release Engineering evidence folder. Proposed textual receipt destination is a unique source-SHA subdirectory under the private assurance repository's release-engineering area, to be published through its authorised publisher without editing Chief's index.
+
+The final external receipt binds source repository/SHA/tree, author/provider/session limitations, original archive SHA256, destination URL, destination byte/hash verification, ACL observation, tests/failures/limitations, remaining decisions and exact verdict. It is generated after source freeze so the Git commit need not contain its own hash. Every archive contains a file manifest; Git binds its source manifest bytes. Hashes demonstrate byte identity, not reviewer independence or technical correctness.
+
+Lifecycle: PENDING_SOURCE → PENDING_PRIVACY_REVIEW → PENDING_PUBLICATION → PUBLISHED_UNVERIFIED → VERIFIED_PUBLISHED, or BLOCKED. Do not claim publication solely from a returned URL. Read destination bytes/checksum and verify restricted item/parent access. Connected owner access is not proof of Chief/reviewer access. Unknown recipients remain unproved; do not grant sharing or change ACLs under this task. No existing review is overwritten. Any corrections become separate dated successor evidence.
+
+If upload/readback/ACL capabilities cannot establish the contract, retain the locally hashed bundle and mark the precise missing condition. The final handover reports actual publication status; this source document does not anticipate success or assert that an upload occurred.

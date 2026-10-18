@@ -1,0 +1,23 @@
+{
+  "status": "DRAFT_NOT_SENT",
+  "instructions": "Actual consumer findings/owners belong only in the restricted register. Unknown owners remain null. An acknowledgement is not deployment approval.",
+  "entries": [
+    {
+      "consumer_id": "TO_BE_ESTABLISHED",
+      "classification": "UNKNOWN / INACCESSIBLE",
+      "owner": null,
+      "owner_source_ref": null,
+      "endpoint": null,
+      "current_configuration_verified_at": null,
+      "notification_authorised_by": null,
+      "notification_sent_at": null,
+      "acknowledgement_ref": null,
+      "http_401_503_means_unavailable": null,
+      "bounded_retry_behavior": null,
+      "dependent_reports_paused_or_labelled_unavailable": null,
+      "accepted_window": null,
+      "ceo_exception_ref": null,
+      "status": "PENDING_OWNER_AND_EVIDENCE"
+    }
+  ]
+}

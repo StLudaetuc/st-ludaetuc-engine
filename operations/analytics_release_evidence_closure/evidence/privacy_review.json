@@ -1,0 +1,9 @@
+{
+  "status": "bounded author privacy review completed",
+  "scope": [
+    "only generic proposals/synthetic logs/public dependency artifacts in source",
+    "no acquired private telemetry/consumer/account records",
+    "patterns checked for connection URLs/credential shapes/private source identifiers"
+  ],
+  "not_independent_secret_assurance": true
+}

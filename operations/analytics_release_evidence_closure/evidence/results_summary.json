@@ -1,0 +1,40 @@
+{
+  "runs": [
+    {
+      "label": "closure314b",
+      "tests": 86,
+      "by_suite": {
+        "closure": 16,
+        "security": 42,
+        "fallback": 4,
+        "priorTools": 12,
+        "priorRehearsal": 12
+      },
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "python": "3.14.3 (main, Mar 24 2026, 22:50:36) [Clang 22.1.1 ]",
+      "all_source_hashes_match_final": true
+    },
+    {
+      "label": "closure314c",
+      "tests": 86,
+      "by_suite": {
+        "closure": 16,
+        "security": 42,
+        "fallback": 4,
+        "priorTools": 12,
+        "priorRehearsal": 12
+      },
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "python": "3.14.3 (main, Mar 24 2026, 22:50:36) [Clang 22.1.1 ]",
+      "all_source_hashes_match_final": true
+    }
+  ],
+  "passing_executions": 172,
+  "author_not_independent": true,
+  "sql_runtime": "NOT_EXECUTED",
+  "production_acceptance": "UNPROVED"
+}

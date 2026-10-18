@@ -1,0 +1,161 @@
+{
+  "author": "GPTWork, not independent assurance",
+  "label": "closure314b",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "started_at": "2026-10-18T16:05:28.731329+00:00",
+  "environment": {
+    "python": "3.14.3 (main, Mar 24 2026, 22:50:36) [Clang 22.1.1 ]",
+    "abi": "cpython-314-x86_64-linux-gnu",
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+    "packages": [
+      [
+        "annotated-doc",
+        "0.0.5"
+      ],
+      [
+        "annotated-types",
+        "0.8.0"
+      ],
+      [
+        "anyio",
+        "4.15.1"
+      ],
+      [
+        "certifi",
+        "2026.7.22"
+      ],
+      [
+        "click",
+        "8.5.0"
+      ],
+      [
+        "fastapi",
+        "0.142.2"
+      ],
+      [
+        "h11",
+        "0.16.0"
+      ],
+      [
+        "httpcore",
+        "1.0.9"
+      ],
+      [
+        "httpx",
+        "0.28.1"
+      ],
+      [
+        "idna",
+        "3.20"
+      ],
+      [
+        "opentelemetry-api",
+        "1.45.0"
+      ],
+      [
+        "psycopg2-binary",
+        "2.9.13"
+      ],
+      [
+        "pydantic",
+        "2.13.5"
+      ],
+      [
+        "pydantic_core",
+        "2.46.5"
+      ],
+      [
+        "starlette",
+        "1.7.0"
+      ],
+      [
+        "typing-inspection",
+        "0.4.4"
+      ],
+      [
+        "typing_extensions",
+        "4.16.0"
+      ],
+      [
+        "uvicorn",
+        "0.54.0"
+      ]
+    ]
+  },
+  "runs": [
+    {
+      "name": "closure",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/closure_test314/bin/python",
+        "-m",
+        "unittest",
+        "operations.analytics_release_evidence_closure.test_evidence_checks",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log": "closure314b_closure.log",
+      "log_sha256": "3ea6bc78f3ec71e4730c7b7e3d88bab34116c5cd9e798adca864190ca8d0360c"
+    },
+    {
+      "name": "security",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/closure_test314/bin/python",
+        "-W",
+        "default",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "security/analytics_access_control",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log": "closure314b_security.log",
+      "log_sha256": "864c1b5476002f66a584eaa04a823f868d1bad6f51d2ab5c007a29e69c4e1207"
+    },
+    {
+      "name": "fallback",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/closure_test314/bin/python",
+        "-m",
+        "unittest",
+        "security.analytics_release.test_containment_fallback",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log": "closure314b_fallback.log",
+      "log_sha256": "21ed8c36fa06c164025cdfadf899fabc292ce64f08bb8d45380971e0097af2bf"
+    },
+    {
+      "name": "priorTools",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/closure_test314/bin/python",
+        "-m",
+        "unittest",
+        "operations.analytics_containment_release.test_tools",
+        "-v"
+      ],
+      "exit_code": 0,
+      "log": "closure314b_priorTools.log",
+      "log_sha256": "4f9a471f0a7f661c8258593372275a307c42b96087d3d9319bba24da8b6498d5"
+    },
+    {
+      "name": "priorRehearsal",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/closure_test314/bin/python",
+        "operations/analytics_containment_release/rehearsal.py"
+      ],
+      "exit_code": 0,
+      "log": "closure314b_priorRehearsal.log",
+      "log_sha256": "2673b6308cc62cb92d21f674a2298b034970dbf2bbb81154ad3b6cc8c5efdd1a"
+    }
+  ],
+  "source_hashes": {
+    "operations/analytics_release_evidence_closure/evidence_checks.py": "1974b1342a6f6e74b3d76c48d618160e789797bc79dd71fee095f5263f45a772",
+    "operations/analytics_release_evidence_closure/record_tests.py": "8a8d1627a180ef2f0308c7dff21852bf64dac7437e7c044d680fcfb67cefb9e2",
+    "operations/analytics_release_evidence_closure/test_evidence_checks.py": "287ce96327c48c8cbdc20d0f5e2e1c11ede82832dda8c11e86801c6eba3b0917",
+    "operations/analytics_release_evidence_closure/verify_wheels.py": "04150948b9b050940cd6121290a6899c6594c2d89f7c98329ee73853d54491b9"
+  }
+}

@@ -1,0 +1,9 @@
+test_analytics_always_blocked (security.analytics_release.test_containment_fallback.FallbackTests.test_analytics_always_blocked) ... ok
+test_head_and_websocket (security.analytics_release.test_containment_fallback.FallbackTests.test_head_and_websocket) ... ok
+test_partial_prefix_not_stripped (security.analytics_release.test_containment_fallback.FallbackTests.test_partial_prefix_not_stripped) ... ok
+test_unrelated_routes_passthrough (security.analytics_release.test_containment_fallback.FallbackTests.test_unrelated_routes_passthrough) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.004s
+
+OK
