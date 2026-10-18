@@ -1,0 +1,62 @@
+{
+  "source": "Render list_logs read-only; deploy dep-db2b0n0473hc739cejd0; observed 2026-10-18",
+  "lines": [
+    {
+      "id": "460c684e-969c-410b-bd8c-f2b6379708e6",
+      "labels": [
+        {
+          "name": "resource",
+          "value": "srv-d71v0v7pm1nc73f60520"
+        },
+        {
+          "name": "level",
+          "value": "info"
+        },
+        {
+          "name": "type",
+          "value": "app"
+        }
+      ],
+      "message": "\u001b[34;1m==>\u001b[0;22m \u001b[1mUsing Python version 3.14.3 (default)\u001b[22m",
+      "timestamp": "2026-10-06T08:25:10.071777395Z"
+    },
+    {
+      "id": "4edb7adc-a7a8-4874-a949-cecffe7af515",
+      "labels": [
+        {
+          "name": "resource",
+          "value": "srv-d71v0v7pm1nc73f60520"
+        },
+        {
+          "name": "level",
+          "value": "info"
+        },
+        {
+          "name": "type",
+          "value": "app"
+        }
+      ],
+      "message": "\u001b[34;1m==>\u001b[0;22m \u001b[1mInstalling Python version 3.14.3...\u001b[22m",
+      "timestamp": "2026-10-06T08:25:10.071944111Z"
+    },
+    {
+      "id": "81fcd2a4-2963-4e54-b217-e9c149f89f6b",
+      "labels": [
+        {
+          "name": "resource",
+          "value": "srv-d71v0v7pm1nc73f60520"
+        },
+        {
+          "name": "level",
+          "value": "info"
+        },
+        {
+          "name": "type",
+          "value": "app"
+        }
+      ],
+      "message": "Successfully installed annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 click-8.5.0 fastapi-0.142.2 h11-0.16.0 idna-3.20 opentelemetry-api-1.45.0 psycopg2-binary-2.9.13 pydantic-2.13.5 pydantic-core-2.46.5 starlette-1.7.0 typing-extensions-4.16.0 typing-inspection-0.4.4 uvicorn-0.54.0",
+      "timestamp": "2026-10-06T08:25:16.357927525Z"
+    }
+  ]
+}

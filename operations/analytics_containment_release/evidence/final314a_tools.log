@@ -1,0 +1,13 @@
+test_data_success_detected (operations.analytics_containment_release.test_tools.ToolTests.test_data_success_detected) ... ok
+test_denials_counted (operations.analytics_containment_release.test_tools.ToolTests.test_denials_counted) ... ok
+test_empty_logs_unknown (operations.analytics_containment_release.test_tools.ToolTests.test_empty_logs_unknown) ... ok
+test_forbidden_rollback (operations.analytics_containment_release.test_tools.ToolTests.test_forbidden_rollback) ... ok
+test_malformed_not_silent (operations.analytics_containment_release.test_tools.ToolTests.test_malformed_not_silent) ... ok
+test_missing_approval_holds (operations.analytics_containment_release.test_tools.ToolTests.test_missing_approval_holds) ... ok
+test_status_success_not_data_leak (operations.analytics_containment_release.test_tools.ToolTests.test_status_success_not_data_leak) ... ok
+test_unknown_result_unclassified (operations.analytics_containment_release.test_tools.ToolTests.test_unknown_result_unclassified) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.001s
+
+OK

@@ -1,0 +1,73 @@
+{
+  "status": "DRAFT_NOT_APPROVED",
+  "release_sha": "3467133b2208a09e1289651b5be0b45342695d52",
+  "fallback_sha": "5f0d07565629fba30d0c2221229fd2483472e701",
+  "expected_main_sha": "2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c",
+  "auto_deploy": "yes-on-main-commit",
+  "independent_security_review": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "independent_fallback_review": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "actual_runtime_match": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "consumer_acknowledgements": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "monitoring_access": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "private_audit_preservation": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "fallback_operator_drill": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "ceo_exact_sha_approval": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "operator_identity": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "deployment_window": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  },
+  "stop_thresholds": {
+    "status": "UNPROVED",
+    "evidence_ref": null,
+    "verified_by": null,
+    "verified_at": null
+  }
+}

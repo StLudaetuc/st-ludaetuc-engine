@@ -1,0 +1,60 @@
+{
+  "schema": "ops_test_execution_v1",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "started_at": "2026-10-18T06:06:32.213804+00:00",
+  "source_hashes": {
+    "engine.py": "186eaa894d2baad6e73ab684b15b79b9202ea24b6a00a455079eb8b7cdea79dd",
+    "analytics_access_control.py": "277004e09ed4a1033dc27371f6cbe7fca25faea071eeb0c11a0b7793efb5ef6e",
+    "security/analytics_release/containment_fallback.py": "2f012b90d5d82a197fbd2503eb76e5190067191ece050de7b915ec3a34e5c49f",
+    "security/analytics_release/fallback_app.py": "4e650a51800d888df9182bf6d96901508a988a18139dfbb03811faa1c82ef326",
+    "operations/analytics_containment_release/rehearsal.py": "51caaac94cc6d6947ab9deb213cda9c9ca58b0010d1d76ccdc3343991aaa7298",
+    "operations/analytics_containment_release/run_tests.py": "5cb496b6518c78a27f3c47e3241fc179fcf2686ccc95f38027b6f9dee9ff1686"
+  },
+  "runs": [
+    {
+      "name": "security",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "-W",
+        "default",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "security/analytics_access_control",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "started_at": "2026-10-18T06:06:32.321107+00:00",
+      "exit_code": 0,
+      "log": "initial314_security.log",
+      "log_sha256": "855bcc8357adb35eaf66abafb8b24b67017d3c7c0f4c22e02e02b67b88b87243"
+    },
+    {
+      "name": "fallback",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "-m",
+        "unittest",
+        "security.analytics_release.test_containment_fallback",
+        "-v"
+      ],
+      "started_at": "2026-10-18T06:06:33.664171+00:00",
+      "exit_code": 0,
+      "log": "initial314_fallback.log",
+      "log_sha256": "c16d22af4f8ad2510da37223cbe8f3434fc9f71d2b813dfcc5e2b84865aa2d0d"
+    },
+    {
+      "name": "operations",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "operations/analytics_containment_release/rehearsal.py"
+      ],
+      "started_at": "2026-10-18T06:06:33.913797+00:00",
+      "exit_code": 1,
+      "log": "initial314_operations.log",
+      "log_sha256": "8aa37143d5b1d91f622b140ade553ba822fd024f3bccd8f87cd3a69f56624257"
+    }
+  ]
+}

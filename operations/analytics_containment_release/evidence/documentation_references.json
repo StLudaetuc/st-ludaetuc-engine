@@ -1,0 +1,23 @@
+[
+  {
+    "url": "https://render.com/docs/deploys.md",
+    "retrieved_date": "2026-10-18",
+    "sha256": "1231a1aea4fbb6f0ad71750a9aa8b84b6225625667af2dd0b4396868d06aa5c6",
+    "bytes": 26485,
+    "status": "fetched and read; external reference not copied"
+  },
+  {
+    "url": "https://render.com/docs/health-checks.md",
+    "retrieved_date": "2026-10-18",
+    "sha256": "cc7f71b3d42326594ce72f87500bf3963312031b44a178dffe5ca76dc3364fdd",
+    "bytes": 6220,
+    "status": "fetched and read; external reference not copied"
+  },
+  {
+    "url": "https://render.com/docs/rollbacks.md",
+    "retrieved_date": "2026-10-18",
+    "sha256": "a5c47a4479347451963f1e4fb35ac30fca69e565fbbfb121a26b0cab2509e823",
+    "bytes": 5345,
+    "status": "fetched and read; external reference not copied"
+  }
+]

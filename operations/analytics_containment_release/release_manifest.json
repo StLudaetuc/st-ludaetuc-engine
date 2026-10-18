@@ -1,0 +1,19 @@
+{
+  "status": "DRAFT_NOT_DEPLOYABLE_NO_AUTHORITY",
+  "primary_security_sha": "3467133b2208a09e1289651b5be0b45342695d52",
+  "preparation_fallback_sha": "5f0d07565629fba30d0c2221229fd2483472e701",
+  "preparation_tree": "df1f91d8d75a1a6fb204277e33eb01130af82c38",
+  "production_baseline": "2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c",
+  "service_id": "srv-d71v0v7pm1nc73f60520",
+  "workspace_id": "tea-d71u0rf5gffc7383mh5g",
+  "primary_command": "uvicorn engine:app --host 0.0.0.0 --port $PORT",
+  "fallback_command_PROPOSED_NOT_CONFIGURED": "uvicorn security.analytics_release.fallback_app:app --host 0.0.0.0 --port $PORT",
+  "production_build": "pip install -r requirements.txt",
+  "production_build_version_lock": "UNPROVED; requirements remain unpinned",
+  "forbidden_rollback_shas": [
+    "2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c",
+    "c035f9d2d74c3eb0d7f2dc1086f2e1095b3bea44"
+  ],
+  "operations_branch": "operations/analytics-containment-release-readiness-v1",
+  "not_a_production_release_artifact": true
+}

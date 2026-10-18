@@ -1,0 +1,631 @@
+{
+  "schema": "operations_rehearsal_v1",
+  "cases": [
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/export",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/export",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/strategy-report",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/strategy-report",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/prediction-accuracy",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/prediction-accuracy",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "//analytics//export",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/ANALYTICS/export",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "",
+      "path": "/analytics/export/",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/analytics/export",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/analytics/export",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/analytics/strategy-report",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/analytics/strategy-report",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/analytics/prediction-accuracy",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/analytics/prediction-accuracy",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "//analytics//export",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/ANALYTICS/export",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "/api",
+      "path": "/api/analytics/export",
+      "status": 404,
+      "error": null,
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/analytics/export",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/analytics/export",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/analytics/strategy-report",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/analytics/strategy-report",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/analytics/prediction-accuracy",
+      "auth": false,
+      "status": 401,
+      "error": "unauthorized"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/analytics/prediction-accuracy",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_scope_unavailable"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "//analytics//export",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/ANALYTICS/export",
+      "status": 401,
+      "error": "unauthorized",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "primary",
+      "root": "/x",
+      "path": "/x/analytics/export",
+      "status": 404,
+      "error": null,
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/export",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/export",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/strategy-report",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/strategy-report",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/prediction-accuracy",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/prediction-accuracy",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "//analytics//export",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/ANALYTICS/export",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "",
+      "path": "/analytics/export/",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/analytics/export",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/analytics/export",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/analytics/strategy-report",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/analytics/strategy-report",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/analytics/prediction-accuracy",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/analytics/prediction-accuracy",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "//analytics//export",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/ANALYTICS/export",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "/api",
+      "path": "/api/analytics/export",
+      "status": 404,
+      "error": null,
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/analytics/export",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/analytics/export",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/analytics/strategy-report",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/analytics/strategy-report",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/analytics/prediction-accuracy",
+      "auth": false,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/analytics/prediction-accuracy",
+      "auth": true,
+      "status": 503,
+      "error": "analytics_containment_active"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "//analytics//export",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/ANALYTICS/export",
+      "status": 503,
+      "error": "analytics_containment_active",
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "mode": "fallback",
+      "root": "/x",
+      "path": "/x/analytics/export",
+      "status": 404,
+      "error": null,
+      "variant": "noncanonical; 404 is routing rejection, never dataset"
+    },
+    {
+      "test": "actual_trading_baseline_differential",
+      "routes": 4,
+      "variants": 3,
+      "db": "in-memory log_event stub; no SQL effects tested"
+    },
+    {
+      "test": "real_uvicorn_cli",
+      "mode": "primary",
+      "root_path_env": "/api",
+      "exit_code": -15,
+      "startup": true,
+      "log": "INFO:     Started server process [55]\nINFO:     Waiting for application startup.\nERROR:root:Failed to ensure events schema on startup (non-fatal)\nTraceback (most recent call last):\n  File \"/workspace/scratch/3ed8d790c2bf/operations_release/engine.py\", line 1465, in _on_startup\n    _ensure_events_schema()\n  File \"/workspace/scratch/3ed8d790c2bf/operations_release/engine.py\", line 456, in _ensure_events_schema\n    pool = _get_pool()\n           ^^^^^^^^^^^\n  File \"/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/local_entry.py\", line 8, in blocked\n    def blocked(*a,**kw):raise AssertionError('DATABASE_CONNECTION_PROHIBITED')\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: DATABASE_CONNECTION_PROHIBITED\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:36635 (Press CTRL+C to quit)\nINFO:     127.0.0.1:59608 - \"GET /api/health HTTP/1.1\" 200 OK\n{\"at\": \"2026-10-18T06:11:35.890422+00:00\", \"event\": \"analytics_access\", \"http_status\": 401, \"request_id\": \"f1d599ee-bed6-4c7b-be56-dd7f8ecf84f9\", \"result\": \"unauthorized\", \"route\": \"/analytics/export\", \"scope\": null, \"service_id\": null}\nINFO:     127.0.0.1:59618 - \"GET /api/analytics/export HTTP/1.1\" 401 Unauthorized\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [55]\n"
+    },
+    {
+      "test": "real_uvicorn_cli",
+      "mode": "fallback",
+      "root_path_env": "/api",
+      "exit_code": -15,
+      "startup": true,
+      "log": "INFO:     Started server process [57]\nINFO:     Waiting for application startup.\nERROR:root:Failed to ensure events schema on startup (non-fatal)\nTraceback (most recent call last):\n  File \"/workspace/scratch/3ed8d790c2bf/operations_release/engine.py\", line 1465, in _on_startup\n    _ensure_events_schema()\n  File \"/workspace/scratch/3ed8d790c2bf/operations_release/engine.py\", line 456, in _ensure_events_schema\n    pool = _get_pool()\n           ^^^^^^^^^^^\n  File \"/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/local_entry.py\", line 8, in blocked\n    def blocked(*a,**kw):raise AssertionError('DATABASE_CONNECTION_PROHIBITED')\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: DATABASE_CONNECTION_PROHIBITED\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:37641 (Press CTRL+C to quit)\nINFO:     127.0.0.1:41454 - \"GET /api/health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:41462 - \"GET /api/analytics/export HTTP/1.1\" 503 Service Unavailable\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [57]\n"
+    },
+    {
+      "test": "health_limit",
+      "finding": "200 health with no configured DB; not DB readiness"
+    },
+    {
+      "test": "failure_limit",
+      "finding": "fallback failure or engine startup failure requires separately approved incident response; no safe old deployment"
+    }
+  ],
+  "audit_events": 28,
+  "legacy_handler_calls": 0,
+  "claim": "author supporting local synthetic evidence; not independent fallback approval or Render deployment acceptance"
+}
+test_01_real_http_primary_and_fallback_roots (__main__.OperationsRehearsal.test_01_real_http_primary_and_fallback_roots) ... ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ok
+test_02_actual_trading_handlers_match_baseline (__main__.OperationsRehearsal.test_02_actual_trading_handlers_match_baseline) ... ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "immutable_baseline_engine", line 1461, in _on_startup
+  File "immutable_baseline_engine", line 455, in _ensure_events_schema
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:market-data: unparseable body even after sanitizing: '['
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:market-data: unparseable body even after sanitizing: '['
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:market-data: unparseable body even after sanitizing: '['
+ok
+test_03_real_http_trading_handlers (__main__.OperationsRehearsal.test_03_real_http_trading_handlers) ... ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ok
+test_04_audit_failure_fails_closed (__main__.OperationsRehearsal.test_04_audit_failure_fails_closed) ... ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ok
+test_05_fallback_covers_primary_bypass (__main__.OperationsRehearsal.test_05_fallback_covers_primary_bypass) ... ok
+test_06_fallback_covers_inner_middleware_failure (__main__.OperationsRehearsal.test_06_fallback_covers_inner_middleware_failure) ... ok
+test_07_fallback_cannot_fix_startup_failure (__main__.OperationsRehearsal.test_07_fallback_cannot_fix_startup_failure) ... ERROR:    synthetic startup failure
+ERROR:    Application startup failed. Exiting.
+ERROR:    synthetic startup failure
+ERROR:    Application startup failed. Exiting.
+ok
+test_08_fallback_websocket_and_head (__main__.OperationsRehearsal.test_08_fallback_websocket_and_head) ... ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ok
+test_09_default_audit_stdout (__main__.OperationsRehearsal.test_09_default_audit_stdout) ... ok
+test_10_env_root_path_and_cli_override (__main__.OperationsRehearsal.test_10_env_root_path_and_cli_override) ... ok
+test_11_health_is_not_database_readiness (__main__.OperationsRehearsal.test_11_health_is_not_database_readiness) ... ERROR:root:Failed to ensure events schema on startup (non-fatal)
+Traceback (most recent call last):
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 1465, in _on_startup
+    _ensure_events_schema()
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/engine.py", line 456, in _ensure_events_schema
+    pool = _get_pool()
+           ^^^^^^^^^^^
+  File "/workspace/scratch/3ed8d790c2bf/operations_release/operations/analytics_containment_release/rehearsal.py", line 28, in blocked
+    raise AssertionError('DATABASE_CONNECTION_PROHIBITED')
+AssertionError: DATABASE_CONNECTION_PROHIBITED
+ok
+test_12_outer_failure_is_not_a_safe_fallback (__main__.OperationsRehearsal.test_12_outer_failure_is_not_a_safe_fallback) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 3.840s
+
+OK

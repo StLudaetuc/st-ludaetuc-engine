@@ -1,0 +1,46 @@
+{
+  "observed_at": "2026-10-18T06:05:12.134Z",
+  "service": {
+    "id": "srv-d71v0v7pm1nc73f60520",
+    "name": "st-ludaetuc-engine",
+    "ownerId": "tea-d71u0rf5gffc7383mh5g",
+    "branch": "main",
+    "autoDeploy": "yes",
+    "autoDeployTrigger": "commit",
+    "updatedAt": "2026-10-06T08:25:47.162586Z",
+    "type": "web_service",
+    "suspended": "not_suspended",
+    "region": "frankfurt",
+    "plan": "starter",
+    "numInstances": 1,
+    "healthCheckPath": "",
+    "commands": {
+      "buildCommand": "pip install -r requirements.txt",
+      "startCommand": "uvicorn engine:app --host 0.0.0.0 --port $PORT"
+    },
+    "web_ip_allowlist": [
+      {
+        "cidrBlock": "0.0.0.0/0",
+        "description": "everywhere"
+      }
+    ],
+    "maintenanceMode": {
+      "enabled": false,
+      "uri": ""
+    }
+  },
+  "live": {
+    "sha": "2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c",
+    "deploy_id": "dep-db2b0n0473hc739cejd0",
+    "status": "live",
+    "source": "fresh list_deploys"
+  },
+  "unproved": [
+    "current process pip freeze",
+    "UVICORN_* names/presence",
+    "identity registry presence",
+    "audit retention/export",
+    "workspace overlapping deploy policy",
+    "PG network boundary not queried"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "base_sha": "5f0d07565629fba30d0c2221229fd2483472e701",
+  "protected_files": [
+    {
+      "path": "engine.py",
+      "base_blob_id": "5fbf9ae9eeeba63fa8d2e2be5d61e611a058033e",
+      "sha256": "186eaa894d2baad6e73ab684b15b79b9202ea24b6a00a455079eb8b7cdea79dd",
+      "byte_identical": true
+    },
+    {
+      "path": "analytics_access_control.py",
+      "base_blob_id": "9f1f84985d92f2cb16df55351f3c2e0bd9dc877a",
+      "sha256": "277004e09ed4a1033dc27371f6cbe7fca25faea071eeb0c11a0b7793efb5ef6e",
+      "byte_identical": true
+    },
+    {
+      "path": "requirements.txt",
+      "base_blob_id": "93cfde86f7eee7888a530a839523023fd691e008",
+      "sha256": "76bcd3e5ea598702bee710223cc001e9c972d192749a42c6d25e0bc848405e7b",
+      "byte_identical": true
+    },
+    {
+      "path": "security/analytics_release/containment_fallback.py",
+      "base_blob_id": "8e3290c09c0b6bd36db977807140279dc4030be9",
+      "sha256": "2f012b90d5d82a197fbd2503eb76e5190067191ece050de7b915ec3a34e5c49f",
+      "byte_identical": true
+    },
+    {
+      "path": "security/analytics_release/fallback_app.py",
+      "base_blob_id": "8ecdb7e084c55c5991073a447bb65dbe64c692de",
+      "sha256": "4e650a51800d888df9182bf6d96901508a988a18139dfbb03811faa1c82ef326",
+      "byte_identical": true
+    },
+    {
+      "path": "security/analytics_release/test_containment_fallback.py",
+      "base_blob_id": "ab4fcc12ad0c376d59916d434980b92cbda71e4e",
+      "sha256": "be703e2dab01aa1542463885359a7399c7042391078c2ca9c1db29a1c9126b4e",
+      "byte_identical": true
+    },
+    {
+      "path": "security/analytics_release/DEPLOYMENT_RUNBOOK.md",
+      "base_blob_id": "a9c0d28c07c57bc4549fef50018fae5f4e5bc02f",
+      "sha256": "85ae3f9e3d5f89fde99b66fd1e8790b78aedfafc8ba0fc743dfe00ba44541625",
+      "byte_identical": true
+    }
+  ],
+  "verification": "git show immutable source bytes compared to worktree; unchanged"
+}

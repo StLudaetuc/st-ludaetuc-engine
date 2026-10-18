@@ -1,0 +1,62 @@
+{
+  "observed_date": "2026-10-18",
+  "checks": [
+    {
+      "method": "list_logs",
+      "window": [
+        "2026-10-06T08:25:00Z",
+        "2026-10-06T08:27:00Z"
+      ],
+      "filter": "type=build, combined package/Python text",
+      "result": "empty; broader follow-up returned build package lines"
+    },
+    {
+      "method": "get_metrics",
+      "window": [
+        "2026-10-18T05:00:00Z",
+        "2026-10-18T06:00:00Z"
+      ],
+      "path": "/market-data",
+      "resolution_seconds": 300,
+      "metrics": [
+        "http_request_count by statusCode",
+        "http_latency"
+      ],
+      "result": "both data=[]"
+    },
+    {
+      "method": "list_logs",
+      "filter": "analytics_access",
+      "result": "logs=[]; hasMore=false; baseline not instrumented"
+    },
+    {
+      "method": "list_logs",
+      "window": [
+        "2026-10-17T23:00:00Z",
+        "2026-10-18T06:00:00Z"
+      ],
+      "filter": "type=request, 7 analytics/trading paths",
+      "result": "logs=[]; hasMore=false"
+    },
+    {
+      "method": "list_logs",
+      "window": [
+        "2026-10-16T12:00:00Z",
+        "2026-10-16T13:00:00Z"
+      ],
+      "filter": "bounded route regex",
+      "result": "no matching route lines"
+    },
+    {
+      "method": "list_events",
+      "window": [
+        "2026-10-17T00:00:00Z",
+        "2026-10-18T06:10:00Z"
+      ],
+      "filter": "server_failed,server_restarted,deploy_started,deploy_ended",
+      "result": "empty page"
+    }
+  ],
+  "classification": "UNPROVED rates/baseline; empty results not verified zero",
+  "durable_audit": "UNPROVED; no sink created"
+}

@@ -1,0 +1,17 @@
+{
+  "decision": "HOLD",
+  "failures": [
+    "working tree not clean",
+    "independent_security_review: evidence missing",
+    "independent_fallback_review: evidence missing",
+    "actual_runtime_match: evidence missing",
+    "consumer_acknowledgements: evidence missing",
+    "monitoring_access: evidence missing",
+    "private_audit_preservation: evidence missing",
+    "fallback_operator_drill: evidence missing",
+    "ceo_exact_sha_approval: evidence missing",
+    "operator_identity: evidence missing",
+    "deployment_window: evidence missing",
+    "stop_thresholds: evidence missing"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "schema": "ops_test_execution_v1",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "started_at": "2026-10-18T06:12:31.296928+00:00",
+  "source_hashes": {
+    "engine.py": "186eaa894d2baad6e73ab684b15b79b9202ea24b6a00a455079eb8b7cdea79dd",
+    "analytics_access_control.py": "277004e09ed4a1033dc27371f6cbe7fca25faea071eeb0c11a0b7793efb5ef6e",
+    "security/analytics_release/containment_fallback.py": "2f012b90d5d82a197fbd2503eb76e5190067191ece050de7b915ec3a34e5c49f",
+    "security/analytics_release/fallback_app.py": "4e650a51800d888df9182bf6d96901508a988a18139dfbb03811faa1c82ef326",
+    "operations/analytics_containment_release/rehearsal.py": "6f5227e66d369f127b09c063d8a9cd844004b09cc4f8570ddf83742b27623f02",
+    "operations/analytics_containment_release/run_tests.py": "231aad51a03651025518abc49a7a099426dadc3c67664e39c665d594fcb638a3",
+    "operations/analytics_containment_release/local_entry.py": "17d13a5a5db7b8b59959c30eab497d45a5699a81384bc8df0cb5bcb1946f7a4b",
+    "operations/analytics_containment_release/release_gate.py": "7dea99ce09eadf25b0564621d2b51c91eccb3e07d8496d66446478234f462348",
+    "operations/analytics_containment_release/audit_summary.py": "1bbdc711320d8ae7445237b81e881053d025292020071a58e9df35933541f93f",
+    "operations/analytics_containment_release/test_tools.py": "3079991f5673f6a72b6ef7c0974a87b21a84f5124cdd6ab782f6ade57c10f1be",
+    "operations/analytics_containment_release/verify_http.py": "7d0ccd7e4d4ca38569dbfd9af9bed6815b3de03e4495e6888d603d92f846e0de"
+  },
+  "runs": [
+    {
+      "name": "tools",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "-m",
+        "unittest",
+        "operations.analytics_containment_release.test_tools",
+        "-v"
+      ],
+      "started_at": "2026-10-18T06:12:31.387802+00:00",
+      "exit_code": 0,
+      "log": "validated314a_tools.log",
+      "log_sha256": "99440f3dc9b90508a79df3b756d2e39fb022d9d4fbf0214e8e72bebe2b11920a"
+    },
+    {
+      "name": "security",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "-W",
+        "default",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "security/analytics_access_control",
+        "-p",
+        "test_*.py",
+        "-v"
+      ],
+      "started_at": "2026-10-18T06:12:31.574184+00:00",
+      "exit_code": 0,
+      "log": "validated314a_security.log",
+      "log_sha256": "459c0132fd078203258388f4f85593f6f709da1deb063b910afcbd323a321fe4"
+    },
+    {
+      "name": "fallback",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "-m",
+        "unittest",
+        "security.analytics_release.test_containment_fallback",
+        "-v"
+      ],
+      "started_at": "2026-10-18T06:12:32.611224+00:00",
+      "exit_code": 0,
+      "log": "validated314a_fallback.log",
+      "log_sha256": "bc8d41e186031ce822acbc0718042202b7e5806a1619f8bf85a8665559b6262c"
+    },
+    {
+      "name": "operations",
+      "command": [
+        "/workspace/scratch/3ed8d790c2bf/operations_env314/bin/python",
+        "operations/analytics_containment_release/rehearsal.py"
+      ],
+      "started_at": "2026-10-18T06:12:32.744244+00:00",
+      "exit_code": 0,
+      "log": "validated314a_operations.log",
+      "log_sha256": "09305617b3bd86e9c5817006dccb1c6b9aa96b96c0275b88fa8e1e5c5e530f50"
+    }
+  ]
+}
