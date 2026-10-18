@@ -2,13 +2,15 @@
   "base_tree": "47879f364c39084246d3d379df5fe5e5642204d9",
   "baseline": "2ca3fa49f1b6e44be55c5ccdc1dbddc44d9f5b3c",
   "build_status": "PINNED_CONTAINER_BUILD_INCOMPLETE",
+  "candidate_parent": "d7d9b9c9d55027806d9f5f6cc8d20ee8a456ba67",
   "claim": "AUTHOR EVIDENCE; source template, not release approval",
   "file_sha256": {
     ".python-version": "5ab05f548328863dd73c057cc6bde305fc62a87522b3f28eadb9bbdd3b1409be",
     "release/audit.lock": "02250948d82d4cced34501802b6a0020eb633863b7176a02a4d28687b443152c",
     "release/build.sh": "2cdd1cb03d48b385cc9c001a6333c5f03bc82ac6e4c2e9719f12c62ff9b2f993",
     "release/build_payload.py": "00f3c28872f365afc6f0c319599f97152b64d671ed395dd8b6ddee668ba9b508",
-    "release/launch.sh": "13ba3f70535b2a73ed6d7cb131f77c5239c5d09cd9d20c0eefaf58c53a3a6a2e",
+    "release/launch.sh": "6651ba0692a241507909d66409a224acc830421c3f3d40dc04da949154f02910",
+    "release/recovery_entry.py": "19255fcb11e0ba752a68398713120979cea53bd5ef81f3824565c69951fd0c8f",
     "release/sbom.cdx.json": "978d587eaab3d25d6fd0ccdd75bf71c8cdbfde98b541f1536055b70c7bb7ea0b",
     "release/tests.lock": "9c871a848cb0cd5a4e55e726572b06a220e82b386bce5f98cdb9c0259ba1cd34",
     "requirements.txt": "87be370d808bc9fb48826123ee579a68cbdeb265edcf91d5814a0d2cf33fc48a",
@@ -24,9 +26,10 @@
     "security/analytics_access_control": "5533972ec65e2b6a55e55fc941946105d8fffcd8",
     "security/analytics_release/DEPLOYMENT_RUNBOOK.md": "a9c0d28c07c57bc4549fef50018fae5f4e5bc02f"
   },
+  "recovery_status": "AUTHOR CANDIDATE ONLY; known-good Production status NOT ESTABLISHED",
   "schema": "r1-source-manifest-v1",
   "selected_set": "G",
-  "supported_entrypoint": "release/launch.sh -> app:app",
+  "supported_entrypoint": "release/launch.sh -> release.recovery_entry:app (mandatory ContainmentOnly)",
   "wheels": [
     {
       "bytes": 5302,
