@@ -17,6 +17,6 @@ for w in m['wheels']:
  p=pathlib.Path(sys.argv[2])/w['wheel'];assert hashlib.sha256(p.read_bytes()).hexdigest()==w['sha256'];shutil.copyfile(p,pathlib.Path(sys.argv[3])/w['wheel'])
 PY
 epoch=$(git -C "$root" show -s --format=%ct "$sha")
-docker buildx build --platform linux/amd64 --network=none --provenance=false --sbom=false --build-arg "SOURCE_DATE_EPOCH=$epoch" --output "type=oci,dest=$output,rewrite-timestamp=true" -f "$context/source/release/Dockerfile.rc2" "$context"
+docker buildx build --no-cache --tag "stl-rc2-local:$sha" --platform linux/amd64 --network=none --provenance=false --sbom=false --build-arg "SOURCE_DATE_EPOCH=$epoch" --output "type=oci,dest=$output,rewrite-timestamp=true" -f "$context/source/release/Dockerfile.rc2" "$context"
 # OCI metadata must be independently inspected/attested. A successful tar export is
 # not a tested deployment. Repeat with a second NEW context/output and compare digests.
