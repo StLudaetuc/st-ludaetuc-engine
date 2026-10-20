@@ -8,7 +8,7 @@
     "release/Dockerfile.rc2": "f681572eb11eedf85294ff431edb8938bd4f3dba45538131061ef11b137a5239",
     "release/audit.lock": "02250948d82d4cced34501802b6a0020eb633863b7176a02a4d28687b443152c",
     "release/build.sh": "2cdd1cb03d48b385cc9c001a6333c5f03bc82ac6e4c2e9719f12c62ff9b2f993",
-    "release/build_image.sh": "ebe2decdead4bc4644a174d6b658291111ee09f283c20db45f24fcfce047ca30",
+    "release/build_image.sh": "fb1e8337fc974eea67e49a47c3c71dabac822ebb2d1051c1340bf4f9c859953c",
     "release/build_native.sh": "c0962854e189fa64674a25d8c3402de41790923b757cfeeaef4fce8da0d2eb46",
     "release/build_payload.py": "00f3c28872f365afc6f0c319599f97152b64d671ed395dd8b6ddee668ba9b508",
     "release/ci_checks.sh": "06db4d132c80605954ac1b43fd769d9a577a610869584b005f4ac7f9b84030fa",
