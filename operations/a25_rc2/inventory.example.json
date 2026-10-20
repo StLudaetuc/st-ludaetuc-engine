@@ -1,0 +1,9 @@
+{
+  "environment": "staging", "production": false,
+  "old_service_id": "SYNTHETIC-old", "new_service_id": "SYNTHETIC-new",
+  "complete_path_inventory": false, "private_peer_inventory": false,
+  "network_mode": "synthetic-loopback", "approval_kind": "NOT_APPROVED",
+  "approval_reference": null, "approval_expires_epoch": 0,
+  "targets": [{"id": "example", "url": "http://127.0.0.1:18080", "host": "staging.example.invalid", "vantage": "external-non-allowlisted", "environment": "staging", "service_id": "SYNTHETIC-old"}],
+  "required_inventory": ["P1 default hostname", "P2 all custom domains DNS TLS CDN", "P3 retained instances", "P4 rollback specific commit auto-deploy", "P5 private host actual port10000 alias discovery IP all peers including Readers", "P6 previews", "P7 historical URLs", "P8 intermediaries", "P9 direct IP", "P10 all other engine copies", "P11 path variants", "P12 external database boundary", "P13 privileged access governance"]
+}

@@ -1,4 +1,4 @@
-name: Verify only (no deployment)
+name: RC2 verify only (no deployment)
 on:
   pull_request:
   workflow_dispatch:
@@ -7,23 +7,43 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.14.3'
-      - run: python -m pip install -r requirements.txt -r release/tests.lock
-      - run: env -i PATH="$PATH" python -m unittest discover -s security/analytics_access_control -p 'test_*.py' -v
-      - run: env -i PATH="$PATH" python -m unittest security.analytics_release.test_containment_fallback release.test_candidate release.local_probes operations.analytics_containment_release.test_tools operations.analytics_release_evidence_closure.test_evidence_checks -v
-      - run: env -i PATH="$PATH" python operations/analytics_containment_release/rehearsal.py
-      - run: python release/verify_release.py "$(git rev-parse HEAD)" release/RELEASE_MANIFEST.json --source-only
-      - run: python -m pip install -r release/audit.lock
+      - run: python -I release/runtime_preflight.py --phase build
+      - run: python -m pip install --require-hashes -r requirements.txt -r release/tests.lock
+      - run: env -i PATH="$PATH" sh release/ci_checks.sh
+      - name: Verify supported launcher in separate clean runtime
+        run: |
+          python -m venv /tmp/rc2-runtime
+          /tmp/rc2-runtime/bin/python -m pip install --require-hashes -r requirements.txt
+          /tmp/rc2-runtime/bin/python -I release/runtime_preflight.py
+          python operations/a25_rc2/http_checks.py /tmp/rc2-runtime --out /tmp/rc2-launcher.json
+      - run: python -m pip install --require-hashes -r release/audit.lock
       - run: python -m pip_audit -r requirements.txt --no-deps --disable-pip --format json
-      - name: Fetch hash-verified scanner and scan full history
+      - name: Fetch hash-verified scanner and scan intended history
         run: |
           curl -fLsS https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
           echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz' | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           /tmp/gitleaks git . --log-opts=--all --redact --report-format json --report-path /tmp/gitleaks.json
+      - name: Verify genuine secret detection still fails
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import secrets
+          p=Path('/tmp/rc2-secret-control');p.mkdir()
+          (p/'control.txt').write_text('api_key = "'+secrets.token_hex(24)+'"\n')
+          PY
+          set +e
+          /tmp/gitleaks dir /tmp/rc2-secret-control --redact --report-format json --report-path /tmp/rc2-secret-positive.json
+          result=$?
+          set -e
+          test "$result" -eq 1

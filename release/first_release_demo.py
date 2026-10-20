@@ -1,3 +1,4 @@
+# ILLUSTRATIVE ONLY: stub example; not A25 acceptance evidence.
 """AUTHOR EVIDENCE: request-path model, not actual Render enforcement."""
 import asyncio,contextlib,io,json
 from security.analytics_release.containment_fallback import ContainmentOnly
