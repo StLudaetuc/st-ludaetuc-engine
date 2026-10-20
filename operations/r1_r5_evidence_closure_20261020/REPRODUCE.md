@@ -1,0 +1,5 @@
+# Evidence-only author scripts
+
+All scripts are supporting author infrastructure. No frozen candidate/R-B files are changed. Tested scripts assume the supplemental archive layout rooted at a workspace with candidate-checkout, recovery-checkout, baseline-supplement, envG/envR and verified wheelhouses. Copy these exact bytes into supplemental-20261020/scripts before reproducing the recorded commands, or explicitly document any path adaptation. Do not execute scripts from originals blindly. Original matrix requires PG18 and SQL-positive controls; the included guarded adapter is unexecuted here. No Production connection or credential is authorised. Container builds remain blocked, and host build checks are not acceptance substitutes.
+
+Raw original reviewer reports, private download metadata and logs belong only in the restricted supplemental archive, not this public branch. Original fixtures/harnesses are resolved by immutable identifiers and hashes in the report. No credentials or expiring download URLs are stored here. A25 remains untouched.
