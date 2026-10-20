@@ -1,0 +1,10 @@
+# Digest taken from the frozen independent review; staging must verify provenance.
+FROM python:3.14.3-slim@sha256:5e59aae31ff0e87511226be8e2b94d78c58f05216efda3b07dbbed938ec8583b
+ARG SOURCE_DATE_EPOCH
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /opt/stludaetuc
+COPY source/ ./
+COPY wheelhouse/ /wheelhouse/
+RUN python -I release/runtime_preflight.py --phase build && python -m pip install --no-compile --no-index --find-links /wheelhouse --require-hashes -r requirements.txt && python -I release/runtime_preflight.py
+USER 65532:65532
+CMD ["sh", "release/launch.sh"]
