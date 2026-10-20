@@ -1,3 +1,5 @@
 # IR-06 precise fingerprint triage
 
 Source: private assurance commit2d39e2b0b9818733daf2da6c367640f1f6a1c49e, original R1–R5 reviewer archive SHA256fed8646ffa048dd2e05e3fbab1e6770285d67ae30a51cf8e03392ed2eb617cb8, logs/secrets/gitleaks_full_history.json and TRIAGE.txt. The23 raw findings comprise22 digest findings (one duplicate fingerprint) and one synthetic JWT redaction fixture. The22 unique fingerprints are listed explicitly; no generic rule, entropy threshold or path is suppressed. The scanner retains its nonzero exit for every other finding. A newly added credential even on a formerly allowlisted path has a different commit fingerprint and must fail.
+
+RC2 full-history scan additionally identified three exact synthetic WebSocket handshake nonce fingerprints: the prior supplemental probe and the two RC2 source commits. Values are fixed protocol-test nonces, not authorisation material. Those three fingerprints alone are suppressed; newly committed secrets on those same paths remain detectable. Raw reports and positive controls are retained privately.
