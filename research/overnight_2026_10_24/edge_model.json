@@ -1,0 +1,30 @@
+{
+ "features": [
+  "htf",
+  "trend",
+  "bbz",
+  "rsi_c",
+  "vwap_d",
+  "macd_d",
+  "atr_p",
+  "atr_r",
+  "core",
+  "adx_s"
+ ],
+ "coef": {
+  "intercept": -0.45,
+  "htf": -0.1177,
+  "trend": -0.1294,
+  "bbz": -0.1167,
+  "rsi_c": 0.0873,
+  "vwap_d": -0.0483,
+  "macd_d": -0.1357,
+  "atr_p": 0.005,
+  "atr_r": 0.0704,
+  "core": -0.0089,
+  "adx_s": 0.0447
+ },
+ "rr": 1.5,
+ "min_stop_pips": 12.0,
+ "auc_oos": 0.5369
+}
