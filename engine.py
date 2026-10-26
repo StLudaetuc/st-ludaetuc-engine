@@ -38,8 +38,8 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.0.0"
-RULESET_VERSION = "manus_ruleset_2026_10_v4_0"
+ENGINE_VERSION = "4.1.0"
+RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
 # v4.0.0 (2026-10-24): decision-making rebuild, driven by the overnight
@@ -81,6 +81,24 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #      in the retired Sheets log were bridged to the WRONG OANDA trade (2025
 #      trade IDs reused against 2026 signals; close time before open time).
 #      Any learning from outcomes must filter on bridge_valid.
+#
+# v4.1.0 (2026-10-26): bespoke per-instrument Pine scripts (FX v6.0.0,
+#   metals v2.0.0), calibrated on each pair's own 5m market-data sheet
+#   (Jun-Sep 2026) relative to GBP/USD:
+#   1. New entry model trend_breakout_continuation (Pine Model E, USD/JPY's
+#      default). USD/JPY was the one pair that did NOT mean-revert
+#      (stretched 40.0% vs chasing 42.1% at 1.5R); trend-aligned breakouts
+#      in its Tokyo / NY-open windows won ~45%. Breakouts close at the top
+#      of the band by definition, so this policy is exempt from
+#      ENTRY_EXTENDED and uses a fixed prior probability (0.45) instead of
+#      the edge model, whose GBP/USD fit penalises exactly that extension.
+#   2. InstrumentConfig.setup_edge_scale scales an entry model's logit
+#      offset per instrument. GBP/USD 1.0 (backtested); EUR/USD, AUD/USD,
+#      USD/CAD 0.75 (their 5m stretched-fade excess over break-even was
+#      ~0.72-0.77x GBP/USD's); metals 0.75 as an untested assumption.
+#   3. min_stop_pips now matches each instrument's Pine stop floor, sized to
+#      ~8.5x round-trip cost: EUR/USD 9.5, AUD/USD 11, USD/CAD 15, USD/JPY 15,
+#      XAU/USD 40 ($4.00), XAG/USD 30 ($0.30). GBP/USD unchanged at 12.
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -648,11 +666,15 @@ class InstrumentConfig:
     # above remains the hard SPREAD_TOO_WIDE limit for when it does arrive.
     typical_spread_price: float = 0.0
     typical_slippage_price: float = 0.0
-    # v4.0.0: floor on stop distance, in pips (pip_size units). Only the
-    # GBP/USD value is backed by the 2026-10-24 study; the rest are scaled
-    # by each pair's typical 2m ATR and should be re-checked with
-    # /analytics/prediction-accuracy once a few weeks of v4 data exist.
+    # v4.0.0: floor on stop distance, in pips (pip_size units). GBP/USD's
+    # 12 is backtested; since v4.1.0 the others match each instrument's own
+    # Pine stop floor (~8.5x round-trip cost) - re-check them with
+    # /analytics/prediction-accuracy once a few weeks of live data exist.
     min_stop_pips: float = 0.0
+    # v4.1.0: multiplies an entry model's logit_offset for this instrument -
+    # how much of the setup edge measured on GBP/USD is assumed to carry
+    # over (see the v4.1.0 notes above ENGINE_VERSION).
+    setup_edge_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -676,6 +698,12 @@ class ModelPolicy:
     target_rr: Optional[float] = None
     logit_offset: float = 0.0
     min_edge_probability: float = 0.0
+    # v4.1.0: prior_probability replaces the edge model's output for a
+    # setup the edge model wasn't fitted to judge (it is still logged).
+    # allow_extended_entry exempts a setup that enters on extension by
+    # design (breakouts) from ENTRY_EXTENDED.
+    prior_probability: Optional[float] = None
+    allow_extended_entry: bool = False
 
 
 # structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
@@ -706,16 +734,18 @@ class ModelPolicy:
 # RR/probability/expected-value floors) is untouched and still applies in
 # every session - this change only removes the blanket time-of-day veto.
 #
-# v4.0.0: the three trailing numbers on each line are typical_spread_price,
-# typical_slippage_price and min_stop_pips (see InstrumentConfig).
+# v4.0.0: the trailing numbers on each line are typical_spread_price,
+# typical_slippage_price, min_stop_pips and (v4.1.0) setup_edge_scale - see
+# InstrumentConfig. USD/JPY's scale is unused: its default model
+# (trend_breakout_continuation) runs on a prior, not the edge model.
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 10.0),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 8.0),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 10.0),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 12.0),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 25.0),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 15.0),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0, 1.0),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 9.5, 0.75),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 11.0, 0.75),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 15.0, 0.75),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75),
 }
 
 # v4.0.0: trend_pullback_reclaim is Pine v6.0.0's Model D. Its logit_offset
@@ -727,6 +757,7 @@ INSTRUMENTS: Dict[str, InstrumentConfig] = {
 # INSUFFICIENT_POST_GATE_EDGE. That is intended: they lost -0.27R/trade in
 # the replica and -0.25R+ live.
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
+    "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True),
     "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35),
     "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",), None, 0.10, 0.0),
     "momentum_continuation": ModelPolicy(True, False, 0.55, 0.06, 1.40, 74.0, ("trend", "breakout"), ("range", "extreme")),
@@ -861,6 +892,7 @@ def normalize_model(payload: Dict[str, Any]) -> str:
         "bb_rsi_reversal": "bb_rsi_armed_reversal",
         "pullback_reclaim": "trend_pullback_reclaim",
         "trend pullback reclaim": "trend_pullback_reclaim",
+        "breakout_continuation": "trend_breakout_continuation",
     }
     model = aliases.get(raw, raw)
     return model if model in MODEL_POLICIES else "unknown"
@@ -1285,12 +1317,19 @@ def edge_model_probability(payload: Dict[str, Any], cfg: InstrumentConfig, polic
     feats, missing = edge_features(payload, cfg)
     z = EDGE_MODEL_COEF["intercept"] + sum(EDGE_MODEL_COEF[k] * v for k, v in feats.items())
     raw = _sigmoid(z)
-    calibrated = _sigmoid(z + policy.logit_offset) if policy.enabled else 0.0
+    offset = policy.logit_offset * cfg.setup_edge_scale
+    if not policy.enabled:
+        calibrated = 0.0
+    elif policy.prior_probability is not None:
+        calibrated = policy.prior_probability
+    else:
+        calibrated = _sigmoid(z + offset)
     return {
         "edge_model_version": EDGE_MODEL_VERSION,
         "raw_probability": raw,
         "probability": calibrated,
-        "logit_offset": policy.logit_offset,
+        "probability_source": "prior" if policy.prior_probability is not None else "edge_model",
+        "logit_offset": offset,
         "features": feats,
         "missing_features": missing,
         # The fit is GBP/USD-only; every other instrument is an
@@ -1427,7 +1466,7 @@ class TradingSignalEvaluationEngine:
             return "execution_cost", "Observed spread exceeds limit.", "SPREAD_TOO_WIDE"
         if (as_float(costs.get("slippage"), 0.0) or 0.0) > cfg.max_slippage_price:
             return "execution_cost", "Expected slippage exceeds limit.", "SLIPPAGE_TOO_HIGH"
-        if v4 and extension_z is not None and extension_z >= MAX_ENTRY_EXTENSION_Z:
+        if v4 and not policy.allow_extended_entry and extension_z is not None and extension_z >= MAX_ENTRY_EXTENSION_Z:
             return "signal", f"Entry chases short-term extension (directional Bollinger z {extension_z:.2f} >= {MAX_ENTRY_EXTENSION_Z}).", "ENTRY_EXTENDED"
         if v4 and edge is not None and edge["raw_probability"] < policy.min_edge_probability:
             return "signal", f"Edge-model probability {edge['raw_probability']:.3f} below model floor {policy.min_edge_probability:.3f}.", "EDGE_PROBABILITY_TOO_LOW"

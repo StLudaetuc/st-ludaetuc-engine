@@ -96,6 +96,42 @@ def test_missing_edge_features_degrade_not_crash():
     assert res["approval_status"] in ("approved", "rejected")
 
 
+def _for_instrument(p, symbol, close, atr, pip):
+    p["instrument"]["symbol"] = symbol
+    p["price"]["close"] = close
+    p["indicators"]["atr"] = atr
+    p["indicators"]["ema_fast"] = close
+    p["indicators"]["ema_slow"] = close - atr if p["signal"]["direction"] == "long" else close + atr
+    p["structure"]["nearest_support"] = close - 2 * atr
+    p["structure"]["nearest_resistance"] = close + 2 * atr
+    p["extensions"]["atr_pips"] = atr / pip
+    return p
+
+
+def test_bespoke_stop_floors_per_instrument():
+    eng = _load("v4")
+    for symbol, close, atr, pip, floor in (("EURUSD", 1.13300, 0.00015, 0.0001, 9.5),
+                                          ("USDCAD", 1.42300, 0.00018, 0.0001, 15.0),
+                                          ("XAUUSD", 4000.00, 1.50, 0.1, 40.0),
+                                          ("XAGUSD", 48.000, 0.040, 0.01, 30.0)):
+        res = _eval(eng, _for_instrument(_payload(), symbol, close, atr, pip))
+        plan = res["manus"]["diagnostics"]["trade_plan_preview"]
+        assert abs(plan["stop_distance_pips"] - floor) < 0.2, (symbol, plan["stop_distance_pips"])
+
+
+def test_usdjpy_breakout_allowed_to_enter_extended():
+    eng = _load("v4")
+    p = _for_instrument(_payload(model="trend_breakout_continuation", pb=0.97, rsi=63.0, macd=0.02),
+                        "USDJPY", 157.400, 0.030, 0.01)
+    res = _eval(eng, p)
+    assert res["rejection_reason_code"] != "ENTRY_EXTENDED"
+    assert res["approval_status"] == "approved", res["rejection_reason"]
+    assert res["manus"]["diagnostics"]["edge_model"]["probability_source"] == "prior"
+    # The same extended entry under the pullback model is still vetoed.
+    p2 = _for_instrument(_payload(pb=0.97), "USDJPY", 157.400, 0.030, 0.01)
+    assert _eval(eng, p2)["rejection_reason_code"] == "ENTRY_EXTENDED"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
