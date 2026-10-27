@@ -1,0 +1,163 @@
+//@version=6
+// St Ludaetuc — Natural Gas, any timeframe — Bollinger %B + Higher High/Lower Low + Wick Absorption
+//
+// Three things must line up before a trade:
+//   1. ZONE    Bollinger %B reaches the low level (38) or the high level (78).
+//              %B = where the close sits inside the bands: 0 = lower band, 50 = basis, 100 = upper band.
+//              The zone only ARMS a setup; it never enters on its own.
+//   2. TURN    While armed, price makes a higher high (long) or lower low (short): the close breaks the
+//              extreme of the previous N bars.
+//   3. FLOW    The Wick Absorption Ratio (built for this script, below) agrees: volume-weighted lower
+//              wicks outweigh upper wicks (long), or the reverse (short), and it is moving the right way.
+//
+// Wick Absorption Ratio (WAR), range -1..+1:
+//   Each bar: (lower wick - upper wick) / bar range. A long lower wick means sellers pushed price down
+//   and were absorbed; a long upper wick means buyers were absorbed. Averaged over WAR length bars,
+//   weighted by each bar's volume (tick volume on CFDs), so heavy-volume rejections count most.
+//   It looks only at where price was rejected, not at closes, so it is unrelated to RSI/MACD/stochastic.
+//
+// Nothing here assumes a timeframe: every length is in bars and nothing calls request.security().
+// Stops sit beyond the setup's own extreme, floored at a minimum ATR distance; target = R multiple.
+// Optional: no new entries in the window around the Thursday EIA gas storage report (10:30 New York).
+strategy("STL Natural Gas – BB Absorption v1", shorttitle = "STL NG v1", overlay = false,
+     initial_capital = 10000, pyramiding = 0, commission_type = strategy.commission.percent,
+     commission_value = 0.02, slippage = 2, calc_on_every_tick = false)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+grpBB   = "Bollinger Bands"
+bbLen   = input.int(20, "Length", minval = 5, group = grpBB)
+bbMult  = input.float(2.0, "Std-dev multiplier", minval = 0.5, step = 0.1, group = grpBB)
+lowLvl  = input.float(38.0, "Low level (%B)", step = 1.0, group = grpBB, tooltip = "0 = lower band, 50 = basis, 100 = upper band")
+highLvl = input.float(78.0, "High level (%B)", step = 1.0, group = grpBB)
+mode    = input.string("Reversion", "Mode", options = ["Reversion", "Breakout"], group = grpBB,
+     tooltip = "Reversion: longs armed at the low level, shorts at the high level. Breakout: the reverse (longs armed at the high level).")
+
+grpCf     = "Confirmation"
+armBars   = input.int(8, "Setup stays armed for (bars)", minval = 1, group = grpCf)
+swingN    = input.int(2, "Higher high / lower low vs last N bars", minval = 1, group = grpCf)
+closeConf = input.bool(true, "Close must break (not just the wick)", group = grpCf)
+warLen    = input.int(14, "Wick Absorption length", minval = 3, group = grpCf)
+warMin    = input.float(0.05, "Minimum absorption", minval = 0.0, maxval = 1.0, step = 0.01, group = grpCf)
+skipEia   = input.bool(true, "No entries 10:00-11:30 NY on Thursdays (EIA storage report, intraday only)", group = grpCf)
+
+grpRk      = "Risk"
+riskPct    = input.float(0.5, "Risk per trade (% of equity)", minval = 0.05, maxval = 5.0, step = 0.05, group = grpRk)
+atrLen     = input.int(14, "ATR length", minval = 2, group = grpRk)
+stopBuf    = input.float(0.25, "Stop buffer beyond setup extreme (x ATR)", minval = 0.0, step = 0.05, group = grpRk)
+minStopAtr = input.float(0.75, "Minimum stop distance (x ATR)", minval = 0.1, step = 0.05, group = grpRk)
+rr         = input.float(1.5, "Reward : risk", minval = 0.5, step = 0.1, group = grpRk)
+maxBars    = input.int(0, "Time exit after N bars (0 = off)", minval = 0, group = grpRk)
+
+// ── Bollinger %B ──────────────────────────────────────────────────────────────
+basis = ta.sma(close, bbLen)
+dev   = bbMult * ta.stdev(close, bbLen)
+upper = basis + dev
+lower = basis - dev
+pctB  = upper > lower ? (close - lower) / (upper - lower) * 100.0 : 50.0
+
+// ── Wick Absorption Ratio ─────────────────────────────────────────────────────
+rng       = high - low
+lowerWick = math.min(open, close) - low
+upperWick = high - math.max(open, close)
+barAbs    = rng > 0 ? (lowerWick - upperWick) / rng : 0.0
+w         = na(volume) or volume <= 0 ? 1.0 : volume
+wSum      = math.sum(w, warLen)
+war       = wSum > 0 ? math.sum(barAbs * w, warLen) / wSum : 0.0
+
+atr = ta.atr(atrLen)
+
+// ── Zones arm a setup ─────────────────────────────────────────────────────────
+reversion = mode == "Reversion"
+longZone  = reversion ? pctB <= lowLvl : pctB >= highLvl
+shortZone = reversion ? pctB >= highLvl : pctB <= lowLvl
+
+var int   lArmBar  = na
+var float lArmLow  = na
+var int   sArmBar  = na
+var float sArmHigh = na
+
+lWasArmed = not na(lArmBar) and bar_index - lArmBar <= armBars
+sWasArmed = not na(sArmBar) and bar_index - sArmBar <= armBars
+
+// Track the lowest low (long) / highest high (short) of the setup for the stop.
+if longZone
+    lArmLow := lWasArmed ? math.min(lArmLow, low) : low
+    lArmBar := bar_index
+else if lWasArmed
+    lArmLow := math.min(lArmLow, low)
+
+if shortZone
+    sArmHigh := sWasArmed ? math.max(sArmHigh, high) : high
+    sArmBar  := bar_index
+else if sWasArmed
+    sArmHigh := math.max(sArmHigh, high)
+
+longArmed  = not na(lArmBar) and bar_index - lArmBar <= armBars
+shortArmed = not na(sArmBar) and bar_index - sArmBar <= armBars
+
+// ── Confirmations ─────────────────────────────────────────────────────────────
+hhLevel    = ta.highest(high, swingN)[1]
+llLevel    = ta.lowest(low, swingN)[1]
+higherHigh = (closeConf ? close : high) > hhLevel
+lowerLow   = (closeConf ? close : low) < llLevel
+
+nyDow    = dayofweek(time, "America/New_York")
+eiaStart = timestamp("America/New_York", year(time, "America/New_York"), month(time, "America/New_York"), dayofmonth(time, "America/New_York"), 10, 0)
+eiaEnd   = timestamp("America/New_York", year(time, "America/New_York"), month(time, "America/New_York"), dayofmonth(time, "America/New_York"), 11, 30)
+inEia    = skipEia and timeframe.isintraday and nyDow == dayofweek.thursday and time < eiaEnd and time_close > eiaStart
+
+longSig  = longArmed and higherHigh and war >= warMin and war > war[1] and not inEia and barstate.isconfirmed
+shortSig = shortArmed and lowerLow and war <= -warMin and war < war[1] and not inEia and barstate.isconfirmed
+
+// ── Orders ────────────────────────────────────────────────────────────────────
+riskCash = strategy.equity * riskPct / 100.0
+pv       = syminfo.pointvalue
+flat     = strategy.position_size == 0
+
+if longSig and flat
+    lStop   = math.min(lArmLow - stopBuf * atr, close - minStopAtr * atr)
+    lDist   = close - lStop
+    lTarget = close + rr * lDist
+    lQty    = lDist > 0 ? riskCash / (lDist * pv) : 0.0
+    if lQty > 0
+        strategy.entry("Long", strategy.long, qty = lQty)
+        strategy.exit("Long SL/TP", from_entry = "Long", stop = lStop, limit = lTarget)
+        alert('{"instrument":"' + syminfo.ticker + '","direction":"long","entry":' + str.tostring(close, format.mintick) +
+             ',"stop_loss":' + str.tostring(lStop, format.mintick) + ',"take_profit":' + str.tostring(lTarget, format.mintick) +
+             ',"pct_b":' + str.tostring(pctB, "#.#") + ',"war":' + str.tostring(war, "#.###") + ',"timeframe":"' + timeframe.period + '"}',
+             alert.freq_once_per_bar_close)
+    lArmBar := na
+else if shortSig and flat
+    sStop   = math.max(sArmHigh + stopBuf * atr, close + minStopAtr * atr)
+    sDist   = sStop - close
+    sTarget = close - rr * sDist
+    sQty    = sDist > 0 ? riskCash / (sDist * pv) : 0.0
+    if sQty > 0
+        strategy.entry("Short", strategy.short, qty = sQty)
+        strategy.exit("Short SL/TP", from_entry = "Short", stop = sStop, limit = sTarget)
+        alert('{"instrument":"' + syminfo.ticker + '","direction":"short","entry":' + str.tostring(close, format.mintick) +
+             ',"stop_loss":' + str.tostring(sStop, format.mintick) + ',"take_profit":' + str.tostring(sTarget, format.mintick) +
+             ',"pct_b":' + str.tostring(pctB, "#.#") + ',"war":' + str.tostring(war, "#.###") + ',"timeframe":"' + timeframe.period + '"}',
+             alert.freq_once_per_bar_close)
+    sArmBar := na
+
+if maxBars > 0 and strategy.opentrades > 0
+    if bar_index - strategy.opentrades.entry_bar_index(0) >= maxBars
+        strategy.close_all(comment = "Time exit")
+
+// ── Visuals: bands and signals on the price chart, WAR in this pane ───────────
+lowLvlPrice  = lower + (upper - lower) * lowLvl / 100.0
+highLvlPrice = lower + (upper - lower) * highLvl / 100.0
+plot(basis, "BB basis", color.new(color.gray, 20), force_overlay = true)
+plot(upper, "BB upper", color.new(color.teal, 30), force_overlay = true)
+plot(lower, "BB lower", color.new(color.teal, 30), force_overlay = true)
+plot(lowLvlPrice, "Low level (38)", color.new(color.orange, 40), style = plot.style_circles, force_overlay = true)
+plot(highLvlPrice, "High level (78)", color.new(color.purple, 40), style = plot.style_circles, force_overlay = true)
+plotshape(longSig and flat, "Long signal", shape.triangleup, location.belowbar, color.green, size = size.small, force_overlay = true)
+plotshape(shortSig and flat, "Short signal", shape.triangledown, location.abovebar, color.red, size = size.small, force_overlay = true)
+
+plot(war, "Wick Absorption Ratio", war >= 0 ? color.new(color.green, 20) : color.new(color.red, 20), style = plot.style_columns)
+hline(0, "Zero", color.gray)
+hline(warMin, "Long threshold", color.new(color.green, 50), hline.style_dashed)
+hline(-warMin, "Short threshold", color.new(color.red, 50), hline.style_dashed)
+bgcolor(longArmed ? color.new(color.green, 92) : shortArmed ? color.new(color.red, 92) : na, title = "Setup armed")
