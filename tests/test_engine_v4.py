@@ -240,6 +240,62 @@ def test_gbp_sizing_falls_back_small_without_rate_and_usd_rollback():
         _load("v4")
 
 
+def _natgas(direction="short", timeframe="240", close=2.736, atr=0.045, open_trades=0):
+    sign = 1.0 if direction == "long" else -1.0
+    stop = close - sign * 0.130
+    target = close + sign * 0.195
+    p = {
+        "meta": {"signal_id": f"STLNG-{timeframe}-1-{direction}"},
+        "system": {"strategy_id": "stl_natgas_anytf_bb_absorption_v1", "strategy_version": "1.1.0"},
+        "instrument": {"symbol": "NATGASUSD"},
+        "market": {"timeframe": timeframe, "bar_time_utc": "2026-10-27T12:00:00Z", "hour_utc": 12, "session_name": "overlap_london_new_york"},
+        "signal": {"signal_type": "entry", "direction": direction, "entry_model": "natgas_bb_absorption"},
+        "price": {"close": close, "bid": close - 0.004, "ask": close + 0.004, "spread_price": 0.008},
+        "indicators": {"atr": atr, "bb_percent_b": 0.80 if direction == "short" else 0.35},
+        "structure": {"volatility_regime": "normal", "market_regime": "unclassified"},
+        "risk": {"risk_percent": 0.35, "proposed_entry": close, "proposed_stop_loss": stop, "proposed_take_profit": target},
+        "context": {"context_status": "unchecked"},
+        "extensions": {"pine_proposal_only": False, "allow_manus_override_sl_tp": False},
+        "costs": {"financing_long_annual": -1.442, "financing_short_annual": 1.392},
+    }
+    return {"payload": p, "authoritative_instrument": "NATGASUSD",
+            "account": {"balance": 4649.29, "currency": "GBP", "instrument_open_trade_count": open_trades}}
+
+
+def test_natgas_h4_short_approved_with_pine_stop_and_whole_units():
+    eng = _load("v4")
+    eng._latest_gbpusd_rate = lambda: (1.33, None)
+    r = eng.engine.evaluate(_natgas())
+    assert r["approval_status"] == "approved", (r["rejection_reason_code"], r["rejection_reason"])
+    m = r["manus"]
+    assert m["final_trade_plan"]["broker_symbol"] == "NATGAS_USD"
+    assert m["final_stop_loss"] > m["final_entry"] > m["final_take_profit"]
+    assert abs(m["final_stop_loss"] - 2.866) < 1e-9                 # Pine's own stop, not recomputed
+    assert m["final_position_size"] < 0 and m["final_position_size"] == int(m["final_position_size"])
+    assert m["diagnostics"]["carry"]["applied"] and m["diagnostics"]["carry"]["carry_r"] > 0
+    assert m["final_trade_plan"]["max_loss_account_ccy"] <= 4649.29 * 0.0035 + 1e-9
+
+
+def test_natgas_longs_and_short_timeframes_rejected_on_cost_and_carry():
+    eng = _load("v4")
+    assert eng.engine.evaluate(_natgas("long"))["rejection_reason_code"] == "INSUFFICIENT_POST_GATE_EDGE"
+    m15 = _natgas("short", "15", atr=0.010)
+    m15["payload"]["risk"].update(proposed_stop_loss=2.761, proposed_take_profit=2.6985)
+    assert eng.engine.evaluate(m15)["rejection_reason_code"] == "COST_R_EXCESSIVE"
+
+
+def test_natgas_one_position_at_a_time():
+    eng = _load("v4")
+    assert eng.engine.evaluate(_natgas(open_trades=1))["rejection_reason_code"] == "POSITION_ALREADY_OPEN"
+
+
+def test_carry_never_touches_fx_or_metals():
+    eng = _load("v4")
+    for p in (_payload(), _for_instrument(_payload(), "XAUUSD", 4000.00, 1.50, 0.1)):
+        carry = _eval(eng, p)["manus"]["diagnostics"]["carry"]
+        assert carry == {"carry_r": 0.0, "applied": False}
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
