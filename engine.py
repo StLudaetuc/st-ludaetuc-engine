@@ -8,6 +8,7 @@ import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import math
 from math import floor, isfinite
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -37,9 +38,74 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "3.11.0"
-RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
-CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
+ENGINE_VERSION = "4.1.0"
+RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
+CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
+
+# v4.0.0 (2026-10-24): decision-making rebuild, driven by the overnight
+#   study of the Master Trading Log + 87,216 GBP/USD 2m bars (2026-04-13 ->
+#   2026-09-30, Apr-Jul design / Aug-Sep held out). Full write-up in the
+#   2026-10-24 morning report. Findings that drive each change:
+#
+#   1. The old heuristic signal_score() rewards trend/EMA/HTF/MACD alignment.
+#      On 2m GBP/USD those terms are ANTI-predictive: replicated over every
+#      bar and both directions, its top quintile wins 34% at 1.5R vs 43% for
+#      its bottom quintile (same in both halves of the sample). On the 86
+#      live trades whose outcome bridge is genuine, winners and losers scored
+#      within ~1-3 points of each other on every Manus score, and the
+#      predicted ~55% win probability compares with ~38% realised.
+#      -> estimate_probability() is replaced (in MANUS_DECISION_MODE=v4, the
+#      default) by edge_model_probability(): a logistic model fitted on that
+#      bar data (out-of-sample AUC 0.537, calibration within ~1-2 points per
+#      bucket), plus a per-entry-model logit offset for setups whose own
+#      backtested hit rate is known. The old heuristic is still computed and
+#      logged as legacy_heuristic_probability for comparison.
+#   2. Stops were far too tight for the costs: live median stop 4.7 pips
+#      GBP/USD / 2.8 pips EUR/USD, so ~1 pip of spread was 0.2-0.35R per
+#      trade before the trade even started, and 27% of live trades closed
+#      within 10 minutes (13% of those won). -> plan_trade() enforces a
+#      per-instrument min_stop_pips (GBP/USD 12, validated; others scaled,
+#      NOT yet validated), and COST_R_EXCESSIVE tightens from 0.50R to 0.20R.
+#   3. Pine never sends bid/ask/spread (hard-coded null), so cost_r() always
+#      fell back to max_spread_price (the worst case). -> it now falls back
+#      to a per-instrument typical_spread_price/typical_slippage_price and
+#      keeps flagging spread_estimated.
+#   4. Entries that chase short-term extension lose: v5.2 signals whose %B
+#      is already >= 0.9 in the trade direction won 32.5% (-0.45R net
+#      out-of-sample). -> new ENTRY_EXTENDED hard gate.
+#   5. New entry model trend_pullback_reclaim (Pine v6.0.0, GBP/USD first).
+#      Bar-close-confirmed backtest: 47.5% win, +0.07R net/trade at a 1.4
+#      pip cost; with this engine's min_edge_probability 0.35 floor, 48.6%
+#      win, +0.10R net, PF 1.17, out-of-sample +0.14R.
+#   6. master_trading_log gains bridge_valid: 836 of the 922 closed outcomes
+#      in the retired Sheets log were bridged to the WRONG OANDA trade (2025
+#      trade IDs reused against 2026 signals; close time before open time).
+#      Any learning from outcomes must filter on bridge_valid.
+#
+# v4.1.0 (2026-10-26): bespoke per-instrument Pine scripts (FX v6.0.0,
+#   metals v2.0.0), calibrated on each pair's own 5m market-data sheet
+#   (Jun-Sep 2026) relative to GBP/USD:
+#   1. New entry model trend_breakout_continuation (Pine Model E, USD/JPY's
+#      default). USD/JPY was the one pair that did NOT mean-revert
+#      (stretched 40.0% vs chasing 42.1% at 1.5R); trend-aligned breakouts
+#      in its Tokyo / NY-open windows won ~45%. Breakouts close at the top
+#      of the band by definition, so this policy is exempt from
+#      ENTRY_EXTENDED and uses a fixed prior probability (0.45) instead of
+#      the edge model, whose GBP/USD fit penalises exactly that extension.
+#   2. InstrumentConfig.setup_edge_scale scales an entry model's logit
+#      offset per instrument. GBP/USD 1.0 (backtested); EUR/USD, AUD/USD,
+#      USD/CAD 0.75 (their 5m stretched-fade excess over break-even was
+#      ~0.72-0.77x GBP/USD's); metals 0.75 as an untested assumption.
+#   3. min_stop_pips now matches each instrument's Pine stop floor, sized to
+#      ~8.5x round-trip cost: EUR/USD 9.5, AUD/USD 11, USD/CAD 15, USD/JPY 15,
+#      XAU/USD 40 ($4.00), XAG/USD 30 ($0.30). GBP/USD unchanged at 12.
+#
+#   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
+#   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
+#   max-spread cost fallback, no stop floor, no extension gate - as an
+#   instant rollback without redeploying older code. The new v4 fields are
+#   still computed and logged in legacy mode so the two can be compared.
+MANUS_DECISION_MODE = os.environ.get("MANUS_DECISION_MODE", "v4").strip().lower()
 
 # v3.5.0: fixed a position-sizing bug in plan_trade() that undersized every
 # USD/JPY and USD/CAD trade because the account-currency conversion was
@@ -283,7 +349,12 @@ SELECT
     p.payload->>'approval_status' AS approval_status,
     NULLIF(p.payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
     NULLIF(p.payload->>'expected_net_r', '')::numeric AS expected_net_r,
-    o.received_at
+    o.received_at,
+    -- v4.0.0: TRUE only when the outcome is bridged to a real open AND
+    -- closed after it opened. The retired Sheets log reused 2025 OANDA trade
+    -- IDs against 2026 signals (836 of 922 rows closed before they opened);
+    -- filter on this before learning anything from outcomes.
+    (topen.event_time IS NOT NULL AND o.event_time >= topen.event_time) AS bridge_valid
 FROM events o
 LEFT JOIN events topen
     ON topen.event_type = 'trade_opened'
@@ -319,7 +390,8 @@ SELECT
     topen.payload->>'oanda_trade_id' AS oanda_trade_id,
     o.event_time AS closed_at,
     o.status AS outcome,
-    NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl
+    NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl,
+    (o.event_time IS NOT NULL AND topen.event_time IS NOT NULL AND o.event_time >= topen.event_time) AS bridge_valid
 FROM events p
 LEFT JOIN events topen
     ON topen.event_type = 'trade_opened'
@@ -588,6 +660,21 @@ class InstrumentConfig:
     # account_ccy_conversion_rate comment in plan_trade() for why this
     # matters for position sizing.
     quote_ccy_is_account_ccy: bool
+    # v4.0.0: typical (not worst-case) spread/slippage, used by cost_r()
+    # when the payload carries no live spread - which is always today, since
+    # Pine hard-codes price.bid/ask/spread_price to null. max_spread_price
+    # above remains the hard SPREAD_TOO_WIDE limit for when it does arrive.
+    typical_spread_price: float = 0.0
+    typical_slippage_price: float = 0.0
+    # v4.0.0: floor on stop distance, in pips (pip_size units). GBP/USD's
+    # 12 is backtested; since v4.1.0 the others match each instrument's own
+    # Pine stop floor (~8.5x round-trip cost) - re-check them with
+    # /analytics/prediction-accuracy once a few weeks of live data exist.
+    min_stop_pips: float = 0.0
+    # v4.1.0: multiplies an entry model's logit_offset for this instrument -
+    # how much of the setup edge measured on GBP/USD is assumed to carry
+    # over (see the v4.1.0 notes above ENGINE_VERSION).
+    setup_edge_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -600,6 +687,23 @@ class ModelPolicy:
     min_pre_gate_score: float
     preferred_regimes: Tuple[str, ...]
     blocked_regimes: Tuple[str, ...]
+    # v4.0.0 fields (v4 decision mode only):
+    # target_rr - take-profit multiple for engine-computed plans; None keeps
+    #   the v3 rule max(cfg.default_rr, min_rr).
+    # logit_offset - added to the edge model's logit for this entry model,
+    #   i.e. how much better (or worse) this setup's backtested hit rate is
+    #   than an average bar with the same features.
+    # min_edge_probability - floor on the RAW edge-model probability (before
+    #   logit_offset); 0.0 disables it.
+    target_rr: Optional[float] = None
+    logit_offset: float = 0.0
+    min_edge_probability: float = 0.0
+    # v4.1.0: prior_probability replaces the edge model's output for a
+    # setup the edge model wasn't fitted to judge (it is still logged).
+    # allow_extended_entry exempts a setup that enters on extension by
+    # design (breakouts) from ENTRY_EXTENDED.
+    prior_probability: Optional[float] = None
+    allow_extended_entry: bool = False
 
 
 # structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
@@ -629,18 +733,33 @@ class ModelPolicy:
 # them. Every other gate (spread/slippage limits, extreme-volatility block,
 # RR/probability/expected-value floors) is untouched and still applies in
 # every session - this change only removes the blanket time-of-day veto.
+#
+# v4.0.0: the trailing numbers on each line are typical_spread_price,
+# typical_slippage_price, min_stop_pips and (v4.1.0) setup_edge_scale - see
+# InstrumentConfig. USD/JPY's scale is unused: its default model
+# (trend_breakout_continuation) runs on a prior, not the edge model.
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0, 1.0),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 9.5, 0.75),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 11.0, 0.75),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 15.0, 0.75),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75),
 }
 
+# v4.0.0: trend_pullback_reclaim is Pine v6.0.0's Model D. Its logit_offset
+# (0.44) is what lifts the edge model's average raw probability for those
+# candidates (0.378) to their backtested hit rate (0.486, n=107, 12-pip
+# stop floor, 1.5R). trend_pullback's 0.10 does the same for v5.2's trigger
+# (0.363 -> 0.385) - which still leaves it below break-even after costs, so
+# in v4 mode v5.2 trend-pullback signals are expected to be rejected on
+# INSUFFICIENT_POST_GATE_EDGE. That is intended: they lost -0.27R/trade in
+# the replica and -0.25R+ live.
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
-    "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",)),
+    "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True),
+    "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35),
+    "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",), None, 0.10, 0.0),
     "momentum_continuation": ModelPolicy(True, False, 0.55, 0.06, 1.40, 74.0, ("trend", "breakout"), ("range", "extreme")),
     "range_reversal": ModelPolicy(True, True, 0.58, 0.10, 1.50, 80.0, ("range", "range_to_reversal"), ("trend", "breakout", "extreme")),
     "bb_rsi_immediate_rejection": ModelPolicy(True, True, 0.60, 0.10, 1.50, 82.0, ("range", "range_to_reversal"), ("trend", "breakout", "extreme")),
@@ -771,6 +890,9 @@ def normalize_model(payload: Dict[str, Any]) -> str:
         "range reversal": "range_reversal",
         "bb_rsi_exhaustion_reversal": "bb_rsi_armed_reversal",
         "bb_rsi_reversal": "bb_rsi_armed_reversal",
+        "pullback_reclaim": "trend_pullback_reclaim",
+        "trend pullback reclaim": "trend_pullback_reclaim",
+        "breakout_continuation": "trend_breakout_continuation",
     }
     model = aliases.get(raw, raw)
     return model if model in MODEL_POLICIES else "unknown"
@@ -921,6 +1043,8 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         nearest_resistance = as_float(get_path(payload, "structure.nearest_resistance"))
         atr_dist = atr * cfg.sl_atr_mult if atr > 0 else entry * 0.001
         rr = max(cfg.default_rr, policy.min_rr)
+        if MANUS_DECISION_MODE == "v4" and policy.target_rr is not None:
+            rr = policy.target_rr
 
         if direction == "long":
             atr_stop = entry - atr_dist
@@ -950,6 +1074,22 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
 
     if sl is None or tp is None or entry <= 0:
         return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis}
+
+    # v4.0.0 stop floor: widen any stop tighter than cfg.min_stop_pips and
+    # move the target out with it so the planned reward:risk is unchanged.
+    # Sizing below then risks the same cash over a wider stop (fewer units),
+    # so this changes cost-per-R, not risk-per-trade.
+    stop_floor_applied = False
+    if MANUS_DECISION_MODE == "v4" and cfg.min_stop_pips > 0 and direction in ("long", "short"):
+        min_dist = cfg.min_stop_pips * cfg.pip_size
+        cur_dist = abs(entry - sl)
+        if cur_dist < min_dist:
+            rr_keep = abs(tp - entry) / cur_dist if cur_dist > 0 else max(cfg.default_rr, policy.min_rr)
+            sign = 1.0 if direction == "long" else -1.0
+            sl = entry - sign * min_dist
+            tp = entry + sign * min_dist * rr_keep
+            stop_floor_applied = True
+            stop_basis = "min_stop_floor"
 
     entry, sl, tp = round_to_tick(entry, cfg.tick_size), round_to_tick(sl, cfg.tick_size), round_to_tick(tp, cfg.tick_size)
     stop_dist = abs(entry - sl)
@@ -1005,6 +1145,8 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         "account_ccy_conversion_rate": account_ccy_conversion_rate,
         "source": source,
         "stop_basis": stop_basis,
+        "stop_floor_applied": stop_floor_applied,
+        "stop_distance_pips": stop_dist / cfg.pip_size if cfg.pip_size > 0 else None,
     }
 
 
@@ -1016,8 +1158,15 @@ def cost_r(payload: Dict[str, Any], cfg: InstrumentConfig, plan: Dict[str, Any])
         if bid is not None and ask is not None and ask >= bid:
             spread = ask - bid
 
-    spread_used = spread if spread is not None else cfg.max_spread_price
-    slippage = as_float(get_path(payload, "execution.expected_slippage_price")) or as_float(get_path(payload, "risk.max_slippage_allowed")) or cfg.max_slippage_price
+    if MANUS_DECISION_MODE == "v4":
+        # v4.0.0: typical, not worst-case, costs when nothing live arrives.
+        # risk.max_slippage_allowed is a LIMIT Pine sends (0.8 pips on
+        # GBP/USD), not an expectation, so it is no longer used as one.
+        spread_used = spread if spread is not None else (cfg.typical_spread_price or cfg.max_spread_price)
+        slippage = as_float(get_path(payload, "execution.expected_slippage_price")) or cfg.typical_slippage_price or cfg.max_slippage_price
+    else:
+        spread_used = spread if spread is not None else cfg.max_spread_price
+        slippage = as_float(get_path(payload, "execution.expected_slippage_price")) or as_float(get_path(payload, "risk.max_slippage_allowed")) or cfg.max_slippage_price
     commission = as_float(get_path(payload, "costs.commission_price_equivalent"), 0.0) or 0.0
     financing = as_float(get_path(payload, "costs.estimated_financing_price_equivalent"), 0.0) or 0.0
     stop_dist = as_float(plan.get("stop_distance"), 0.0) or 0.0
@@ -1067,6 +1216,144 @@ def estimate_probability(signal: float, context: float, fit: float, data_quality
     return clamp(probability, 0.05, 0.75)
 
 
+# --- v4.0.0 edge model -----------------------------------------------------
+#
+# Logistic regression for P(take-profit before stop-loss) at a 1.5R target
+# with a stop of max(2 ATR, 12 pips), fitted on every GBP/USD 2m bar and
+# both directions (169,003 labelled samples, 2026-04-13 -> 2026-09-30).
+# Fitted on Apr-Jul first: out-of-sample (Aug-Sep) AUC 0.537, and predicted
+# vs realised win rate agreed within ~1-2 points in every populated bucket
+# (0.33/0.33, 0.36/0.37, 0.40/0.42, 0.43/0.43). These are the coefficients
+# refitted on the full sample. Weak but honest: it ranks entries, it does
+# not make an edge on its own - entry-model logit_offset carries the setup's
+# own edge.
+#
+# Every feature is "directional": positive means "in the trade's favour"
+# for alignment flags, or "already moved in the trade's direction" for the
+# stretch measures. Negative coefficients on htf/trend/bbz/macd_d/vwap_d
+# are the core finding - at 2m, buying strength that has already happened
+# loses; buying a stretched pullback wins.
+EDGE_MODEL_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
+EDGE_MODEL_COEF: Dict[str, float] = {
+    "intercept": -0.4500,
+    "htf": -0.1177,      # 1.0 if structure.higher_timeframe_bias agrees with direction
+    "trend": -0.1294,    # 1.0 if structure.trend_bias agrees with direction
+    "bbz": -0.1167,      # (indicators.bb_percent_b - 0.5) * 2 * dir, clipped to [-2, 2]
+    "rsi_c": 0.0873,     # (directional RSI - 50) / 10, clipped to [-3, 3]
+    "vwap_d": -0.0483,   # dir * extensions.distance_from_vwap_atr, clipped to [-10, 10], / 5
+    "macd_d": -0.1357,   # dir * indicators.macd_histogram / indicators.atr, clipped to [-1, 1]
+    "atr_p": 0.0050,     # extensions.atr_pips clipped to [0.5, 6]
+    "atr_r": 0.0704,     # extensions.atr_ratio clipped to [0.5, 2]
+    "core": -0.0089,     # 1.0 if 06:00-18:59 UTC
+    "adx_s": 0.0447,     # indicators.adx clipped to [5, 60], / 25
+}
+# Features that, when missing, fall back to their sample-average value
+# (contribution ~ neutral) rather than failing the evaluation.
+_EDGE_FEATURE_DEFAULTS: Dict[str, float] = {
+    "htf": 0.5, "trend": 0.4, "bbz": 0.0, "rsi_c": 0.0, "vwap_d": 0.0, "macd_d": 0.0,
+    "atr_p": 2.2, "atr_r": 1.0, "core": 0.55, "adx_s": 0.95,
+}
+
+
+def _sigmoid(z: float) -> float:
+    return 1.0 / (1.0 + math.exp(-z))
+
+
+def edge_features(payload: Dict[str, Any], cfg: InstrumentConfig) -> Tuple[Dict[str, float], list]:
+    """Builds EDGE_MODEL_COEF's inputs from fields Pine v5.2+/v6 already
+    sends. Returns (features, names_of_features_that_were_missing)."""
+    direction = as_str(get_path(payload, "signal.direction"), "").lower()
+    d = 1.0 if direction == "long" else -1.0
+    want = "bullish" if d > 0 else "bearish"
+    f: Dict[str, Optional[float]] = {}
+
+    htf = as_str(get_path(payload, "structure.higher_timeframe_bias"), "").lower()
+    f["htf"] = (1.0 if htf == want else 0.0) if htf else None
+    trend = as_str(get_path(payload, "structure.trend_bias"), "").lower()
+    f["trend"] = (1.0 if trend == want else 0.0) if trend else None
+
+    pb = as_float(get_path(payload, "indicators.bb_percent_b"))
+    if pb is None:
+        close = as_float(get_path(payload, "price.close"))
+        upper = as_float(get_path(payload, "indicators.bb_upper"))
+        lower = as_float(get_path(payload, "indicators.bb_lower"))
+        if close is not None and upper is not None and lower is not None and upper > lower:
+            pb = (close - lower) / (upper - lower)
+    f["bbz"] = clamp((pb - 0.5) * 2.0 * d, -2.0, 2.0) if pb is not None else None
+
+    rsi = as_float(get_path(payload, "indicators.rsi"))
+    f["rsi_c"] = clamp(((rsi if d > 0 else 100.0 - rsi) - 50.0) / 10.0, -3.0, 3.0) if rsi is not None else None
+
+    vwap_atr = as_float(get_path(payload, "extensions.distance_from_vwap_atr"))
+    f["vwap_d"] = clamp(d * vwap_atr, -10.0, 10.0) / 5.0 if vwap_atr is not None else None
+
+    macd = as_float(get_path(payload, "indicators.macd_histogram"))
+    atr = as_float(get_path(payload, "indicators.atr"))
+    f["macd_d"] = clamp(d * macd / atr, -1.0, 1.0) if macd is not None and atr else None
+
+    atr_pips = as_float(get_path(payload, "extensions.atr_pips"))
+    if atr_pips is None and atr:
+        atr_pips = atr / cfg.pip_size
+    f["atr_p"] = clamp(atr_pips, 0.5, 6.0) if atr_pips is not None else None
+
+    atr_ratio = as_float(get_path(payload, "extensions.atr_ratio"))
+    f["atr_r"] = clamp(atr_ratio, 0.5, 2.0) if atr_ratio is not None else None
+
+    hour = as_float(get_path(payload, "market.hour_utc"))
+    if hour is None:
+        bar_time = get_path(payload, "market.bar_time_utc")
+        if bar_time:
+            hour = float(_parse_event_time(bar_time).hour)
+    f["core"] = (1.0 if 6 <= hour <= 18 else 0.0) if hour is not None else None
+
+    adx = as_float(get_path(payload, "indicators.adx"))
+    f["adx_s"] = clamp(adx, 5.0, 60.0) / 25.0 if adx is not None else None
+
+    missing = [k for k, v in f.items() if v is None]
+    return {k: (_EDGE_FEATURE_DEFAULTS[k] if v is None else v) for k, v in f.items()}, missing
+
+
+def edge_model_probability(payload: Dict[str, Any], cfg: InstrumentConfig, policy: ModelPolicy) -> Dict[str, Any]:
+    feats, missing = edge_features(payload, cfg)
+    z = EDGE_MODEL_COEF["intercept"] + sum(EDGE_MODEL_COEF[k] * v for k, v in feats.items())
+    raw = _sigmoid(z)
+    offset = policy.logit_offset * cfg.setup_edge_scale
+    if not policy.enabled:
+        calibrated = 0.0
+    elif policy.prior_probability is not None:
+        calibrated = policy.prior_probability
+    else:
+        calibrated = _sigmoid(z + offset)
+    return {
+        "edge_model_version": EDGE_MODEL_VERSION,
+        "raw_probability": raw,
+        "probability": calibrated,
+        "probability_source": "prior" if policy.prior_probability is not None else "edge_model",
+        "logit_offset": offset,
+        "features": feats,
+        "missing_features": missing,
+        # The fit is GBP/USD-only; every other instrument is an
+        # extrapolation until its own outcome data says otherwise.
+        "validated_for_instrument": cfg.symbol == "GBPUSD",
+    }
+
+
+def entry_extension(payload: Dict[str, Any], cfg: InstrumentConfig) -> Optional[float]:
+    """Directional Bollinger z of the entry bar ((%B - 0.5) * 2, signed so
+    positive = price already up the band in the trade's direction)."""
+    feats, missing = edge_features(payload, cfg)
+    return None if "bbz" in missing else feats["bbz"]
+
+
+# v4.0.0: v5.2 signals entered at directional z >= 0.8 won 32.5% at 1.5R
+# (-0.29R net; -0.45R out-of-sample), against 39.6% below it. Pine v6
+# confirmation entries almost never reach it (2 of 120).
+MAX_ENTRY_EXTENSION_Z = 0.8
+# v4.0.0: was 0.50R. At 0.50R a trade needs a >56% hit rate at 1.5R just to
+# break even - nothing in the data gets there.
+MAX_COST_R_V4 = 0.20
+
+
 class TradingSignalEvaluationEngine:
     def evaluate(self, request_body: Dict[str, Any]) -> Dict[str, Any]:
         req = EvaluateRequest(**request_body)
@@ -1091,7 +1378,11 @@ class TradingSignalEvaluationEngine:
         plan = plan_trade(payload, account, cfg, policy)
         cr, cost_diag = cost_r(payload, cfg, plan)
         risk = risk_score(payload, account, cfg, policy, plan, cost_diag)
-        prob = estimate_probability(sig, ctx, fit, dq_score, policy)
+        legacy_prob = estimate_probability(sig, ctx, fit, dq_score, policy)
+        edge = edge_model_probability(payload, cfg, policy)
+        extension_z = entry_extension(payload, cfg)
+        v4 = MANUS_DECISION_MODE == "v4"
+        prob = edge["probability"] if v4 else legacy_prob
 
         rr = as_float(plan.get("rr"), 0.0) or 0.0
         gross_ev_r = prob * rr - (1.0 - prob)
@@ -1102,7 +1393,11 @@ class TradingSignalEvaluationEngine:
             "engine_version": ENGINE_VERSION,
             "ruleset_version": RULESET_VERSION,
             "calibration_version": CALIBRATION_VERSION,
-            "probability_is_calibrated": False,
+            "probability_is_calibrated": bool(v4 and edge["validated_for_instrument"]),
+            "decision_mode": MANUS_DECISION_MODE,
+            "legacy_heuristic_probability": legacy_prob,
+            "edge_model": edge,
+            "entry_extension_z": extension_z,
             "instrument_resolved_via": instrument_resolved_via,
             "data_quality": dq_diag,
             "costs": cost_diag,
@@ -1110,31 +1405,41 @@ class TradingSignalEvaluationEngine:
             "policy": policy.__dict__,
         }
 
-        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag)
+        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag, edge, extension_z)
         if rejection:
             stage, reason, code = rejection
             return self._result(payload, cfg, model, "rejected", stage, reason, code, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
 
-        passed = (
-            pre_gate_score >= policy.min_pre_gate_score
-            and prob >= policy.min_probability
-            and net_ev_r >= policy.min_expected_net_r
-        )
+        if v4:
+            # v4: the expected-value test on the edge-model probability is
+            # the decision. pre_gate_score and min_probability are legacy
+            # (uncalibrated-scale) thresholds and are only logged - the
+            # signal-score half of pre_gate_score is anti-predictive.
+            passed = net_ev_r >= policy.min_expected_net_r
+        else:
+            passed = (
+                pre_gate_score >= policy.min_pre_gate_score
+                and prob >= policy.min_probability
+                and net_ev_r >= policy.min_expected_net_r
+            )
 
         if passed:
             return self._result(payload, cfg, model, "approved", None, None, None, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, plan)
 
         reasons = []
-        if pre_gate_score < policy.min_pre_gate_score:
+        if not v4 and pre_gate_score < policy.min_pre_gate_score:
             reasons.append(f"pre_gate_score={pre_gate_score:.2f}<{policy.min_pre_gate_score:.2f}")
-        if prob < policy.min_probability:
+        if not v4 and prob < policy.min_probability:
             reasons.append(f"probability={prob:.3f}<{policy.min_probability:.3f}")
+        if v4:
+            reasons.append(f"probability={prob:.3f} at rr={rr:.2f}, cost_r={cr:.3f}")
         if net_ev_r < policy.min_expected_net_r:
             reasons.append(f"expected_net_r={net_ev_r:.3f}<{policy.min_expected_net_r:.3f}")
 
         return self._result(payload, cfg, model, "rejected", "expected_value", "; ".join(reasons), "INSUFFICIENT_POST_GATE_EDGE", dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
 
-    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any]) -> Optional[Tuple[str, str, str]]:
+    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any], edge: Optional[Dict[str, Any]] = None, extension_z: Optional[float] = None) -> Optional[Tuple[str, str, str]]:
+        v4 = MANUS_DECISION_MODE == "v4"
         direction = as_str(get_path(payload, "signal.direction"), "").lower()
         session = as_str(get_path(payload, "market.session_name"), "unknown").lower()
         vol = as_str(get_path(payload, "structure.volatility_regime"), "unknown").lower()
@@ -1161,7 +1466,13 @@ class TradingSignalEvaluationEngine:
             return "execution_cost", "Observed spread exceeds limit.", "SPREAD_TOO_WIDE"
         if (as_float(costs.get("slippage"), 0.0) or 0.0) > cfg.max_slippage_price:
             return "execution_cost", "Expected slippage exceeds limit.", "SLIPPAGE_TOO_HIGH"
-        if sig < 45:
+        if v4 and not policy.allow_extended_entry and extension_z is not None and extension_z >= MAX_ENTRY_EXTENSION_Z:
+            return "signal", f"Entry chases short-term extension (directional Bollinger z {extension_z:.2f} >= {MAX_ENTRY_EXTENSION_Z}).", "ENTRY_EXTENDED"
+        if v4 and edge is not None and edge["raw_probability"] < policy.min_edge_probability:
+            return "signal", f"Edge-model probability {edge['raw_probability']:.3f} below model floor {policy.min_edge_probability:.3f}.", "EDGE_PROBABILITY_TOO_LOW"
+        # v4: signal_score() is anti-predictive at 2m (see v4.0.0 notes), so
+        # it no longer vetoes anything - it is still computed and logged.
+        if not v4 and sig < 45:
             return "signal", "Signal quality below hard minimum.", "SIGNAL_SCORE_TOO_LOW"
         if risk < 45:
             return "risk", "Risk score below hard minimum.", "RISK_SCORE_TOO_LOW"
@@ -1169,8 +1480,9 @@ class TradingSignalEvaluationEngine:
             return "context", "Context score below hard minimum.", "CONTEXT_SCORE_TOO_LOW"
         if fit < 40:
             return "strategy_fit", "Strategy-fit score below hard minimum.", "FIT_SCORE_TOO_LOW"
-        if (as_float(costs.get("cost_r"), 1.0) or 1.0) >= 0.50:
-            return "execution_cost", "Estimated costs consume at least 0.50R.", "COST_R_EXCESSIVE"
+        max_cost_r = MAX_COST_R_V4 if v4 else 0.50
+        if (as_float(costs.get("cost_r"), 1.0) or 1.0) >= max_cost_r:
+            return "execution_cost", f"Estimated costs consume at least {max_cost_r:.2f}R.", "COST_R_EXCESSIVE"
         return None
 
     def _result(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, status: str, stage: Optional[str], reason: Optional[str], code: Optional[str], dq: float, sig: float, risk: float, ctx: float, fit: float, pre: float, prob: float, gross_r: float, cost_r_value: float, net_r: float, diagnostics: Dict[str, Any], plan: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1189,13 +1501,18 @@ class TradingSignalEvaluationEngine:
             "confidence_score": round(prob * 100.0, 2),
             "predicted_win_probability": round(prob, 4),
             "predicted_tp_before_sl_probability": round(prob, 4),
-            "probability_is_calibrated": False,
+            "probability_is_calibrated": bool(diagnostics.get("probability_is_calibrated")),
+            "decision_mode": diagnostics.get("decision_mode"),
+            "legacy_heuristic_probability": round(diagnostics.get("legacy_heuristic_probability") or 0.0, 4),
+            "edge_model_version": (diagnostics.get("edge_model") or {}).get("edge_model_version"),
+            "edge_model_raw_probability": round((diagnostics.get("edge_model") or {}).get("raw_probability") or 0.0, 4),
+            "entry_extension_z": diagnostics.get("entry_extension_z"),
             "expected_gross_r": round(gross_r, 4),
             "expected_cost_r": round(cost_r_value, 4),
             "expected_net_r": round(net_r, 4),
             "expected_value_score": round(net_r, 4),
             "approval_status": status,
-            "approval_reason": "Approved by Manus v3.3 deterministic ruleset." if status == "approved" else None,
+            "approval_reason": (f"Approved by Manus {RULESET_VERSION} ({MANUS_DECISION_MODE} decision mode)." if status == "approved" else None),
             "rejection_stage": stage,
             "rejection_reason": reason,
             "rejection_reason_code": code,
@@ -1472,7 +1789,10 @@ def health() -> Dict[str, Any]:
         "calibration_version": CALIBRATION_VERSION,
         "supported_instruments": sorted(INSTRUMENTS.keys()),
         "supported_entry_models": sorted(MODEL_POLICIES.keys()),
-        "probability_is_calibrated": False,
+        "decision_mode": MANUS_DECISION_MODE,
+        "edge_model_version": EDGE_MODEL_VERSION,
+        "probability_is_calibrated": MANUS_DECISION_MODE == "v4",
+        "probability_calibration_scope": "GBPUSD 2m only" if MANUS_DECISION_MODE == "v4" else None,
         "events_db_configured": bool(DATABASE_URL),
     }
 
@@ -1678,6 +1998,15 @@ def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
                     "expected_gross_r": manus.get("expected_gross_r"),
                     "expected_cost_r": manus.get("expected_cost_r"),
                     "expected_net_r": manus.get("expected_net_r"),
+                    # v4.0.0: both probabilities are logged on every
+                    # prediction, whichever one decided, so the edge model
+                    # and the legacy heuristic can be compared on the same
+                    # signals with /analytics/prediction-accuracy.
+                    "decision_mode": manus.get("decision_mode"),
+                    "legacy_heuristic_probability": manus.get("legacy_heuristic_probability"),
+                    "edge_model_version": manus.get("edge_model_version"),
+                    "edge_model_raw_probability": manus.get("edge_model_raw_probability"),
+                    "entry_extension_z": manus.get("entry_extension_z"),
                     "final_trade_plan": manus.get("final_trade_plan"),
                     # v3.10.0: plan_trade() already computes an entry/stop
                     # loss/take profit for every signal that resolves to a
