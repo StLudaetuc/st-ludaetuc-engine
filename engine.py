@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.1.1"
+ENGINE_VERSION = "4.2.0"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -131,7 +131,20 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #     would otherwise silently block the metals in volatile sessions.
 #   Known, not changed: the OANDA account is GBP but sizing treats risk_cash
 #   as USD, so every trade risks ~25% LESS than risk_percent (safe direction;
-#   a correct fix needs a live GBP/USD rate in the payload).
+#   a correct fix needs a live GBP/USD rate in the payload). Fixed in v4.2.0.
+#
+# v4.2.0 (2026-10-27) - full intended risk on the GBP account:
+#   - plan_trade() converts the GBP risk budget to USD before sizing, using
+#     GBP/USD from the signal itself (GBP/USD) or the latest GBPUSD close in
+#     the engine's own market_data events (every other pair). Each trade now
+#     loses risk_percent of the GBP balance at the stop (~+33% units vs 4.1).
+#   - No rate (empty DB, stale > 72h, outside 1.00-1.60) -> factor 1.0, i.e.
+#     the old, smaller size; usd_rate_source says "fallback_..." so it shows.
+#   - ACCOUNT_CURRENCY env var (default GBP); ACCOUNT_CURRENCY=USD is the
+#     instant rollback to v4.1.1 sizing. Make passes units through unchanged
+#     (floor/ceil toward zero, no multiplier - checked on all 7 scenarios).
+#   - final_trade_plan gains usd_per_account_ccy, usd_rate_source and
+#     max_loss_account_ccy; each evaluate logs one "sizing:" line.
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -302,6 +315,76 @@ def _get_pool():
             logging.exception("Failed to create Postgres connection pool")
             _db_pool = None
     return _db_pool
+
+
+# v4.2.0: account-currency sizing. The OANDA practice account is GBP, but
+# every pair's P&L lands in USD (XXX/USD) or is converted to USD via the
+# pair's own price (USD/XXX). plan_trade() therefore needs USD per 1 unit of
+# account currency (GBP/USD) to turn a GBP risk budget into units.
+# ACCOUNT_CURRENCY=USD restores the pre-4.2 sizing exactly.
+ACCOUNT_CURRENCY = os.environ.get("ACCOUNT_CURRENCY", "GBP").strip().upper() or "GBP"
+GBPUSD_RATE_MAX_AGE = timedelta(hours=72)   # covers the weekend gap before the Monday Asia open
+GBPUSD_RATE_SANE_RANGE = (1.00, 1.60)
+_GBPUSD_CACHE_SECONDS = 30.0
+_gbpusd_cache: Dict[str, Any] = {"rate": None, "event_time": None, "fetched_at": None}
+
+
+def _latest_gbpusd_rate() -> Tuple[Optional[float], Optional[datetime]]:
+    """Latest GBP/USD close from the engine's own /market-data stream
+    (TradingView -> Postgres), cached for 30s. (None, None) when unavailable,
+    stale beyond GBPUSD_RATE_MAX_AGE, or outside GBPUSD_RATE_SANE_RANGE."""
+    now = datetime.now(timezone.utc)
+    fetched_at = _gbpusd_cache["fetched_at"]
+    if fetched_at is not None and (now - fetched_at).total_seconds() < _GBPUSD_CACHE_SECONDS:
+        return _gbpusd_cache["rate"], _gbpusd_cache["event_time"]
+    rate, event_time = None, None
+    pool = _get_pool()
+    if pool is not None:
+        conn = None
+        try:
+            conn = pool.getconn()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT payload, event_time FROM events WHERE event_type = 'market_data' AND instrument = 'GBPUSD' "
+                    "AND event_time > %s ORDER BY event_time DESC LIMIT 1",
+                    (now - GBPUSD_RATE_MAX_AGE,),
+                )
+                row = cur.fetchone()
+            conn.rollback()
+            if row:
+                payload = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+                ohlc = _extract_ohlc(payload)
+                close = ohlc["close"] if ohlc else None
+                if close is not None and GBPUSD_RATE_SANE_RANGE[0] <= close <= GBPUSD_RATE_SANE_RANGE[1]:
+                    rate, event_time = close, row[1]
+        except Exception:
+            logging.exception("GBP/USD rate lookup failed (sizing falls back to 1.0)")
+        finally:
+            if conn is not None:
+                try:
+                    pool.putconn(conn)
+                except Exception:
+                    pass
+    _gbpusd_cache.update(rate=rate, event_time=event_time, fetched_at=now)
+    return rate, event_time
+
+
+def usd_per_account_ccy(cfg: "InstrumentConfig", entry: float, account: Dict[str, Any]) -> Tuple[float, str]:
+    """(USD per 1 unit of account currency, source). Falls back to 1.0 -
+    the pre-4.2 behaviour, which under-risks a GBP account by ~25% - only
+    when no trustworthy GBP/USD rate exists, so a missing rate can never
+    oversize a trade."""
+    ccy = as_str(account.get("currency"), "").strip().upper() or ACCOUNT_CURRENCY
+    if ccy == "USD":
+        return 1.0, "account_ccy_usd"
+    if ccy != "GBP":
+        return 1.0, f"fallback_unsupported_account_ccy_{ccy}"
+    if cfg.symbol == "GBPUSD" and GBPUSD_RATE_SANE_RANGE[0] <= entry <= GBPUSD_RATE_SANE_RANGE[1]:
+        return entry, "signal_entry"
+    rate, _ = _latest_gbpusd_rate()
+    if rate is not None:
+        return rate, "market_data_gbpusd"
+    return 1.0, "fallback_no_gbpusd_rate"
 
 
 _EVENTS_SCHEMA_SQL = """
@@ -1199,7 +1282,12 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     # multiplier should be removed now that the engine applies the correct,
     # live-price-based conversion itself - leaving it in place would double
     # -apply the correction.
-    account_ccy_conversion_rate = 1.0 if cfg.quote_ccy_is_account_ccy else entry
+    #
+    # v4.2.0: the above treated risk_cash as USD, but the account is GBP. The
+    # quote->USD factor (1.0 or entry) is now multiplied by USD-per-GBP, so a
+    # 0.5% trade loses 0.5% of the GBP balance at the stop, not ~0.37%.
+    usd_per_acct, usd_rate_source = usd_per_account_ccy(cfg, entry, account)
+    account_ccy_conversion_rate = (1.0 if cfg.quote_ccy_is_account_ccy else entry) * usd_per_acct
     units = round_to_step(risk_cash * account_ccy_conversion_rate / stop_dist, cfg.unit_step) if stop_dist > 0 else 0.0
     if units < cfg.min_units:
         # v4.1.1: the risk budget buys less than the broker minimum (seen on
@@ -1209,6 +1297,9 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
                 "geometry_error": f"risk budget {risk_cash:.2f} buys {units:g} units over a {stop_dist:g} stop, below the {cfg.min_units:g}-unit minimum; refusing to upsize"}
     units = clamp(units, cfg.min_units, cfg.max_units)
     units = -abs(units) if direction == "short" else abs(units)
+    logging.info("sizing: %s %s balance=%.2f %s risk=%.2f%% (%.2f) usd_per_%s=%.5f [%s] stop=%g units=%g max_loss=%.2f",
+                 cfg.symbol, direction, equity, ACCOUNT_CURRENCY, risk_pct, risk_cash, ACCOUNT_CURRENCY.lower(), usd_per_acct,
+                 usd_rate_source, stop_dist, units, abs(units) * stop_dist / account_ccy_conversion_rate)
 
     return {
         "entry": entry,
@@ -1221,6 +1312,9 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         "risk_percent": risk_pct,
         "risk_cash": risk_cash,
         "account_ccy_conversion_rate": account_ccy_conversion_rate,
+        "usd_per_account_ccy": usd_per_acct,
+        "usd_rate_source": usd_rate_source,
+        "max_loss_account_ccy": abs(units) * stop_dist / account_ccy_conversion_rate,
         "source": source,
         "stop_basis": stop_basis,
         "stop_floor_applied": stop_floor_applied,
@@ -1618,6 +1712,9 @@ class TradingSignalEvaluationEngine:
                     "risk_percent": plan["risk_percent"],
                     "risk_cash": plan["risk_cash"],
                     "account_ccy_conversion_rate": plan.get("account_ccy_conversion_rate"),
+                    "usd_per_account_ccy": plan.get("usd_per_account_ccy"),
+                    "usd_rate_source": plan.get("usd_rate_source"),
+                    "max_loss_account_ccy": plan.get("max_loss_account_ccy"),
                     "planning_source": plan["source"],
                     "stop_basis": plan.get("stop_basis"),
                     "no_mid_trade_adjustment": True,
@@ -1856,6 +1953,9 @@ def _on_startup() -> None:
         _ensure_events_schema()
     except Exception:
         logging.exception("Failed to ensure events schema on startup (non-fatal)")
+    rate, event_time = _latest_gbpusd_rate() if ACCOUNT_CURRENCY == "GBP" else (None, None)
+    logging.warning("sizing: account_currency=%s gbpusd_rate=%s (event_time=%s)%s", ACCOUNT_CURRENCY, rate, event_time,
+                    " - FALLBACK 1.0 for non-GBPUSD pairs until a rate arrives" if ACCOUNT_CURRENCY == "GBP" and rate is None else "")
 
 
 @app.get("/health")
@@ -1872,6 +1972,8 @@ def health() -> Dict[str, Any]:
         "probability_is_calibrated": MANUS_DECISION_MODE == "v4",
         "probability_calibration_scope": "GBPUSD 2m only" if MANUS_DECISION_MODE == "v4" else None,
         "events_db_configured": bool(DATABASE_URL),
+        "account_currency": ACCOUNT_CURRENCY,
+        "gbpusd_sizing_rate": _latest_gbpusd_rate()[0] if ACCOUNT_CURRENCY == "GBP" else None,
     }
 
 

@@ -199,6 +199,47 @@ def test_v6_models_not_vetoed_by_legacy_extreme_band_but_legacy_models_are():
     _load("v4")
 
 
+def _max_loss_gbp(plan, gbpusd, quote_to_usd=1.0):
+    return abs(plan["units"]) * plan["stop_distance"] / quote_to_usd / gbpusd
+
+
+def test_gbp_account_trades_risk_full_percent():
+    # v4.2.0: a 0.5% trade on a GBP 10,000 balance must lose ~GBP 50 at the
+    # stop (never more), not the ~GBP 37.6 the USD-as-GBP sizing gave.
+    os.environ.pop("ACCOUNT_CURRENCY", None)
+    eng = _load("v4")
+    eng._latest_gbpusd_rate = lambda: (1.33000, None)
+    gbp = _eval(eng, _payload())["manus"]["diagnostics"]["trade_plan_preview"]
+    assert gbp["usd_rate_source"] == "signal_entry"
+    assert 49.0 < _max_loss_gbp(gbp, 1.33) <= 50.0, _max_loss_gbp(gbp, 1.33)
+    for symbol, close, atr, pip, quote_to_usd in (("EURUSD", 1.13300, 0.00015, 0.0001, 1.0),
+                                                 ("USDJPY", 157.400, 0.030, 0.01, 157.400),
+                                                 ("USDCAD", 1.42300, 0.00018, 0.0001, 1.42300),
+                                                 ("XAGUSD", 48.000, 0.040, 0.01, 1.0)):
+        plan = _eval(eng, _for_instrument(_payload(), symbol, close, atr, pip))["manus"]["diagnostics"]["trade_plan_preview"]
+        assert plan["usd_rate_source"] == "market_data_gbpusd", symbol
+        loss = _max_loss_gbp(plan, 1.33, quote_to_usd)
+        budget = plan["risk_cash"]                         # metals are capped at 0.35%
+        assert 0.94 * budget < loss <= budget + 1e-9, (symbol, loss, budget)
+        assert abs(plan["max_loss_account_ccy"] - loss) < 1e-6
+
+
+def test_gbp_sizing_falls_back_small_without_rate_and_usd_rollback():
+    eng = _load("v4")
+    eng._latest_gbpusd_rate = lambda: (None, None)
+    p = _for_instrument(_payload(), "EURUSD", 1.13300, 0.00015, 0.0001)
+    plan = _eval(eng, p)["manus"]["diagnostics"]["trade_plan_preview"]
+    assert plan["usd_rate_source"] == "fallback_no_gbpusd_rate" and plan["usd_per_account_ccy"] == 1.0
+    os.environ["ACCOUNT_CURRENCY"] = "USD"
+    try:
+        eng = _load("v4")
+        plan_usd = _eval(eng, p)["manus"]["diagnostics"]["trade_plan_preview"]
+        assert plan_usd["usd_rate_source"] == "account_ccy_usd" and plan_usd["units"] == plan["units"]
+    finally:
+        os.environ.pop("ACCOUNT_CURRENCY", None)
+        _load("v4")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
