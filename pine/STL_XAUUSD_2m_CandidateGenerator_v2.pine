@@ -1549,7 +1549,7 @@ bool v6ArmCommon =
      v6VolatilityOk and
      not na(bbZ)
 
-bool longArmTrigger =
+bool longReclaimArmTrigger =
      v6ArmCommon and
      htfBullish and
      longStretchRecent and
@@ -1557,7 +1557,7 @@ bool longArmTrigger =
      close > open and
      bbZ < v6CheapZ
 
-bool shortArmTrigger =
+bool shortReclaimArmTrigger =
      v6ArmCommon and
      htfBearish and
      shortStretchRecent and
@@ -1627,14 +1627,14 @@ if shortArmInvalidated or shortPullbackReclaim or (not na(shortArmBar) and bar_i
     shortArmHigh := na
     shortArmLow := na
 
-if barstate.isconfirmed and longArmTrigger and not shortArmTrigger
+if barstate.isconfirmed and longReclaimArmTrigger and not shortReclaimArmTrigger
     longArmBar := bar_index
     longArmHigh := high
     longArmLow := low
     longArmBbZ := bbZ
     longArmWick := lowerWickRatio
 
-if barstate.isconfirmed and shortArmTrigger and not longArmTrigger
+if barstate.isconfirmed and shortReclaimArmTrigger and not longReclaimArmTrigger
     shortArmBar := bar_index
     shortArmHigh := high
     shortArmLow := low
