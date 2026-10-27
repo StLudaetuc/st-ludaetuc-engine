@@ -149,6 +149,56 @@ def test_bespoke_session_windows_not_vetoed_by_context():
         assert _eval(eng, p)["rejection_reason_code"] != "CONTEXT_SCORE_TOO_LOW", symbol
 
 
+def test_inverted_payload_stop_or_target_never_approved_any_mode():
+    for mode in ("v4", "legacy"):
+        eng = _load(mode)
+        for direction, sl, tp in (("long", 1.3330, 1.3350),   # stop above entry
+                                  ("long", 1.3280, 1.3290),   # target below entry
+                                  ("short", 1.3270, 1.3250),  # stop below entry
+                                  ("short", 1.3330, 1.3310),  # target above entry
+                                  ("long", 1.3300, 1.3350)):  # stop == entry
+            p = _payload(direction=direction, htf="bullish" if direction == "long" else "bearish")
+            p["extensions"]["pine_proposal_only"] = False
+            p["risk"].update(proposed_entry=1.3300, proposed_stop_loss=sl, proposed_take_profit=tp)
+            r = _eval(eng, p)
+            assert r["approval_status"] == "rejected" and r["rejection_reason_code"] == "INVALID_TRADE_PLAN", (mode, direction, sl, tp, r.get("rejection_reason_code"))
+    _load("v4")
+
+
+def test_engine_computed_plan_sides_are_correct_both_directions():
+    eng = _load("v4")
+    for direction in ("long", "short"):
+        p = _payload(direction=direction, htf="bullish" if direction == "long" else "bearish",
+                     trend="bullish" if direction == "long" else "bearish", pb=0.31 if direction == "long" else 0.69,
+                     rsi=45.0 if direction == "long" else 55.0, macd=-0.00001 if direction == "long" else 0.00001)
+        plan = _eval(eng, p)["manus"]["diagnostics"]["trade_plan_preview"]
+        if direction == "long":
+            assert plan["sl"] < plan["entry"] < plan["tp"] and plan["units"] > 0
+        else:
+            assert plan["tp"] < plan["entry"] < plan["sl"] and plan["units"] < 0
+
+
+def test_position_below_minimum_is_refused_not_upsized():
+    eng = _load("v4")
+    p = _for_instrument(_payload(), "XAUUSD", 4000.00, 1.50, 0.1)
+    p["structure"]["nearest_support"] = 3950.00          # $50 structure stop
+    p["risk"]["risk_percent"] = 0.35
+    r = eng.engine.evaluate({"payload": p, "account": {"balance": 5000}})   # 17.50 risk < 1 oz x $50
+    assert r["rejection_reason_code"] == "INVALID_TRADE_PLAN"
+    assert "minimum" in r["rejection_reason"]
+
+
+def test_v6_models_not_vetoed_by_legacy_extreme_band_but_legacy_models_are():
+    eng = _load("v4")
+    p = _payload(); p["structure"]["volatility_regime"] = "extreme"
+    assert _eval(eng, p)["rejection_reason_code"] != "EXTREME_VOLATILITY"
+    p2 = _payload(model="trend_pullback"); p2["structure"]["volatility_regime"] = "extreme"
+    assert _eval(eng, p2)["rejection_reason_code"] == "EXTREME_VOLATILITY"
+    eng = _load("legacy")
+    assert _eval(eng, p)["rejection_reason_code"] == "EXTREME_VOLATILITY"
+    _load("v4")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

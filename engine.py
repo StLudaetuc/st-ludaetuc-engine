@@ -113,6 +113,25 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #   not part of the v4 probability, so this only changes which signals reach
 #   the expected-value decision. Metals get "asia": their sessions are New
 #   York local time, so after US DST ends (1 Nov) 07:00 UTC falls in "asia".
+#   Pre-deploy alignment review (same release) added three safety guards:
+#   - plan_geometry_error(): a long must have stop < entry < target and a
+#     short target < entry < stop, checked before the stop floor and after
+#     tick rounding, in EVERY decision mode. Fuzzing 7,560 Pine-shaped signals
+#     found that with pine_proposal_only=false the engine took payload SL/TP
+#     verbatim and approved 639 inverted plans. All live scripts send
+#     pine_proposal_only=true, so none reached OANDA, but a misconfigured
+#     script now gets INVALID_TRADE_PLAN instead.
+#   - No upsizing to the broker minimum: if the risk budget buys fewer than
+#     min_units, the plan is refused instead of clamped up (XAU/USD at 1 oz
+#     over a wide stop risked up to +26% over budget). Every mode.
+#   - EXTREME_VOLATILITY no longer vetoes the two v6 Pine models in v4 mode
+#     (ModelPolicy.own_volatility_filter): their scripts apply their own
+#     minimum-ATR and ATR-ratio filters, the GBP/USD backtest had no upper ATR
+#     cap, and the legacy per-pair ATR band (e.g. XAU/USD max $2.00 on 2m)
+#     would otherwise silently block the metals in volatile sessions.
+#   Known, not changed: the OANDA account is GBP but sizing treats risk_cash
+#   as USD, so every trade risks ~25% LESS than risk_percent (safe direction;
+#   a correct fix needs a live GBP/USD rate in the payload).
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -723,6 +742,10 @@ class ModelPolicy:
     # design (breakouts) from ENTRY_EXTENDED.
     prior_probability: Optional[float] = None
     allow_extended_entry: bool = False
+    # v4.1.1: the Pine model applies its own volatility filter (minimum ATR
+    # and ATR/50-bar ratio), so the legacy per-pair ATR band behind
+    # structure.volatility_regime == "extreme" does not veto it in v4 mode.
+    own_volatility_filter: bool = False
 
 
 # structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
@@ -776,8 +799,8 @@ INSTRUMENTS: Dict[str, InstrumentConfig] = {
 # INSUFFICIENT_POST_GATE_EDGE. That is intended: they lost -0.27R/trade in
 # the replica and -0.25R+ live.
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
-    "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True),
-    "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35),
+    "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True, True),
+    "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35, None, False, True),
     "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",), None, 0.10, 0.0),
     "momentum_continuation": ModelPolicy(True, False, 0.55, 0.06, 1.40, 74.0, ("trend", "breakout"), ("range", "extreme")),
     "range_reversal": ModelPolicy(True, True, 0.58, 0.10, 1.50, 80.0, ("range", "range_to_reversal"), ("trend", "breakout", "extreme")),
@@ -1024,6 +1047,21 @@ def fit_score(payload: Dict[str, Any], policy: ModelPolicy) -> float:
     return clamp(score, 0.0, 100.0)
 
 
+def plan_geometry_error(direction: str, entry: Optional[float], sl: Optional[float], tp: Optional[float]) -> Optional[str]:
+    """v4.1.1: None if the plan is on the correct sides, else the reason.
+    A long needs stop < entry < target and a short needs target < entry <
+    stop, all finite and strictly apart. Applies in every decision mode."""
+    if direction not in ("long", "short"):
+        return "direction must be long or short"
+    if any(v is None or not isfinite(v) or v <= 0 for v in (entry, sl, tp)):
+        return "entry/stop/target must be finite positive prices"
+    if direction == "long" and not (sl < entry < tp):
+        return f"long requires stop < entry < target (stop {sl}, entry {entry}, target {tp})"
+    if direction == "short" and not (tp < entry < sl):
+        return f"short requires target < entry < stop (target {tp}, entry {entry}, stop {sl})"
+    return None
+
+
 def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: InstrumentConfig, policy: ModelPolicy) -> Dict[str, Any]:
     direction = as_str(get_path(payload, "signal.direction"), "neutral").lower()
     entry = as_float(get_path(payload, "risk.proposed_entry")) or as_float(get_path(payload, "price.close")) or 0.0
@@ -1095,6 +1133,17 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     if sl is None or tp is None or entry <= 0:
         return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis}
 
+    # v4.1.1 geometry guard, checked on the RAW stop/target before the stop
+    # floor (which measures distance with abs() and would otherwise quietly
+    # "repair" a wrong-side stop into a different trade) and again after tick
+    # rounding below. Found by fuzzing: with pine_proposal_only=false the
+    # engine took payload SL/TP verbatim and approved inverted plans (e.g. a
+    # long whose target was below entry). Engine-computed plans were never
+    # inverted, but a misconfigured script must not be able to reach OANDA.
+    geometry_error = plan_geometry_error(direction, entry, sl, tp)
+    if geometry_error:
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis, "geometry_error": geometry_error, "rejected_sl": sl, "rejected_tp": tp}
+
     # v4.0.0 stop floor: widen any stop tighter than cfg.min_stop_pips and
     # move the target out with it so the planned reward:risk is unchanged.
     # Sizing below then risks the same cash over a wider stop (fewer units),
@@ -1112,6 +1161,9 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
             stop_basis = "min_stop_floor"
 
     entry, sl, tp = round_to_tick(entry, cfg.tick_size), round_to_tick(sl, cfg.tick_size), round_to_tick(tp, cfg.tick_size)
+    geometry_error = plan_geometry_error(direction, entry, sl, tp)
+    if geometry_error:
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis, "geometry_error": "after tick rounding: " + geometry_error}
     stop_dist = abs(entry - sl)
     target_dist = abs(tp - entry)
     rr = target_dist / stop_dist if stop_dist > 0 else None
@@ -1149,6 +1201,12 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     # -apply the correction.
     account_ccy_conversion_rate = 1.0 if cfg.quote_ccy_is_account_ccy else entry
     units = round_to_step(risk_cash * account_ccy_conversion_rate / stop_dist, cfg.unit_step) if stop_dist > 0 else 0.0
+    if units < cfg.min_units:
+        # v4.1.1: the risk budget buys less than the broker minimum (seen on
+        # XAU/USD: 1 oz over a wide stop). Clamping up to min_units would risk
+        # MORE than risk_percent (fuzzing found up to +26%), so refuse instead.
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": account_ccy_conversion_rate, "source": source, "stop_basis": stop_basis,
+                "geometry_error": f"risk budget {risk_cash:.2f} buys {units:g} units over a {stop_dist:g} stop, below the {cfg.min_units:g}-unit minimum; refusing to upsize"}
     units = clamp(units, cfg.min_units, cfg.max_units)
     units = -abs(units) if direction == "short" else abs(units)
 
@@ -1475,10 +1533,10 @@ class TradingSignalEvaluationEngine:
             return "context", f"Blocked session: {session}.", "BLOCKED_SESSION"
         if context_status == "blocked":
             return "context", "Context explicitly blocked.", "CONTEXT_BLOCKED"
-        if vol == "extreme":
+        if vol == "extreme" and not (v4 and policy.own_volatility_filter):
             return "strategy_fit", "Extreme volatility blocked.", "EXTREME_VOLATILITY"
         if plan.get("sl") is None or plan.get("tp") is None or plan.get("units") is None:
-            return "execution_planning", "Invalid trade plan.", "INVALID_TRADE_PLAN"
+            return "execution_planning", "Invalid trade plan." + (f" {plan['geometry_error']}." if plan.get("geometry_error") else ""), "INVALID_TRADE_PLAN"
         if (as_float(plan.get("rr"), 0.0) or 0.0) < policy.min_rr:
             return "risk", "Reward-to-risk below model minimum.", "RR_BELOW_MODEL_MINIMUM"
         spread = as_float(costs.get("spread"))
