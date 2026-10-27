@@ -1297,7 +1297,7 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
                 "geometry_error": f"risk budget {risk_cash:.2f} buys {units:g} units over a {stop_dist:g} stop, below the {cfg.min_units:g}-unit minimum; refusing to upsize"}
     units = clamp(units, cfg.min_units, cfg.max_units)
     units = -abs(units) if direction == "short" else abs(units)
-    logging.info("sizing: %s %s balance=%.2f %s risk=%.2f%% (%.2f) usd_per_%s=%.5f [%s] stop=%g units=%g max_loss=%.2f",
+    logging.warning("sizing: %s %s balance=%.2f %s risk=%.2f%% (%.2f) usd_per_%s=%.5f [%s] stop=%g units=%g max_loss=%.2f",
                  cfg.symbol, direction, equity, ACCOUNT_CURRENCY, risk_pct, risk_cash, ACCOUNT_CURRENCY.lower(), usd_per_acct,
                  usd_rate_source, stop_dist, units, abs(units) * stop_dist / account_ccy_conversion_rate)
 
