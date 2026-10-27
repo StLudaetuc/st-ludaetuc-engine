@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.1.0"
+ENGINE_VERSION = "4.1.1"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -99,6 +99,20 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #   3. min_stop_pips now matches each instrument's Pine stop floor, sized to
 #      ~8.5x round-trip cost: EUR/USD 9.5, AUD/USD 11, USD/CAD 15, USD/JPY 15,
 #      XAU/USD 40 ($4.00), XAG/USD 30 ($0.30). GBP/USD unchanged at 12.
+#
+# v4.1.1 (2026-10-27): Pine always sends context.context_status
+#   "unchecked" (-15), so a signal in a session NOT in preferred_sessions
+#   (-5) scored context 30 < 35 and was hard-rejected as
+#   CONTEXT_SCORE_TOO_LOW. That silently vetoed hours the bespoke scripts
+#   were built for: USD/JPY's Tokyo window (00-06 UTC, its best block),
+#   AUD/USD's 16-20 UTC "new_york" block (its best), and the 06-07 / 12-13
+#   UTC "offpeak" hours inside each FX window. Found live on the first
+#   night: both USD/JPY signals (05:16 and 05:46 UTC) were rejected this
+#   way. New InstrumentConfig.script_sessions lists the extra sessions each
+#   script can emit in its windows; v4 treats them as preferred. Context is
+#   not part of the v4 probability, so this only changes which signals reach
+#   the expected-value decision. Metals get "asia": their sessions are New
+#   York local time, so after US DST ends (1 Nov) 07:00 UTC falls in "asia".
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -675,6 +689,11 @@ class InstrumentConfig:
     # how much of the setup edge measured on GBP/USD is assumed to carry
     # over (see the v4.1.0 notes above ENGINE_VERSION).
     setup_edge_scale: float = 1.0
+    # v4.1.1: every session name this instrument's Pine script can emit
+    # inside its own arming windows. In v4 mode context_score() treats
+    # these as preferred too (see the v4.1.1 notes above ENGINE_VERSION);
+    # legacy mode ignores them, so it still reproduces v3.11 exactly.
+    script_sessions: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -734,18 +753,18 @@ class ModelPolicy:
 # RR/probability/expected-value floors) is untouched and still applies in
 # every session - this change only removes the blanket time-of-day veto.
 #
-# v4.0.0: the trailing numbers on each line are typical_spread_price,
-# typical_slippage_price, min_stop_pips and (v4.1.0) setup_edge_scale - see
-# InstrumentConfig. USD/JPY's scale is unused: its default model
+# v4.0.0: the trailing values on each line are typical_spread_price,
+# typical_slippage_price, min_stop_pips, (v4.1.0) setup_edge_scale and
+# (v4.1.1) script_sessions - see InstrumentConfig. USD/JPY's scale is unused: its default model
 # (trend_breakout_continuation) runs on a prior, not the edge model.
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0, 1.0),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 9.5, 0.75),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 11.0, 0.75),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 15.0, 0.75),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0, 1.0, ("offpeak",)),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 9.5, 0.75, ("offpeak",)),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 11.0, 0.75, ("new_york", "offpeak")),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 15.0, 0.75, ("offpeak",)),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0, ("asia", "offpeak")),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75, ("asia",)),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75, ("asia",)),
 }
 
 # v4.0.0: trend_pullback_reclaim is Pine v6.0.0's Model D. Its logit_offset
@@ -981,8 +1000,9 @@ def context_score(payload: Dict[str, Any], cfg: InstrumentConfig) -> float:
     status = as_str(get_path(payload, "context.context_status"), "unchecked").lower()
     event = as_bool(get_path(payload, "context.high_impact_event_nearby"), False)
 
+    preferred = cfg.preferred_sessions + (cfg.script_sessions if MANUS_DECISION_MODE == "v4" else ())
     score = 50.0
-    score += 15 if session in cfg.preferred_sessions else (-25 if session in cfg.blocked_sessions else -5)
+    score += 15 if session in preferred else (-25 if session in cfg.blocked_sessions else -5)
     score += 20 if status == "clear" else (-15 if status in ("warning", "unchecked", "unknown", "") else -50)
     if event:
         score -= 35

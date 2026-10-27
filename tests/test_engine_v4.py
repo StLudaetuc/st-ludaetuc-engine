@@ -132,6 +132,23 @@ def test_usdjpy_breakout_allowed_to_enter_extended():
     assert _eval(eng, p2)["rejection_reason_code"] == "ENTRY_EXTENDED"
 
 
+def test_bespoke_session_windows_not_vetoed_by_context():
+    # Pine always sends context_status "unchecked"; each script's own arming
+    # window must still clear the CONTEXT_SCORE_TOO_LOW gate (v4.1.1).
+    eng = _load("v4")
+    jpy = _for_instrument(_payload(model="trend_breakout_continuation", pb=0.97, rsi=63.0, macd=0.02), "USDJPY", 157.400, 0.030, 0.01)
+    jpy["market"].update(session_name="asia", hour_utc=5)
+    jpy["context"]["context_status"] = "unchecked"
+    assert _eval(eng, jpy)["rejection_reason_code"] != "CONTEXT_SCORE_TOO_LOW"
+    for symbol, close, atr, pip, session in (("AUDUSD", 0.69450, 0.00012, 0.0001, "new_york"),
+                                             ("GBPUSD", 1.33000, 0.00025, 0.0001, "offpeak"),
+                                             ("XAUUSD", 4000.00, 1.50, 0.1, "asia")):
+        p = _for_instrument(_payload(), symbol, close, atr, pip)
+        p["market"]["session_name"] = session
+        p["context"]["context_status"] = "unchecked"
+        assert _eval(eng, p)["rejection_reason_code"] != "CONTEXT_SCORE_TOO_LOW", symbol
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
