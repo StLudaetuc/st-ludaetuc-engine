@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.1.0"
+ENGINE_VERSION = "4.1.1"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -99,6 +99,39 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #   3. min_stop_pips now matches each instrument's Pine stop floor, sized to
 #      ~8.5x round-trip cost: EUR/USD 9.5, AUD/USD 11, USD/CAD 15, USD/JPY 15,
 #      XAU/USD 40 ($4.00), XAG/USD 30 ($0.30). GBP/USD unchanged at 12.
+#
+# v4.1.1 (2026-10-27): Pine always sends context.context_status
+#   "unchecked" (-15), so a signal in a session NOT in preferred_sessions
+#   (-5) scored context 30 < 35 and was hard-rejected as
+#   CONTEXT_SCORE_TOO_LOW. That silently vetoed hours the bespoke scripts
+#   were built for: USD/JPY's Tokyo window (00-06 UTC, its best block),
+#   AUD/USD's 16-20 UTC "new_york" block (its best), and the 06-07 / 12-13
+#   UTC "offpeak" hours inside each FX window. Found live on the first
+#   night: both USD/JPY signals (05:16 and 05:46 UTC) were rejected this
+#   way. New InstrumentConfig.script_sessions lists the extra sessions each
+#   script can emit in its windows; v4 treats them as preferred. Context is
+#   not part of the v4 probability, so this only changes which signals reach
+#   the expected-value decision. Metals get "asia": their sessions are New
+#   York local time, so after US DST ends (1 Nov) 07:00 UTC falls in "asia".
+#   Pre-deploy alignment review (same release) added three safety guards:
+#   - plan_geometry_error(): a long must have stop < entry < target and a
+#     short target < entry < stop, checked before the stop floor and after
+#     tick rounding, in EVERY decision mode. Fuzzing 7,560 Pine-shaped signals
+#     found that with pine_proposal_only=false the engine took payload SL/TP
+#     verbatim and approved 639 inverted plans. All live scripts send
+#     pine_proposal_only=true, so none reached OANDA, but a misconfigured
+#     script now gets INVALID_TRADE_PLAN instead.
+#   - No upsizing to the broker minimum: if the risk budget buys fewer than
+#     min_units, the plan is refused instead of clamped up (XAU/USD at 1 oz
+#     over a wide stop risked up to +26% over budget). Every mode.
+#   - EXTREME_VOLATILITY no longer vetoes the two v6 Pine models in v4 mode
+#     (ModelPolicy.own_volatility_filter): their scripts apply their own
+#     minimum-ATR and ATR-ratio filters, the GBP/USD backtest had no upper ATR
+#     cap, and the legacy per-pair ATR band (e.g. XAU/USD max $2.00 on 2m)
+#     would otherwise silently block the metals in volatile sessions.
+#   Known, not changed: the OANDA account is GBP but sizing treats risk_cash
+#   as USD, so every trade risks ~25% LESS than risk_percent (safe direction;
+#   a correct fix needs a live GBP/USD rate in the payload).
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -675,6 +708,11 @@ class InstrumentConfig:
     # how much of the setup edge measured on GBP/USD is assumed to carry
     # over (see the v4.1.0 notes above ENGINE_VERSION).
     setup_edge_scale: float = 1.0
+    # v4.1.1: every session name this instrument's Pine script can emit
+    # inside its own arming windows. In v4 mode context_score() treats
+    # these as preferred too (see the v4.1.1 notes above ENGINE_VERSION);
+    # legacy mode ignores them, so it still reproduces v3.11 exactly.
+    script_sessions: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -704,6 +742,10 @@ class ModelPolicy:
     # design (breakouts) from ENTRY_EXTENDED.
     prior_probability: Optional[float] = None
     allow_extended_entry: bool = False
+    # v4.1.1: the Pine model applies its own volatility filter (minimum ATR
+    # and ATR/50-bar ratio), so the legacy per-pair ATR band behind
+    # structure.volatility_regime == "extreme" does not veto it in v4 mode.
+    own_volatility_filter: bool = False
 
 
 # structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
@@ -734,18 +776,18 @@ class ModelPolicy:
 # RR/probability/expected-value floors) is untouched and still applies in
 # every session - this change only removes the blanket time-of-day veto.
 #
-# v4.0.0: the trailing numbers on each line are typical_spread_price,
-# typical_slippage_price, min_stop_pips and (v4.1.0) setup_edge_scale - see
-# InstrumentConfig. USD/JPY's scale is unused: its default model
+# v4.0.0: the trailing values on each line are typical_spread_price,
+# typical_slippage_price, min_stop_pips, (v4.1.0) setup_edge_scale and
+# (v4.1.1) script_sessions - see InstrumentConfig. USD/JPY's scale is unused: its default model
 # (trend_breakout_continuation) runs on a prior, not the edge model.
 INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0, 1.0),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 9.5, 0.75),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 11.0, 0.75),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 15.0, 0.75),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75),
+    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00012, 0.00003, 12.0, 1.0, ("offpeak",)),
+    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.00008, 0.00003, 9.5, 0.75, ("offpeak",)),
+    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True, 0.00010, 0.00003, 11.0, 0.75, ("new_york", "offpeak")),
+    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.00014, 0.00004, 15.0, 0.75, ("offpeak",)),
+    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0, ("asia", "offpeak")),
+    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75, ("asia",)),
+    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75, ("asia",)),
 }
 
 # v4.0.0: trend_pullback_reclaim is Pine v6.0.0's Model D. Its logit_offset
@@ -757,8 +799,8 @@ INSTRUMENTS: Dict[str, InstrumentConfig] = {
 # INSUFFICIENT_POST_GATE_EDGE. That is intended: they lost -0.27R/trade in
 # the replica and -0.25R+ live.
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
-    "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True),
-    "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35),
+    "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True, True),
+    "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35, None, False, True),
     "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",), None, 0.10, 0.0),
     "momentum_continuation": ModelPolicy(True, False, 0.55, 0.06, 1.40, 74.0, ("trend", "breakout"), ("range", "extreme")),
     "range_reversal": ModelPolicy(True, True, 0.58, 0.10, 1.50, 80.0, ("range", "range_to_reversal"), ("trend", "breakout", "extreme")),
@@ -981,8 +1023,9 @@ def context_score(payload: Dict[str, Any], cfg: InstrumentConfig) -> float:
     status = as_str(get_path(payload, "context.context_status"), "unchecked").lower()
     event = as_bool(get_path(payload, "context.high_impact_event_nearby"), False)
 
+    preferred = cfg.preferred_sessions + (cfg.script_sessions if MANUS_DECISION_MODE == "v4" else ())
     score = 50.0
-    score += 15 if session in cfg.preferred_sessions else (-25 if session in cfg.blocked_sessions else -5)
+    score += 15 if session in preferred else (-25 if session in cfg.blocked_sessions else -5)
     score += 20 if status == "clear" else (-15 if status in ("warning", "unchecked", "unknown", "") else -50)
     if event:
         score -= 35
@@ -1002,6 +1045,21 @@ def fit_score(payload: Dict[str, Any], policy: ModelPolicy) -> float:
     if policy.research_only:
         score -= 8
     return clamp(score, 0.0, 100.0)
+
+
+def plan_geometry_error(direction: str, entry: Optional[float], sl: Optional[float], tp: Optional[float]) -> Optional[str]:
+    """v4.1.1: None if the plan is on the correct sides, else the reason.
+    A long needs stop < entry < target and a short needs target < entry <
+    stop, all finite and strictly apart. Applies in every decision mode."""
+    if direction not in ("long", "short"):
+        return "direction must be long or short"
+    if any(v is None or not isfinite(v) or v <= 0 for v in (entry, sl, tp)):
+        return "entry/stop/target must be finite positive prices"
+    if direction == "long" and not (sl < entry < tp):
+        return f"long requires stop < entry < target (stop {sl}, entry {entry}, target {tp})"
+    if direction == "short" and not (tp < entry < sl):
+        return f"short requires target < entry < stop (target {tp}, entry {entry}, stop {sl})"
+    return None
 
 
 def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: InstrumentConfig, policy: ModelPolicy) -> Dict[str, Any]:
@@ -1075,6 +1133,17 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     if sl is None or tp is None or entry <= 0:
         return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis}
 
+    # v4.1.1 geometry guard, checked on the RAW stop/target before the stop
+    # floor (which measures distance with abs() and would otherwise quietly
+    # "repair" a wrong-side stop into a different trade) and again after tick
+    # rounding below. Found by fuzzing: with pine_proposal_only=false the
+    # engine took payload SL/TP verbatim and approved inverted plans (e.g. a
+    # long whose target was below entry). Engine-computed plans were never
+    # inverted, but a misconfigured script must not be able to reach OANDA.
+    geometry_error = plan_geometry_error(direction, entry, sl, tp)
+    if geometry_error:
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis, "geometry_error": geometry_error, "rejected_sl": sl, "rejected_tp": tp}
+
     # v4.0.0 stop floor: widen any stop tighter than cfg.min_stop_pips and
     # move the target out with it so the planned reward:risk is unchanged.
     # Sizing below then risks the same cash over a wider stop (fewer units),
@@ -1092,6 +1161,9 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
             stop_basis = "min_stop_floor"
 
     entry, sl, tp = round_to_tick(entry, cfg.tick_size), round_to_tick(sl, cfg.tick_size), round_to_tick(tp, cfg.tick_size)
+    geometry_error = plan_geometry_error(direction, entry, sl, tp)
+    if geometry_error:
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis, "geometry_error": "after tick rounding: " + geometry_error}
     stop_dist = abs(entry - sl)
     target_dist = abs(tp - entry)
     rr = target_dist / stop_dist if stop_dist > 0 else None
@@ -1129,6 +1201,12 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     # -apply the correction.
     account_ccy_conversion_rate = 1.0 if cfg.quote_ccy_is_account_ccy else entry
     units = round_to_step(risk_cash * account_ccy_conversion_rate / stop_dist, cfg.unit_step) if stop_dist > 0 else 0.0
+    if units < cfg.min_units:
+        # v4.1.1: the risk budget buys less than the broker minimum (seen on
+        # XAU/USD: 1 oz over a wide stop). Clamping up to min_units would risk
+        # MORE than risk_percent (fuzzing found up to +26%), so refuse instead.
+        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": account_ccy_conversion_rate, "source": source, "stop_basis": stop_basis,
+                "geometry_error": f"risk budget {risk_cash:.2f} buys {units:g} units over a {stop_dist:g} stop, below the {cfg.min_units:g}-unit minimum; refusing to upsize"}
     units = clamp(units, cfg.min_units, cfg.max_units)
     units = -abs(units) if direction == "short" else abs(units)
 
@@ -1455,10 +1533,10 @@ class TradingSignalEvaluationEngine:
             return "context", f"Blocked session: {session}.", "BLOCKED_SESSION"
         if context_status == "blocked":
             return "context", "Context explicitly blocked.", "CONTEXT_BLOCKED"
-        if vol == "extreme":
+        if vol == "extreme" and not (v4 and policy.own_volatility_filter):
             return "strategy_fit", "Extreme volatility blocked.", "EXTREME_VOLATILITY"
         if plan.get("sl") is None or plan.get("tp") is None or plan.get("units") is None:
-            return "execution_planning", "Invalid trade plan.", "INVALID_TRADE_PLAN"
+            return "execution_planning", "Invalid trade plan." + (f" {plan['geometry_error']}." if plan.get("geometry_error") else ""), "INVALID_TRADE_PLAN"
         if (as_float(plan.get("rr"), 0.0) or 0.0) < policy.min_rr:
             return "risk", "Reward-to-risk below model minimum.", "RR_BELOW_MODEL_MINIMUM"
         spread = as_float(costs.get("spread"))
