@@ -1,0 +1,197 @@
+//@version=6
+// St Ludaetuc — Natural Gas, any timeframe — Bollinger %B + Higher High/Lower Low + Wick Absorption
+//
+// Three things must line up before a trade:
+//   1. ZONE    Bollinger %B reaches the low level (38) or the high level (78).
+//              %B = where the close sits inside the bands: 0 = lower band, 50 = basis, 100 = upper band.
+//              The zone only ARMS a setup; it never enters on its own.
+//   2. TURN    While armed, price makes a higher high (long) or lower low (short): the close breaks the
+//              extreme of the previous N bars.
+//   3. FLOW    The Wick Absorption Ratio (built for this script, below) agrees: volume-weighted lower
+//              wicks outweigh upper wicks (long), or the reverse (short), and it is moving the right way.
+//
+// Wick Absorption Ratio (WAR), range -1..+1:
+//   Each bar: (lower wick - upper wick) / bar range. A long lower wick means sellers pushed price down
+//   and were absorbed; a long upper wick means buyers were absorbed. Averaged over WAR length bars,
+//   weighted by each bar's volume (tick volume on CFDs), so heavy-volume rejections count most.
+//   It looks only at where price was rejected, not at closes, so it is unrelated to RSI/MACD/stochastic.
+//
+// Nothing here assumes a timeframe: every length is in bars and nothing calls request.security().
+// Stops sit beyond the setup's own extreme, floored at a minimum ATR distance; target = R multiple.
+// Optional: no new entries in the window around the Thursday EIA gas storage report (10:30 New York).
+//
+// v1.1.0 (2026-10-27) — wired to Manus: every signal sends the full candidate payload through
+// alert() to the "NATGAS/USD Manus" Make scenario (alert condition: "alert() function calls only").
+// Alerts fire on every signal; the backtest still takes one position at a time, and the engine
+// enforces one live NATGAS_USD trade at a time. Pine's own stop/target are sent as authoritative
+// (pine_proposal_only = false); the engine checks their geometry, sizes the trade and decides.
+// Backtest on OANDA NATGAS_USD (engine.py v4.3.0 notes): the signal alone is break-even before costs,
+// so Manus approves mainly where carry helps (shorts) and the spread is small next to the stop (H4+).
+strategy("STL Natural Gas – BB Absorption v1.1", shorttitle = "STL NG v1.1", overlay = false,
+     initial_capital = 10000, pyramiding = 0, commission_type = strategy.commission.percent,
+     commission_value = 0.02, slippage = 2, calc_on_every_tick = false)
+
+// ── Inputs ────────────────────────────────────────────────────────────────────
+grpBB   = "Bollinger Bands"
+bbLen   = input.int(20, "Length", minval = 5, group = grpBB)
+bbMult  = input.float(2.0, "Std-dev multiplier", minval = 0.5, step = 0.1, group = grpBB)
+lowLvl  = input.float(38.0, "Low level (%B)", step = 1.0, group = grpBB, tooltip = "0 = lower band, 50 = basis, 100 = upper band")
+highLvl = input.float(78.0, "High level (%B)", step = 1.0, group = grpBB)
+mode    = input.string("Reversion", "Mode", options = ["Reversion", "Breakout"], group = grpBB,
+     tooltip = "Reversion: longs armed at the low level, shorts at the high level. Breakout: the reverse (longs armed at the high level).")
+
+grpCf     = "Confirmation"
+armBars   = input.int(8, "Setup stays armed for (bars)", minval = 1, group = grpCf)
+swingN    = input.int(2, "Higher high / lower low vs last N bars", minval = 1, group = grpCf)
+closeConf = input.bool(true, "Close must break (not just the wick)", group = grpCf)
+warLen    = input.int(14, "Wick Absorption length", minval = 3, group = grpCf)
+warMin    = input.float(0.05, "Minimum absorption", minval = 0.0, maxval = 1.0, step = 0.01, group = grpCf)
+skipEia   = input.bool(true, "No entries 10:00-11:30 NY on Thursdays (EIA storage report, intraday only)", group = grpCf)
+
+grpRk      = "Risk"
+riskPct    = input.float(0.35, "Risk per trade (% of equity)", minval = 0.05, maxval = 5.0, step = 0.05, group = grpRk)
+atrLen     = input.int(14, "ATR length", minval = 2, group = grpRk)
+stopBuf    = input.float(0.25, "Stop buffer beyond setup extreme (x ATR)", minval = 0.0, step = 0.05, group = grpRk)
+minStopAtr = input.float(0.75, "Minimum stop distance (x ATR)", minval = 0.1, step = 0.05, group = grpRk)
+rr         = input.float(1.5, "Reward : risk", minval = 0.5, step = 0.1, group = grpRk)
+maxBars    = input.int(0, "Time exit after N bars (0 = off)", minval = 0, group = grpRk)
+
+// ── Bollinger %B ──────────────────────────────────────────────────────────────
+basis = ta.sma(close, bbLen)
+dev   = bbMult * ta.stdev(close, bbLen)
+upper = basis + dev
+lower = basis - dev
+pctB  = upper > lower ? (close - lower) / (upper - lower) * 100.0 : 50.0
+
+// ── Wick Absorption Ratio ─────────────────────────────────────────────────────
+rng       = high - low
+lowerWick = math.min(open, close) - low
+upperWick = high - math.max(open, close)
+barAbs    = rng > 0 ? (lowerWick - upperWick) / rng : 0.0
+w         = na(volume) or volume <= 0 ? 1.0 : volume
+wSum      = math.sum(w, warLen)
+war       = wSum > 0 ? math.sum(barAbs * w, warLen) / wSum : 0.0
+
+atr = ta.atr(atrLen)
+
+// ── Zones arm a setup ─────────────────────────────────────────────────────────
+reversion = mode == "Reversion"
+longZone  = reversion ? pctB <= lowLvl : pctB >= highLvl
+shortZone = reversion ? pctB >= highLvl : pctB <= lowLvl
+
+var int   lArmBar  = na
+var float lArmLow  = na
+var int   sArmBar  = na
+var float sArmHigh = na
+
+lWasArmed = not na(lArmBar) and bar_index - lArmBar <= armBars
+sWasArmed = not na(sArmBar) and bar_index - sArmBar <= armBars
+
+// Track the lowest low (long) / highest high (short) of the setup for the stop.
+if longZone
+    lArmLow := lWasArmed ? math.min(lArmLow, low) : low
+    lArmBar := bar_index
+else if lWasArmed
+    lArmLow := math.min(lArmLow, low)
+
+if shortZone
+    sArmHigh := sWasArmed ? math.max(sArmHigh, high) : high
+    sArmBar  := bar_index
+else if sWasArmed
+    sArmHigh := math.max(sArmHigh, high)
+
+longArmed  = not na(lArmBar) and bar_index - lArmBar <= armBars
+shortArmed = not na(sArmBar) and bar_index - sArmBar <= armBars
+
+// ── Confirmations ─────────────────────────────────────────────────────────────
+hhLevel    = ta.highest(high, swingN)[1]
+llLevel    = ta.lowest(low, swingN)[1]
+higherHigh = (closeConf ? close : high) > hhLevel
+lowerLow   = (closeConf ? close : low) < llLevel
+
+nyDow    = dayofweek(time, "America/New_York")
+eiaStart = timestamp("America/New_York", year(time, "America/New_York"), month(time, "America/New_York"), dayofmonth(time, "America/New_York"), 10, 0)
+eiaEnd   = timestamp("America/New_York", year(time, "America/New_York"), month(time, "America/New_York"), dayofmonth(time, "America/New_York"), 11, 30)
+inEia    = skipEia and timeframe.isintraday and nyDow == dayofweek.thursday and time < eiaEnd and time_close > eiaStart
+
+longSig  = longArmed and higherHigh and war >= warMin and war > war[1] and not inEia and barstate.isconfirmed
+shortSig = shortArmed and lowerLow and war <= -warMin and war < war[1] and not inEia and barstate.isconfirmed
+
+// ── Manus payload ─────────────────────────────────────────────────────────────
+atrSlow   = ta.sma(atr, 50)
+atrRatio  = atrSlow > 0 ? atr / atrSlow : 1.0
+volRegime = atrRatio >= 2.6 ? "extreme" : atrRatio >= 1.8 ? "high" : atrRatio <= 0.6 ? "low" : "normal"
+hUtc      = hour(time, "UTC")
+session   = hUtc >= 22 or hUtc < 7 ? "asia" : hUtc < 12 ? "london" : hUtc < 16 ? "overlap_london_new_york" : hUtc < 21 ? "new_york" : "offpeak"
+
+f_num(float x) => na(x) ? "null" : str.tostring(x, "0.######")
+f_px(float x)  => na(x) ? "null" : str.tostring(x, format.mintick)
+
+f_payload(string dir, float entry, float stop, float target, float extreme) =>
+    string barUtc = str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC")
+    string sigId  = "STLNG-" + timeframe.period + "-" + str.tostring(time, "#") + "-" + (dir == "long" ? "L" : "S")
+    '{"schema_name":"stl_candidate","schema_version":"1.0","event_type":"candidate",' +
+     '"meta":{"signal_id":"' + sigId + '","generated_at_utc":"' + str.format_time(timenow, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC") + '"},' +
+     '"system":{"strategy_id":"stl_natgas_anytf_bb_absorption_v1","strategy_name":"STL Natural Gas BB Absorption","strategy_version":"1.1.0","source":"tradingview"},' +
+     '"instrument":{"symbol":"NATGASUSD","broker_symbol":"NATGAS_USD","tradingview_ticker":"' + syminfo.tickerid + '"},' +
+     '"market":{"timeframe":"' + timeframe.period + '","bar_time_utc":"' + barUtc + '","hour_utc":' + str.tostring(hUtc) + ',"session_name":"' + session + '"},' +
+     '"signal":{"signal_type":"entry","direction":"' + dir + '","entry_model":"natgas_bb_absorption","mode":"' + mode + '"},' +
+     '"price":{"open":' + f_px(open) + ',"high":' + f_px(high) + ',"low":' + f_px(low) + ',"close":' + f_px(close) + '},' +
+     '"indicators":{"atr":' + f_num(atr) + ',"bb_basis":' + f_px(basis) + ',"bb_upper":' + f_px(upper) + ',"bb_lower":' + f_px(lower) +
+     ',"bb_percent_b":' + f_num(pctB / 100.0) + ',"wick_absorption_ratio":' + f_num(war) + '},' +
+     '"structure":{"volatility_regime":"' + volRegime + '","market_regime":"unclassified","setup_extreme":' + f_px(extreme) + '},' +
+     '"risk":{"risk_percent":' + f_num(riskPct) + ',"proposed_entry":' + f_px(entry) + ',"proposed_stop_loss":' + f_px(stop) +
+     ',"proposed_take_profit":' + f_px(target) + ',"rr_ratio":' + f_num(rr) + '},' +
+     '"context":{"context_status":"unchecked"},' +
+     '"extensions":{"pine_proposal_only":false,"allow_manus_override_sl_tp":false,"atr_ratio":' + f_num(atrRatio) +
+     ',"pct_b_100":' + f_num(pctB) + ',"low_level":' + f_num(lowLvl) + ',"high_level":' + f_num(highLvl) + '}}'
+
+// ── Orders ────────────────────────────────────────────────────────────────────
+riskCash = strategy.equity * riskPct / 100.0
+pv       = syminfo.pointvalue
+flat     = strategy.position_size == 0
+
+// Alerts go to Manus on every signal; the backtest itself stays one position at a time.
+if longSig
+    lStop   = math.min(lArmLow - stopBuf * atr, close - minStopAtr * atr)
+    lDist   = close - lStop
+    lTarget = close + rr * lDist
+    lQty    = lDist > 0 ? riskCash / (lDist * pv) : 0.0
+    if lDist > 0
+        alert(f_payload("long", close, lStop, lTarget, lArmLow), alert.freq_once_per_bar_close)
+    if flat and lQty > 0
+        strategy.entry("Long", strategy.long, qty = lQty)
+        strategy.exit("Long SL/TP", from_entry = "Long", stop = lStop, limit = lTarget)
+    lArmBar := na
+else if shortSig
+    sStop   = math.max(sArmHigh + stopBuf * atr, close + minStopAtr * atr)
+    sDist   = sStop - close
+    sTarget = close - rr * sDist
+    sQty    = sDist > 0 ? riskCash / (sDist * pv) : 0.0
+    if sDist > 0
+        alert(f_payload("short", close, sStop, sTarget, sArmHigh), alert.freq_once_per_bar_close)
+    if flat and sQty > 0
+        strategy.entry("Short", strategy.short, qty = sQty)
+        strategy.exit("Short SL/TP", from_entry = "Short", stop = sStop, limit = sTarget)
+    sArmBar := na
+
+if maxBars > 0 and strategy.opentrades > 0
+    if bar_index - strategy.opentrades.entry_bar_index(0) >= maxBars
+        strategy.close_all(comment = "Time exit")
+
+// ── Visuals: bands and signals on the price chart, WAR in this pane ───────────
+lowLvlPrice  = lower + (upper - lower) * lowLvl / 100.0
+highLvlPrice = lower + (upper - lower) * highLvl / 100.0
+plot(basis, "BB basis", color.new(color.gray, 20), force_overlay = true)
+plot(upper, "BB upper", color.new(color.teal, 30), force_overlay = true)
+plot(lower, "BB lower", color.new(color.teal, 30), force_overlay = true)
+plot(lowLvlPrice, "Low level (38)", color.new(color.orange, 40), style = plot.style_circles, force_overlay = true)
+plot(highLvlPrice, "High level (78)", color.new(color.purple, 40), style = plot.style_circles, force_overlay = true)
+plotshape(longSig, "Long signal", shape.triangleup, location.belowbar, color.green, size = size.small, force_overlay = true)
+plotshape(shortSig, "Short signal", shape.triangledown, location.abovebar, color.red, size = size.small, force_overlay = true)
+
+plot(war, "Wick Absorption Ratio", war >= 0 ? color.new(color.green, 20) : color.new(color.red, 20), style = plot.style_columns)
+hline(0, "Zero", color.gray)
+hline(warMin, "Long threshold", color.new(color.green, 50), hline.style_dashed)
+hline(-warMin, "Short threshold", color.new(color.red, 50), hline.style_dashed)
+bgcolor(longArmed ? color.new(color.green, 92) : shortArmed ? color.new(color.red, 92) : na, title = "Setup armed")

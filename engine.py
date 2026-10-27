@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.2.0"
+ENGINE_VERSION = "4.3.0"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -145,6 +145,24 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #     (floor/ceil toward zero, no multiplier - checked on all 7 scenarios).
 #   - final_trade_plan gains usd_per_account_ccy, usd_rate_source and
 #     max_loss_account_ccy; each evaluate logs one "sizing:" line.
+#
+# v4.3.0 (2026-10-27) - Natural Gas (OANDA NATGAS_USD):
+#   - New instrument NATGASUSD and entry model natgas_bb_absorption for
+#     pine/STL_NATGAS_AnyTF_BB_Absorption (any timeframe). Fed by its own
+#     Make scenario, which also sends live bid/ask, OANDA's live financing
+#     rates and the count of open NATGAS_USD trades.
+#   - Replayed on OANDA NATGAS_USD M5-H4 (Feb 2025-Oct 2026, H4 from 2023):
+#     the signal alone wins 39.2% at 1.5R (break-even before costs), so the
+#     model runs on that prior. The decision then comes from cost and carry:
+#     OANDA charges longs ~144%/yr and pays shorts ~139%/yr (futures roll).
+#     Longs lost in all 54 settings tested; shorts were positive in 83% on
+#     H4; below ~1h the spread is >0.2R and COST_R_EXCESSIVE rejects it.
+#   - carry_r(): financing over the model's median hold (17 bars, capped at
+#     4 days and +/-0.5R) now enters expected net R - only for models that
+#     set expected_hold_bars, i.e. only natgas_bb_absorption. Every FX and
+#     metals decision is unchanged.
+#   - POSITION_ALREADY_OPEN: one NATGAS_USD trade at a time, as backtested
+#     (only enforced when Make sends account.instrument_open_trade_count).
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -796,6 +814,15 @@ class InstrumentConfig:
     # these as preferred too (see the v4.1.1 notes above ENGINE_VERSION);
     # legacy mode ignores them, so it still reproduces v3.11 exactly.
     script_sessions: Tuple[str, ...] = ()
+    # v4.3.0: broker financing as an annual fraction of notional (OANDA's
+    # instrument longRate/shortRate; negative = the position pays). Only
+    # read when the entry model sets expected_hold_bars. Make can send live
+    # values as costs.financing_long_annual / costs.financing_short_annual.
+    financing_long_annual: float = 0.0
+    financing_short_annual: float = 0.0
+    # v4.3.0: 0 = no limit. Enforced only when Make sends
+    # account.instrument_open_trade_count.
+    max_open_per_instrument: int = 0
 
 
 @dataclass(frozen=True)
@@ -829,6 +856,10 @@ class ModelPolicy:
     # and ATR/50-bar ratio), so the legacy per-pair ATR band behind
     # structure.volatility_regime == "extreme" does not veto it in v4 mode.
     own_volatility_filter: bool = False
+    # v4.3.0: median bars a trade stays open (from the model's backtest).
+    # When set, expected financing ("carry") over that hold enters the
+    # expected-value test; None leaves the model exactly as before.
+    expected_hold_bars: Optional[float] = None
 
 
 # structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
@@ -871,6 +902,10 @@ INSTRUMENTS: Dict[str, InstrumentConfig] = {
     "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False, 0.012, 0.004, 15.0, 1.0, ("asia", "offpeak")),
     "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.30, 0.10, 40.0, 0.75, ("asia",)),
     "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True, 0.025, 0.010, 30.0, 0.75, ("asia",)),
+    # v4.3.0: OANDA NATGAS_USD CFD (checked live 2026-10-27): pip 0.01,
+    # price to 0.001, whole units, min 1, 10% margin, financing -144%/yr
+    # long, +139%/yr short (the futures roll). Any timeframe, every session.
+    "NATGASUSD": InstrumentConfig("NATGASUSD", "NATGAS_USD", 0.01, 0.001, 1, 1, 1, 100000, 0.35, 0.025, 0.010, 1.50, 1.50, 0.0, ("asia", "london", "overlap_london_new_york", "new_york", "offpeak"), ("unknown",), True, 0.008, 0.002, 2.0, 1.0, (), -1.442, 1.392, 1),
 }
 
 # v4.0.0: trend_pullback_reclaim is Pine v6.0.0's Model D. Its logit_offset
@@ -882,6 +917,14 @@ INSTRUMENTS: Dict[str, InstrumentConfig] = {
 # INSUFFICIENT_POST_GATE_EDGE. That is intended: they lost -0.27R/trade in
 # the replica and -0.25R+ live.
 MODEL_POLICIES: Dict[str, ModelPolicy] = {
+    # v4.3.0: STL_NATGAS_AnyTF_BB_Absorption (Bollinger %B 38/78 zone ->
+    # higher high / lower low -> Wick Absorption Ratio). Replayed on OANDA
+    # NATGAS_USD M30/H1/H4 (462 trades): 39.2% hit rate at 1.5R before costs,
+    # i.e. no edge of its own in either direction - so it runs on that prior
+    # and the decision comes from costs and financing. Longs lost in all 54
+    # tested settings (financing), shorts held up on H4; below ~1h the spread
+    # alone is >0.2R. Uses Pine's own stop (beyond the setup extreme).
+    "natgas_bb_absorption": ModelPolicy(True, False, 0.0, 0.02, 1.40, 0.0, ("trend", "mixed", "range", "breakout", "unclassified"), ("extreme",), None, 0.0, 0.0, 0.392, True, False, 17.0),
     "trend_breakout_continuation": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "breakout"), ("range", "extreme"), 1.5, 0.0, 0.0, 0.45, True, True),
     "trend_pullback_reclaim": ModelPolicy(True, False, 0.45, 0.0, 1.40, 0.0, ("trend", "mixed", "range", "trend_pullback"), ("extreme",), 1.5, 0.44, 0.35, None, False, True),
     "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",), None, 0.10, 0.0),
@@ -1322,6 +1365,47 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
     }
 
 
+_TF_UNIT_MINUTES = {"": 1.0, "m": 1.0, "min": 1.0, "S": 1 / 60, "s": 1 / 60, "H": 60.0, "h": 60.0,
+                    "D": 1440.0, "d": 1440.0, "W": 10080.0, "w": 10080.0, "M": 43200.0}
+
+
+def timeframe_minutes(raw: Any) -> Optional[float]:
+    """TradingView timeframe.period ("240", "30S", "D", "2W", "M" = month) or
+    "4h"/"15m" style (lower-case m = minutes) -> minutes; None if unparseable."""
+    m = re.fullmatch(r"(\d*)([A-Za-z]*)", as_str(raw, "").strip())
+    if not m or not (m.group(1) or m.group(2)) or m.group(2) not in _TF_UNIT_MINUTES:
+        return None
+    return (float(m.group(1)) if m.group(1) else 1.0) * _TF_UNIT_MINUTES[m.group(2)]
+
+
+MAX_CARRY_HOLD_DAYS = 4.0
+MAX_CARRY_R = 0.5
+
+
+def carry_r(payload: Dict[str, Any], cfg: InstrumentConfig, policy: ModelPolicy, plan: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
+    """v4.3.0: expected broker financing over the model's typical hold, in R
+    (positive = the position is paid). Zero unless policy.expected_hold_bars
+    is set. Hold capped at MAX_CARRY_HOLD_DAYS and the result at
+    +/-MAX_CARRY_R, so a daily/weekly chart cannot be approved on carry alone."""
+    if policy.expected_hold_bars is None:
+        return 0.0, {"carry_r": 0.0, "applied": False}
+    direction = as_str(get_path(payload, "signal.direction"), "").lower()
+    key = "long" if direction == "long" else "short"
+    rate = as_float(get_path(payload, f"costs.financing_{key}_annual"))
+    source = "payload" if rate is not None else "instrument_config"
+    if rate is None:
+        rate = cfg.financing_long_annual if key == "long" else cfg.financing_short_annual
+    tf_min = timeframe_minutes(get_path(payload, "market.timeframe"))
+    entry = as_float(plan.get("entry"), 0.0) or 0.0
+    stop_dist = as_float(plan.get("stop_distance"), 0.0) or 0.0
+    if tf_min is None or stop_dist <= 0 or entry <= 0:
+        return 0.0, {"carry_r": 0.0, "applied": False, "reason": "missing timeframe or plan"}
+    hold_days = min(policy.expected_hold_bars * tf_min / 1440.0, MAX_CARRY_HOLD_DAYS)
+    value = clamp(rate / 365.0 * hold_days * entry / stop_dist, -MAX_CARRY_R, MAX_CARRY_R)
+    return value, {"carry_r": value, "applied": True, "annual_rate": rate, "rate_source": source,
+                   "timeframe_minutes": tf_min, "expected_hold_days": hold_days}
+
+
 def cost_r(payload: Dict[str, Any], cfg: InstrumentConfig, plan: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
     spread = as_float(get_path(payload, "price.spread_price"))
     if spread is None:
@@ -1549,6 +1633,7 @@ class TradingSignalEvaluationEngine:
         fit = fit_score(payload, policy)
         plan = plan_trade(payload, account, cfg, policy)
         cr, cost_diag = cost_r(payload, cfg, plan)
+        carry, carry_diag = carry_r(payload, cfg, policy, plan)
         risk = risk_score(payload, account, cfg, policy, plan, cost_diag)
         legacy_prob = estimate_probability(sig, ctx, fit, dq_score, policy)
         edge = edge_model_probability(payload, cfg, policy)
@@ -1558,7 +1643,9 @@ class TradingSignalEvaluationEngine:
 
         rr = as_float(plan.get("rr"), 0.0) or 0.0
         gross_ev_r = prob * rr - (1.0 - prob)
-        net_ev_r = gross_ev_r - cr
+        # v4.3.0: financing over the expected hold (0 unless the model sets
+        # expected_hold_bars, so every pre-4.3 model is unchanged).
+        net_ev_r = gross_ev_r - cr + (carry if v4 else 0.0)
         pre_gate_score = dq_score * 0.15 + sig * 0.25 + risk * 0.25 + ctx * 0.15 + fit * 0.20
 
         diagnostics = {
@@ -1573,11 +1660,12 @@ class TradingSignalEvaluationEngine:
             "instrument_resolved_via": instrument_resolved_via,
             "data_quality": dq_diag,
             "costs": cost_diag,
+            "carry": carry_diag,
             "trade_plan_preview": plan,
             "policy": policy.__dict__,
         }
 
-        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag, edge, extension_z)
+        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag, edge, extension_z, account)
         if rejection:
             stage, reason, code = rejection
             return self._result(payload, cfg, model, "rejected", stage, reason, code, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
@@ -1610,7 +1698,7 @@ class TradingSignalEvaluationEngine:
 
         return self._result(payload, cfg, model, "rejected", "expected_value", "; ".join(reasons), "INSUFFICIENT_POST_GATE_EDGE", dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
 
-    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any], edge: Optional[Dict[str, Any]] = None, extension_z: Optional[float] = None) -> Optional[Tuple[str, str, str]]:
+    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any], edge: Optional[Dict[str, Any]] = None, extension_z: Optional[float] = None, account: Optional[Dict[str, Any]] = None) -> Optional[Tuple[str, str, str]]:
         v4 = MANUS_DECISION_MODE == "v4"
         direction = as_str(get_path(payload, "signal.direction"), "").lower()
         session = as_str(get_path(payload, "market.session_name"), "unknown").lower()
@@ -1619,6 +1707,9 @@ class TradingSignalEvaluationEngine:
 
         if not dq_pass:
             return "data_quality", "Required fields missing or invalid.", "DATA_QUALITY_FAIL"
+        open_here = as_float((account or {}).get("instrument_open_trade_count"))
+        if cfg.max_open_per_instrument > 0 and open_here is not None and open_here >= cfg.max_open_per_instrument:
+            return "risk", f"{int(open_here)} {cfg.broker_symbol} trade(s) already open (limit {cfg.max_open_per_instrument}).", "POSITION_ALREADY_OPEN"
         if not policy.enabled:
             return "strategy_fit", f"Model disabled or unsupported: {model}.", "MODEL_DISABLED"
         if direction not in ("long", "short"):
