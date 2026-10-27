@@ -1,2378 +1,4083 @@
-from __future__ import annotations
+//@version=6
+strategy(
+     title                   = "St Ludaetuc XAGUSD 2m Candidate Generator v2.0",
+     shorttitle              = "STLXAGC20",
+     overlay                 = true,
+     pyramiding              = 0,
+     initial_capital         = 10000,
+     currency                = currency.USD,
+     default_qty_type        = strategy.percent_of_equity,
+     default_qty_value       = 0.50,
+     commission_type         = strategy.commission.cash_per_order,
+     commission_value        = 0.0,
+     slippage                = 1,
+     process_orders_on_close = true,
+     calc_on_order_fills     = true,
+     calc_on_every_tick      = false
+)
 
-import hashlib
-import json
-import logging
-import os
-import re
-from copy import deepcopy
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from math import floor, isfinite
-from typing import Any, Dict, Optional, Tuple, Union
-
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from shadow_scorer import shadow_score_0_100
-
-# Bare (unquoted) NaN / Infinity / -Infinity tokens are valid Python/JS/Pine
-# number literals but not valid JSON. TradingView's {{plot(...)}} alert
-# placeholders can substitute one of these verbatim (e.g. an indicator that
-# has no value yet), which otherwise breaks strict JSON parsing outright.
-# Matched only when not already inside quotes-adjacent word characters, so
-# it won't touch a legitimate string that happens to contain "NaN" as text.
-_JSON_NAN_INF_RE = re.compile(r'(?<![\w"])(-?Infinity|NaN)(?![\w"])')
-
-try:
-    import psycopg2
-    from psycopg2 import pool as _pg_pool
-    from psycopg2.extras import Json as _PgJson
-    from psycopg2.extras import RealDictCursor as _PgRealDictCursor
-except Exception:  # pragma: no cover - psycopg2 should always be installed, but
-    # the events pipeline is best-effort and must never take trading down.
-    psycopg2 = None
-    _pg_pool = None
-    _PgJson = None
-    _PgRealDictCursor = None
-
-
-ENGINE_VERSION = "3.11.0"
-RULESET_VERSION = "manus_ruleset_2026_09_v3_3"
-CALIBRATION_VERSION = "heuristic_uncalibrated_v1"
-
-# v3.5.0: fixed a position-sizing bug in plan_trade() that undersized every
-# USD/JPY and USD/CAD trade because the account-currency conversion was
-# missing entirely (risk_cash/stop_dist assumed quote currency == account
-# currency, true only for the XXX/USD pairs). See InstrumentConfig.
-# quote_ccy_is_account_ccy and the account_ccy_conversion_rate comment in
-# plan_trade() below for the full explanation. This also obsoletes the "*
-# 100" multiplier manually added to the USD/JPY Make scenario's math
-# module as a stopgap - that static multiplier should be removed now that
-# the engine applies the correct, live-price-based conversion itself.
-#
-# v3.6.0: Google Sheets ("St Ludaetuc Master Trading Log") retired as a
-# data store. Two changes replace it with Postgres, via Make, as planned:
-#   1. /evaluate's existing "prediction" event logging now also archives
-#      the OANDA account snapshot each call already receives (equity,
-#      margin, open trade count, etc.) - previously only written to
-#      Sheets, never persisted anywhere queryable.
-#   2. New POST /trade-opened endpoint, called by each pair's Make
-#      scenario immediately after an approved signal's order is placed.
-#      This is the open-time bridge between a Pine signal_id and the
-#      OANDA trade ID that signal produced - documented below as missing
-#      since the Market Data Centre was first added, and something Sheets
-#      had informally the whole time via one wide spreadsheet row that
-#      Postgres never captured. master_trading_log is rewritten to use
-#      this bridge, so a closed trade's predicted_* columns now populate
-#      for real instead of coming back NULL.
-#
-# v3.6.1: /trade-opened's account_snapshot and oanda_order_response now
-#   accept a JSON-encoded string (the Make side was switched from an
-#   unquoted toString() object-splice, which corrupted the outer JSON body
-#   on every real call, to a quoted escapeJSON(toString(...)) string) as
-#   well as the original raw dict, decoded server-side by _parse_json_field.
-#
-# v3.6.2: fixed _ensure_events_schema() silently failing on every startup
-#   since v3.6.0 shipped. The v3.6.0 master_trading_log rewrite renamed its
-#   first output column from trade_id to oanda_trade_id, but the live view
-#   (created by an earlier version of this code) still had a column
-#   literally named trade_id - Postgres refuses CREATE OR REPLACE VIEW
-#   whenever it would rename an existing output column ("cannot change name
-#   of view column ... to ..."). That error aborted the whole multi-statement
-#   execute() (both CREATE OR REPLACE VIEW statements plus every IF NOT
-#   EXISTS table/index in _EVENTS_SCHEMA_SQL and all of _REFERENCE_SCHEMA_SQL
-#   live in one implicit transaction), so none of it ever committed - the
-#   startup log swallowed this as "non-fatal" and moved on, but the schema
-#   was silently stuck exactly where it was before v3.6.0. Switched both
-#   master_trading_log and master_decision_log to DROP VIEW IF EXISTS +
-#   CREATE VIEW, which isn't subject to the column-identity restriction.
-#
-# v3.7.0: added GET /analytics/strategy-report - a single read-only endpoint
-#   that rolls up everything needed for the first strategy-performance
-#   diagnostic (closed-trade win/loss/PnL by instrument, the /evaluate
-#   approval funnel and rejection-reason breakdown, approved-vs-rejected
-#   score distributions, Pine setup_class/entry_model breakdowns pulled from
-#   every prediction's archived raw_signal_payload, and the full rows of
-#   whatever trades already have a complete prediction->trade_opened->
-#   trade_outcome bridge). Every section is independently try/excepted so
-#   one bad query can't blank out the rest of the report - this endpoint is
-#   read-only and exploratory by nature, used while the events data itself
-#   is still thin (trade_opened bridging has only been reliable since
-#   today, v3.6.1), so partial results are expected and far more useful
-#   than an all-or-nothing 500.
-#
-# v3.8.0: signal_score() now also reads signal.conviction_score, alongside
-#   the existing extensions.candidate_strength. This follows directly from
-#   the v3.7.0 /analytics/strategy-report diagnostic and the matching Pine
-#   v5.1.0 rebuild (all 5 pairs): confidence_raw, confidence_pct and
-#   conviction_score were previously all the same duplicated value on the
-#   Pine side, so reading just one of them (candidate_strength, which maps
-#   to confidence_pct) lost nothing. Now that conviction_score is a
-#   genuinely independent breadth-of-confirmation measure (percentage of 6
-#   confirming conditions met - trend/HTF/DI/MACD alignment, volatility
-#   sweet-spot, session quality - as opposed to candidate_strength's
-#   point-weighted magnitude score), it is scored as its own input rather
-#   than left unread. Weighted slightly lighter than candidate_strength
-#   (+/-6 vs +/-8 max swing) since it is a brand-new, not-yet-validated
-#   signal - revisit the relative weighting once live data shows whether it
-#   actually separates approved-and-won from approved-and-lost candidates.
-#   confidence_raw (the unclamped score) is deliberately NOT read yet - it
-#   only adds information in the rare case candidate_strength saturated at
-#   0 or 100, and there isn't yet a live sample to show that's worth a
-#   separate scoring term; revisit alongside the next diagnostic pass.
-#
-# v3.9.0: two additions, both in support of the gold/silver strategy-
-#   improvement work:
-#   1. reference.timeframes was missing a '10m' row (it jumped straight from
-#      5m to 15m) - added. Harmless gap in practice (events.timeframe is
-#      still free-text, not yet FK'd to this table - see the comment on
-#      _REFERENCE_SCHEMA_SQL below), but this table is meant to become the
-#      canonical enum once FK enforcement is added, so it's worth closing
-#      now while it's a one-line, ON CONFLICT DO NOTHING change rather than
-#      a gap someone has to debug into later.
-#   2. added GET /analytics/export - a read-only bulk export, complementing
-#      /analytics/strategy-report (which only returns aggregate rollups).
-#      This is the endpoint Claude uses to actually pull the underlying
-#      1m/2m/3m/5m/10m market-data candles plus the matching trade_outcome/
-#      prediction/trade_opened rows for a given instrument and date window,
-#      to cross-reference entry/exit quality against the raw price action
-#      and work on improving profit factor - direct Postgres access is
-#      blocked by this database's deliberately empty IP allowlist (same
-#      reason /analytics/strategy-report exists), so this is the only way
-#      to get the raw rows rather than just aggregates.
-#
-# v3.10.0: prediction-accuracy project (Andy, 2026-10-05) - the goal is to
-#   check every signal Manus ever saw against what the market's own 1m
-#   candles actually did afterwards, not just the handful that became real
-#   OANDA trades, so the model can start learning from "no trade" decisions
-#   too. Two changes:
-#   1. /evaluate's "prediction" event now also logs
-#      "hypothetical_trade_plan" (the same entry/stop_loss/take_profit
-#      plan_trade() already computes for every signal, previously kept
-#      only when approved, under final_trade_plan). This is going-forward
-#      only: a prediction logged before this version still has no plan to
-#      score.
-#   2. New GET /analytics/prediction-accuracy - for every prediction with a
-#      usable plan (final_trade_plan when approved, hypothetical_trade_plan
-#      otherwise), walks the 1m market_data candles forward from the
-#      signal's bar time and checks whether price reached the predicted
-#      take-profit or stop-loss level first, within a configurable
-#      lookahead. That gives a real win/loss label for rejected signals
-#      too, not just approved ones, which is a much denser dataset to
-#      recalibrate predicted_win_probability / shadow_score_v0 against
-#      than waiting on live trade closures alone.
-
-# --- St Ludaetuc Market Data Centre / canonical events ledger -------------
-#
-# One generic `events` table (Cloud V1 charter, Canonical Event Ledger,
-# section 6) backs four event types so far:
-#   - "market_data"   : raw OHLCV ticks pushed directly from TradingView,
-#                        never routed through Make (by explicit decision).
-#   - "prediction"    : every /evaluate call's confidence/expected-value
-#                        output, keyed by the signal's trade_id, so it can
-#                        later be joined against...
-#   - "trade_opened"  : ...confirmation that an approved signal's order was
-#                        actually placed on OANDA, keyed by the same
-#                        trade_id, carrying the resulting OANDA trade ID -
-#                        the bridge to...
-#   - "trade_outcome" : ...the actual closed-trade result, keyed by that
-#                        OANDA trade ID, to finally make
-#                        `probability_is_calibrated` mean something.
-#
-# All DB access is best-effort from the trading path's point of view: a
-# Postgres hiccup must never block or fail a /evaluate call. It's only
-# allowed to be loud (500) on /market-data, /trade-opened and
-# /trade-outcome, since there logging the event *is* the whole point of
-# the request - none of those three sit in front of an order placement
-# (that already happened by the time /trade-opened is called), so a loud
-# failure there only means the HTTP caller sees an honest error, never a
-# blocked or duplicated trade.
-EVENTS_SCHEMA_VERSION = "v1"
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
-
-_db_pool = None
-
-
-def _get_pool():
-    global _db_pool
-    if _db_pool is None and DATABASE_URL and _pg_pool is not None:
-        try:
-            _db_pool = _pg_pool.SimpleConnectionPool(1, 5, DATABASE_URL, connect_timeout=5)
-        except Exception:
-            logging.exception("Failed to create Postgres connection pool")
-            _db_pool = None
-    return _db_pool
-
-
-_EVENTS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS events (
-    event_id TEXT PRIMARY KEY,
-    event_type TEXT NOT NULL,
-    origin TEXT NOT NULL,
-    destination TEXT,
-    trade_id TEXT,
-    instrument TEXT,
-    timeframe TEXT,
-    event_time TIMESTAMPTZ NOT NULL,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    schema_version TEXT NOT NULL DEFAULT 'v1',
-    strategy_version TEXT,
-    model_version TEXT,
-    environment TEXT NOT NULL DEFAULT 'production',
-    status TEXT,
-    retry_count INTEGER NOT NULL DEFAULT 0,
-    related_experiment_id TEXT,
-    related_deployment_id TEXT,
-    payload JSONB NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_events_type_time ON events (event_type, event_time DESC);
-CREATE INDEX IF NOT EXISTS idx_events_instrument_tf_time ON events (instrument, timeframe, event_time DESC);
-CREATE INDEX IF NOT EXISTS idx_events_trade_id ON events (trade_id);
-
--- Lets master_trading_log below find the "trade_opened" row for a given
--- OANDA trade ID in one index lookup instead of a payload scan - this is
--- the bridge join's hot path, so it gets its own partial expression index
--- rather than relying on idx_events_type_time alone.
-CREATE INDEX IF NOT EXISTS idx_events_trade_opened_oanda_id
-    ON events ((payload->>'oanda_trade_id'))
-    WHERE event_type = 'trade_opened';
-
--- Master Trading Log (v2): every closed-trade outcome, bridged back to the
--- signal that opened it, and from there to the /evaluate "prediction" that
--- signal produced. v1 joined trade_outcome -> prediction directly on
--- trade_id, which came back NULL for every OANDA-side closure, because
--- trade_outcome is keyed by OANDA's own tradeID while prediction is keyed
--- by the Pine-side meta.signal_id - there was no open-time record of which
--- signal_id produced which OANDA tradeID. The new "trade_opened" event
--- (logged by /trade-opened at order-placement time, keyed by signal_id,
--- carrying the resulting OANDA tradeID in its payload) is exactly that
--- bridge, so the three-way join below now resolves for real instead of
--- coming back NULL. A trade_outcome row with no matching trade_opened row
--- (e.g. a trade that closed before this version shipped) still appears,
--- just without predicted_* - LEFT JOINs throughout, not INNER.
---
--- DROP + CREATE instead of CREATE OR REPLACE: the live view predating this
--- v2 rewrite has its first column literally named trade_id, and Postgres
--- refuses CREATE OR REPLACE VIEW whenever it would rename/reorder/drop an
--- existing output column (the new v2 select aliases that column to
--- oanda_trade_id) - "cannot change name of view column ... to ...". That
--- made every startup since the v2 rewrite throw inside this same
--- multi-statement execute() / implicit transaction, aborting it before any
--- of the IF NOT EXISTS DDL above or the reference.* schema below ever
--- committed (startup logged it as non-fatal and carried on, but the schema
--- was never actually brought up to date). DROP VIEW IF EXISTS sidesteps the
--- column-identity check entirely; these are plain read-only derived views
--- with no grants to re-apply, so drop-and-recreate is safe.
-DROP VIEW IF EXISTS master_trading_log;
-CREATE VIEW master_trading_log AS
-SELECT
-    o.trade_id AS oanda_trade_id,
-    COALESCE(topen.trade_id, o.trade_id) AS signal_id,
-    o.instrument,
-    o.event_time AS closed_at,
-    o.status AS outcome,
-    o.payload->>'exit_reason' AS exit_reason,
-    NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl,
-    NULLIF(o.payload->>'exit_price', '')::numeric AS exit_price,
-    topen.event_time AS opened_at,
-    topen.payload->>'fill_status' AS fill_status,
-    p.event_time AS predicted_at,
-    p.strategy_version,
-    p.model_version,
-    p.payload->>'approval_status' AS approval_status,
-    NULLIF(p.payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
-    NULLIF(p.payload->>'expected_net_r', '')::numeric AS expected_net_r,
-    o.received_at
-FROM events o
-LEFT JOIN events topen
-    ON topen.event_type = 'trade_opened'
-    AND topen.payload->>'oanda_trade_id' = o.trade_id
-LEFT JOIN events p
-    ON p.event_type = 'prediction'
-    AND p.trade_id = topen.trade_id
-WHERE o.event_type = 'trade_outcome'
-ORDER BY o.event_time DESC;
-
--- Master Decision Log: every /evaluate decision, approved or rejected -
--- the funnel view Doc 1's spec calls for, left-joined forward to whether
--- (and how) an approved decision actually got placed and closed. A
--- rejected signal simply has no trade_opened/trade_outcome row, which is
--- the point: rejections are retained here for funnel analysis, not
--- dropped the way a trades-only table would.
---
--- DROP + CREATE for the same column-identity reason as master_trading_log
--- above - applied defensively here too since the aborted transaction never
--- let this statement run far enough to prove whether it also conflicted.
-DROP VIEW IF EXISTS master_decision_log;
-CREATE VIEW master_decision_log AS
-SELECT
-    p.trade_id AS signal_id,
-    p.instrument,
-    p.event_time AS decided_at,
-    p.payload->>'approval_status' AS approval_status,
-    p.payload->>'rejection_reason_code' AS rejection_reason_code,
-    NULLIF(p.payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
-    NULLIF(p.payload->>'expected_net_r', '')::numeric AS expected_net_r,
-    topen.event_time AS opened_at,
-    topen.payload->>'fill_status' AS fill_status,
-    topen.payload->>'oanda_trade_id' AS oanda_trade_id,
-    o.event_time AS closed_at,
-    o.status AS outcome,
-    NULLIF(o.payload->>'realized_pnl', '')::numeric AS realized_pnl
-FROM events p
-LEFT JOIN events topen
-    ON topen.event_type = 'trade_opened'
-    AND topen.trade_id = p.trade_id
-LEFT JOIN events o
-    ON o.event_type = 'trade_outcome'
-    AND o.trade_id = topen.payload->>'oanda_trade_id'
-WHERE p.event_type = 'prediction'
-ORDER BY p.event_time DESC;
-"""
+// ============================================================================
+// ST LUDAETUC XAG/USD (Silver) 2-MINUTE CANDIDATE GENERATOR v2.0.0
+//
+// ----------------------------------------------------------------------------
+// CHANGE LOG v2.0.0 (bespoke XAG/USD (Silver) build, 2026-10-26)
+// ----------------------------------------------------------------------------
+// Shared research basis (2026-10-24 overnight study, GBP/USD 2m, 87,216
+// bars): v5.2's trigger had no directional edge (-0.05R gross, -0.27R net
+// per trade); entries that chase short-term extension lose; stretched
+// pullbacks confirmed by a reclaim close win; stops under ~8x round-trip
+// cost bleed. GBP/USD v6.0.0 (pullback reclaim, 12-pip floor, 1.5R) was
+// +0.07R to +0.10R net per trade, positive in-sample and out-of-sample.
+//
+// Bespoke calibration for THIS instrument (2026-10-26) used its own
+// "XAG/USD Market Data" 5m sheet, Jun-Sep 2026 (~25,000 bars), closes
+// only, compared side by side with GBP/USD from the same 5m source so
+// every number below is relative to the pair that was fully backtested.
+// The 5m sheets have no high/low columns, so these are close-path
+// estimates (no spread cost), NOT a full 2m backtest like GBP/USD's.
+//
+// XAG/USD (Silver) - NO PRICE DATA was available for this instrument (no
+// silver market-data sheet, no silver rows in the master log, no outside
+// data source reachable), so nothing here is backtested. What is bespoke:
+//   - Built on silver's own v1.2.0 script: New York session windows, pip
+//     size (0.01), and the existing bb_rsi_armed_reversal model (kept,
+//     OFF by default - no live record, research-only in engine v4).
+//   - Model D (pullback reclaim) default, Model E available OFF, for the
+//     same reasons as gold.
+//   - Stop floor 30 pips = $0.30: ~8.5x a ~$0.035 round trip. Silver's
+//     spread is large relative to its moves, so this floor is wider in
+//     ATR terms than gold's.
+//   - Arms 07:00-19:59 UTC.
+// Run it in the Strategy Tester before enabling alerts.
+//
+// Settings this build ships with (all are inputs, group "Model D/E"):
+//   stop floor 30.0 pips, target 1.5R, minimum ATR 2.5 pips,
+//   ATR/50-bar-average >= 0.90, arms 07:00-19:59 UTC,
+//   Model D ON, Model E OFF.
+// The alert payload schema is unchanged; entry_model arrives as
+// "trend_pullback_reclaim" (Model D) or "trend_breakout_continuation"
+// (Model E). Needs Manus engine v4.1.0+, which knows both models and this
+// instrument's matching stop floor.
+//
+// Earlier notes retained below for history.
+//
+// ----------------------------------------------------------------------------
+// (previous header)
+// ST LUDAETUC XAG/USD (Silver) 2-MINUTE CANDIDATE GENERATOR v1.0.0
+//
+// TradingView proposes candidates.
+// Manus (the FastAPI scoring engine) approves or rejects.
+// Make.com routes approved decisions.
+// Oanda executes approved trades.
+//
+// Alert configuration:
+// Condition: Any alert() function call
+// Frequency: Once Per Bar Close
+//
+// ----------------------------------------------------------------------------
+// NOTES (first release, 2026-10-03)
+// ----------------------------------------------------------------------------
+// This is a new build for XAG/USD (Silver), sharing the same architecture as
+// the five FX candidate generators (v5.1.0) -- pair config, inputs, chart
+// validation, core market features, classification, session handling,
+// frequency governance, ATR/structure stop-target math, JSON payload
+// builder, strategy-tester simulation, chart visuals and a diagnostic
+// dashboard -- but with a single, different entry model:
+//
+//   bb_rsi_armed_reversal ("BB/RSI armed exhaustion reversal")
+//
+// This reconstructs a strategy the user remembered running previously:
+// price closes outside the Bollinger Band (upper ~77 / lower ~37 on RSI,
+// paired with the band touch) which ARMS a setup; the script then waits
+// for a subsequent bar to push the extreme further (a lower low for the
+// long/fade side, a higher high for the short/fade side) and ENTERS
+// against that fresh extreme, i.e. fading the exhaustion move rather than
+// continuing with it. This is deliberately the REVERSAL interpretation,
+// not a continuation/breakout model -- confirmed against engine.py, which
+// already has a dedicated "bb_rsi_armed_reversal" / "bb_rsi_immediate_
+// rejection" model policy pair, plus legacy aliases
+// ("bb_rsi_exhaustion_reversal", "bb_rsi_reversal") that both resolve to
+// bb_rsi_armed_reversal -- strong evidence the original strategy this is
+// rebuilding was a reversal/fade model under that exact name.
+//
+// Only the "armed" (wait-for-extra-extension) variant is built in this
+// pass, per explicit scope decision. The engine's "bb_rsi_immediate_
+// rejection" policy (a same-bar, no-wait variant) is NOT implemented here
+// and can follow later as its own addition if wanted.
+//
+// Risk, structure-stop, ATR, session, cooldown and daily-cap governance are
+// reused from the FX template essentially unchanged. The one deliberate
+// correction made here (not carried over from the FX files, where it was
+// a known but out-of-scope gap): getSessionName() below can return
+// "new_york" as its own session label, because engine.py's INSTRUMENTS
+// entry for both metals explicitly lists "new_york" as a preferred
+// session -- the FX files never needed that label since none of their
+// pairs' preferred_sessions included it.
+//
+// Stop/target math (stopAtrMultiplier = 1.60, targetRiskMultiplier =
+// 1.70, structureBufferPips = 0.6) is set to match
+// engine.py's InstrumentConfig for XAGUSD (sl_atr_mult / default_rr /
+// structure_buffer_pips) exactly, 1:1, following the same convention used
+// for the five FX pairs -- so an eventual engine-side override is a no-op
+// until the two are jointly re-tuned.
+//
+// ATR volatility band (minimumAtrPips = 2.5, maximumAtrPips =
+// 15.0) and session windows are REASONED, NOT BACKTESTED --
+// there is no live diagnostic history for XAGUSD yet, unlike the FX
+// pairs which had a 2026-10-01/02 live diagnostic to calibrate against.
+// Treat these as sane starting points to be revisited once live candidates
+// accumulate, exactly as flagged for the FX pairs' own per-pair tuning.
+//
+// ----------------------------------------------------------------------------
+// v1.1.0 (2026-10-04) -- missing reversal stage added
+// ----------------------------------------------------------------------------
+// v1.0.0 entered immediately on the fresh lower-low/higher-high that pushed
+// the exhaustion move further (the EXTEND event), with no confirmation that
+// price had actually turned. Two problems followed directly from that: (1)
+// it was fading INTO a still-falling/rising market, not an actual reversal;
+// and (2) because the model fully disarmed on every such entry and a fresh
+// BB/RSI arm trigger very commonly re-fires on the very next bar of the same
+// selloff/rally, it could stack multiple entries chasing successive new
+// extremes on one swing.
+//
+// v1.1.0 inserts a third stage between EXTEND and ENTRY: after the fresh
+// low/high, the model now WAITS for a later confirmed bar to close back
+// through that extreme bar's high (long) / low (short) before entering --
+// an objective, price-structure confirmation that the move has actually
+// turned, not just extended. A still-deeper low/high while waiting ratchets
+// the trigger level to the new extreme and restarts the reversal-wait timer,
+// so an ongoing selloff/rally keeps pushing the goalposts instead of leaving
+// the model waiting on a stale level. Reaching ENTRY still fully disarms the
+// model (one trade per armed cycle), which combined with the reversal gate
+// is what stops repeated entries on the same swing. See section 7 for the
+// full three-stage state machine.
+//
+// ----------------------------------------------------------------------------
+// v1.1.1 (2026-10-04) -- trade-frequency tuning (testing phase)
+// ----------------------------------------------------------------------------
+// A live strategy-tester export after the v1.1.0 change (XAUUSD, 2026-09-02
+// to 2026-09-29) showed only 13 trades across 27 days (~0.5/day, median gap
+// between entries ~40 hours) -- too sparse to meaningfully evaluate while
+// testing. Two changes, both easily reversible once enough live candidates
+// have accumulated to judge properly:
+//
+//   1. The stage-3 (reversal-wait) timeout previously shared maxArmedBars
+//      (8 bars / 16 min) with stage 1 (arm-wait). Waiting for an actual
+//      confirmed reversal close realistically takes longer than waiting for
+//      one more fresh low/high, so it is now its own input,
+//      maxReversalWaitBars, defaulted to 24 bars / 48 min -- three times
+//      the stage-1 budget. maxArmedBars itself is unchanged at 8.
+//   2. allowAsia defaulted to false (London/Overlap/New York only); it now
+//      defaults to true, widening the trading window to roughly 24 hours.
+//
+// Neither change touches the core signal definition (RSI 37/77 thresholds,
+// the arm/extend/reversal conditions themselves) -- both are governance
+// knobs being loosened specifically to get more candidates flowing during
+// the evaluation period.
+//
+// ----------------------------------------------------------------------------
+// v1.1.2 (2026-10-04) -- disarm-race bug fixed (setups no longer wasted on
+// rejected candidates)
+// ----------------------------------------------------------------------------
+// Found while diagnosing a frozen, never-closing simulated trade in a live
+// XAGUSD strategy-tester export: the Section 9 state machine fully disarmed
+// the armed cycle (longArmed/longAwaitingReversal etc. all reset to
+// false/na) purely on longReversalTrigger/shortReversalTrigger being
+// geometrically true -- i.e. on the price-structure confirmation alone --
+// regardless of whether the candidate that confirmation would produce was
+// actually going to be accepted downstream. If cooldown, the daily
+// candidate cap, volatility/session validity, or risk/reward (longRiskValid
+// / shortRiskValid) rejected it that same bar, the setup was silently
+// consumed anyway: no trade, no alert, and the armed cycle was gone, so the
+// model had to wait for an entirely fresh arm trigger from the band/RSI
+// before it could try again.
+//
+// Fixed by hoisting validLongCandidate / validShortCandidate (and
+// everything they depend on: rawLongCandidate/rawShortCandidate,
+// commonCandidatePass, longRiskValid/shortRiskValid, previously Sections
+// 10-12) to directly above the Section 9 state-mutation cascade, and
+// changing the two disarm conditions from "if longReversalTrigger" / "if
+// shortReversalTrigger" to "if longReversalTrigger and validLongCandidate"
+// / "if shortReversalTrigger and validShortCandidate". A reversal
+// confirmation that gets rejected downstream now falls through the
+// existing if/else-if cascade as a no-op for that bar -- the
+// awaiting-reversal state is left exactly as it was, still bounded by its
+// own longReversalTimeout/shortReversalTimeout and
+// longAwaitingReversalRecovery/shortAwaitingReversalRecovery safety valves
+// -- so it can still go on to trigger a real entry on a later bar once the
+// gate that blocked it clears (e.g. cooldown expiring), instead of being
+// thrown away. Section 17's validLongCandidate/validShortCandidate/
+// validFinalCandidate declarations were removed (no longer redeclared --
+// they are defined once, earlier, and reused as-is).
+//
+// This is a pure governance-ordering fix: the final candidate/alert/
+// strategy-entry logic itself (Sections 17-18) is unchanged, so which
+// signals actually trade is identical to before. What changes is that a
+// signal rejected by governance no longer burns the armed cycle it arrived
+// on.
+//
+// ----------------------------------------------------------------------------
+// v1.2.0 (2026-10-06) -- closed the last session blind spot; "overnight" is
+// now a real, named session instead of falling through to "unknown"
+// ----------------------------------------------------------------------------
+// Prompted by Andy wanting the strategy to trade (and be scored/learned
+// from) in every session, not just London/Overlap/New York. Two separate
+// things were found stacking to produce the near-total overnight silence
+// actually observed live, and only one of them was in this file:
+//
+//   1. engine.py's INSTRUMENTS table hard-vetoed the "asia" and "overnight"
+//      session labels outright (BLOCKED_SESSION, in _hard_rejection()) for
+//      most pairs -- fixed separately, engine-side, in v3.11.0. Not this
+//      script's problem, but worth noting here since it was the other half
+//      of the same symptom.
+//   2. HERE, in this script: validSession was built from exactly four
+//      named windows -- london (0300-0800), overlap (0800-1100), new_york
+//      (0830-1600) and asia (1800-0300), all in New York local time. Those
+//      four leave a real, unconditional gap from 1600-1800 NY (2000-2200
+//      UTC) that NO session window covers at all -- not "blocked", just
+//      never classified as anything but the "unknown" fallback in
+//      getSessionName(), which both this script's own validSession check
+//      and engine.py's session gate have always treated as a data problem,
+//      not a real session. That gap existed regardless of allowAsia and
+//      regardless of today's engine.py fix -- it could never produce a
+//      candidate, by construction, before this change.
+//
+// Fixed by adding a fifth named window, overnightSession (default
+// "1600-1800" NY local, matching the gap exactly), a matching inOvernight
+// check, and a new allowOvernight toggle (default true, mirroring the
+// existing allowAsia pattern so either can be switched off independently
+// without touching code if live results say one session isn't worth
+// taking). getSessionName() now returns "overnight" for it instead of
+// falling through to "unknown" -- "unknown" is reserved for genuine
+// classification failures again, exactly as engine.py's gate assumes.
+// allowAsia itself was already defaulted to true as of v1.1.1, so with this
+// change validSession now covers all 24 hours of the day with every hour
+// mapped to a specific, named, independently-togglable session -- nothing
+// left that silently can't be learned from.
+//
+// Pure governance/classification change: the entry-model logic itself
+// (Sections 7-9) and the risk/stop/target math are untouched.
+// ============================================================================
 
 
-# Reference schema (St Ludaetuc PostgreSQL Data Architecture spec, sections
-# 6-10): canonical naming/identifiers so values like "GBP/USD" vs "GBPUSD"
-# vs "GBP_USD" can't silently drift into different internal entities. This
-# is purely additive - no existing table, column or live ingestion path is
-# touched. The events.instrument / events.timeframe / events.environment
-# free-text columns are NOT yet foreign-keyed to these tables; that's a
-# deliberate later step (it means reconciling existing row values first,
-# e.g. events.environment is currently lowercase 'production' while the
-# spec's convention is uppercase 'PRODUCTION').
-#
-# Seed values below are read directly from this codebase's own live
-# behaviour, not guessed from the spec's illustrative examples:
-#   - instruments: the 7 pairs in INSTRUMENTS (canonical_code = OANDA style).
-#   - timeframes: the actual codes _normalize_tv_interval() produces
-#     ("{digits}m" for intraday, "d"/"w" passthrough for daily/weekly) -
-#     note this is a different notation than the spec's "M5"/"D1" style
-#     example, which is exactly the kind of drift section 49 warns about;
-#     recording the real one here is more useful than inventing a parallel
-#     one nothing actually emits.
-#   - providers: the real origin values already written by log_event()
-#     (tradingview, oanda_via_make -> OANDA + MAKE, manus_engine -> MANUS).
-#   - environments: only PRODUCTION. Per section 3.3, a non-production
-#     database would get its own separate reference.environments seeded
-#     with DEVELOPMENT/VALIDATION/DEMO/SHADOW/REPLAY - until that database
-#     exists (physical separation was deliberately deferred), keeping only
-#     PRODUCTION here means a row can't be mislabelled as DEMO even by
-#     accident, since DEMO doesn't exist as a valid value in this database.
-_REFERENCE_SCHEMA_SQL = """
-CREATE SCHEMA IF NOT EXISTS reference;
+// ============================================================================
+// 0. PAIR-SPECIFIC CONFIGURATION
+//
+// To adapt this script to a different metal or instrument:
+//   1. Edit every value in this section.
+//   2. Also edit the strategy() declaration above (title, shorttitle) -
+//      Pine requires those to be compile-time literals.
+//   3. Re-check groupRisk / groupVolatility defaults below - these were
+//      reasoned for XAG/USD (Silver) specifically and are unlikely to transfer
+//      as-is to another metal, a different FX pair, or an index/equity.
+// ============================================================================
 
-CREATE TABLE IF NOT EXISTS reference.environments (
-    environment_id SERIAL PRIMARY KEY,
-    code TEXT UNIQUE NOT NULL,
-    display_name TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS reference.instruments (
-    instrument_id SERIAL PRIMARY KEY,
-    canonical_code TEXT UNIQUE NOT NULL,
-    display_name TEXT,
-    asset_class TEXT,
-    base_currency TEXT,
-    quote_currency TEXT,
-    oanda_code TEXT,
-    tradingview_code TEXT,
-    price_precision INTEGER,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS reference.timeframes (
-    timeframe_id SERIAL PRIMARY KEY,
-    canonical_code TEXT UNIQUE NOT NULL,
-    seconds INTEGER,
-    display_name TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
-);
-
-CREATE TABLE IF NOT EXISTS reference.providers (
-    provider_id SERIAL PRIMARY KEY,
-    provider_code TEXT UNIQUE NOT NULL,
-    provider_type TEXT,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS reference.event_types (
-    event_type_id SERIAL PRIMARY KEY,
-    code TEXT UNIQUE NOT NULL,
-    description TEXT
-);
-
-INSERT INTO reference.environments (code, display_name) VALUES
-    ('PRODUCTION', 'Production')
-ON CONFLICT (code) DO NOTHING;
-
-INSERT INTO reference.instruments
-    (canonical_code, display_name, asset_class, base_currency, quote_currency, oanda_code, tradingview_code, price_precision)
-VALUES
-    ('GBP_USD', 'GBP/USD', 'fx',    'GBP', 'USD', 'GBP_USD', 'GBPUSD', 5),
-    ('EUR_USD', 'EUR/USD', 'fx',    'EUR', 'USD', 'EUR_USD', 'EURUSD', 5),
-    ('AUD_USD', 'AUD/USD', 'fx',    'AUD', 'USD', 'AUD_USD', 'AUDUSD', 5),
-    ('USD_CAD', 'USD/CAD', 'fx',    'USD', 'CAD', 'USD_CAD', 'USDCAD', 5),
-    ('USD_JPY', 'USD/JPY', 'fx',    'USD', 'JPY', 'USD_JPY', 'USDJPY', 3),
-    ('XAU_USD', 'XAU/USD', 'metal', 'XAU', 'USD', 'XAU_USD', 'XAUUSD', 2),
-    ('XAG_USD', 'XAG/USD', 'metal', 'XAG', 'USD', 'XAG_USD', 'XAGUSD', 3)
-ON CONFLICT (canonical_code) DO NOTHING;
-
-INSERT INTO reference.timeframes (canonical_code, seconds, display_name) VALUES
-    ('1m',   60,     '1 minute'),
-    ('2m',   120,    '2 minutes'),
-    ('3m',   180,    '3 minutes'),
-    ('5m',   300,    '5 minutes'),
-    ('10m',  600,    '10 minutes'),
-    ('15m',  900,    '15 minutes'),
-    ('30m',  1800,   '30 minutes'),
-    ('60m',  3600,   '1 hour'),
-    ('240m', 14400,  '4 hours'),
-    ('d',    86400,  '1 day'),
-    ('w',    604800, '1 week')
-ON CONFLICT (canonical_code) DO NOTHING;
-
-INSERT INTO reference.providers (provider_code, provider_type) VALUES
-    ('TRADINGVIEW', 'market_data'),
-    ('OANDA',       'broker'),
-    ('MAKE',        'automation'),
-    ('MANUS',       'agent_runtime')
-ON CONFLICT (provider_code) DO NOTHING;
-
-INSERT INTO reference.event_types (code, description) VALUES
-    ('market_data',   'Raw market tick/candle data received from TradingView'),
-    ('prediction',    'Intelligence evaluation output logged at /evaluate time, keyed by meta.signal_id'),
-    ('trade_opened',  'OANDA order-placement confirmation for an approved signal, keyed by meta.signal_id, carrying the resulting OANDA trade ID'),
-    ('trade_outcome', 'Closed-trade result reconciled from OANDA, keyed by the OANDA trade ID')
-ON CONFLICT (code) DO NOTHING;
-"""
+string pairSymbol            = "XAGUSD"
+string pairDisplayName       = "XAG/USD (Silver)"
+string pairBrokerSymbol      = "XAG_USD"
+string pairBaseCurrency      = "XAG"
+string pairQuoteCurrency     = "USD"
+float  pairPipSize           = 0.01
+int    pairPriceDecimals     = 3
+float  pairContractSize      = 1
+float  pairUnitStep          = 1
+float  pairMinUnits          = 1
+float  pairMaxUnits          = 5000
+string metalSymbol           = "XAG"
+string strategyIdSlug        = "stl_xagusd_2m_candidate_generator_v2"
+string strategyVersionString = "2.0.0"
+string strategyDisplayName   = "St Ludaetuc XAG/USD 2-Minute Candidate Generator"
+string signalIdPrefix        = "STL-XAGUSD-2M-V2"
+string tickerMatchString     = "XAGUSD"
+string schemaVersionString   = "1.1.0"
+string engineExpectedVersion = "4.1.0"
+string strategyRevisionDate  = "2026-10-26"
 
 
-def _ensure_events_schema() -> None:
-    pool = _get_pool()
-    if pool is None:
-        return
-    conn = pool.getconn()
-    try:
-        with conn, conn.cursor() as cur:
-            cur.execute(_EVENTS_SCHEMA_SQL)
-            cur.execute(_REFERENCE_SCHEMA_SQL)
-    finally:
-        pool.putconn(conn)
+// ============================================================================
+// 1. INPUTS
+// ============================================================================
 
+string groupGeneral = "General"
 
-def _parse_event_time(raw: Any) -> datetime:
-    if raw is None:
-        return datetime.now(timezone.utc)
-    if isinstance(raw, datetime):
-        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
-    s = str(raw).strip()
-    if s.endswith("Z"):
-        s = s[:-1] + "+00:00"
-    try:
-        dt = datetime.fromisoformat(s)
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-    except ValueError:
-        pass
-    try:
-        ms = float(s)
-        ts = ms / 1000.0 if ms > 1e12 else ms
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
-    except Exception:
-        return datetime.now(timezone.utc)
+bool enableAlerts = input.bool(
+     true,
+     "Enable canonical JSON alerts",
+     group = groupGeneral
+)
 
+bool simulateCandidates = input.bool(
+     true,
+     "Simulate candidates as strategy trades",
+     tooltip = "Displays candidate entries in Strategy Tester. Manus remains the execution authority.",
+     group = groupGeneral
+)
 
-def log_event(
-    event_type: str,
-    origin: str,
-    event_time: datetime,
-    payload: Dict[str, Any],
-    *,
-    event_id: Optional[str] = None,
-    trade_id: Optional[str] = None,
-    instrument: Optional[str] = None,
-    timeframe: Optional[str] = None,
-    destination: Optional[str] = None,
-    strategy_version: Optional[str] = None,
-    model_version: Optional[str] = None,
-    status: Optional[str] = None,
-    environment: str = "production",
-    related_experiment_id: Optional[str] = None,
-    related_deployment_id: Optional[str] = None,
-) -> str:
-    pool = _get_pool()
-    if pool is None:
-        raise RuntimeError("DATABASE_URL not configured or Postgres pool unavailable")
+bool enableLongs = input.bool(
+     true,
+     "Enable long candidates",
+     group = groupGeneral
+)
 
-    if event_id is None:
-        basis = f"{event_type}:{origin}:{instrument}:{timeframe}:{trade_id}:{event_time.isoformat()}"
-        event_id = hashlib.sha256(basis.encode("utf-8")).hexdigest()
+bool enableShorts = input.bool(
+     true,
+     "Enable short candidates",
+     group = groupGeneral
+)
 
-    conn = pool.getconn()
-    try:
-        with conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO events (
-                    event_id, event_type, origin, destination, trade_id,
-                    instrument, timeframe, event_time, schema_version,
-                    strategy_version, model_version, environment, status,
-                    related_experiment_id, related_deployment_id, payload
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (event_id) DO UPDATE SET
-                    payload = EXCLUDED.payload,
-                    status = EXCLUDED.status,
-                    received_at = now(),
-                    retry_count = events.retry_count + 1
-                """,
-                (
-                    event_id, event_type, origin, destination, trade_id,
-                    instrument, timeframe, event_time, EVENTS_SCHEMA_VERSION,
-                    strategy_version, model_version, environment, status,
-                    related_experiment_id, related_deployment_id, _PgJson(payload),
-                ),
-            )
-    finally:
-        pool.putconn(conn)
-    return event_id
+int cooldownBars = input.int(
+     5,
+     "Minimum bars between candidates",
+     minval = 0,
+     maxval = 100,
+     tooltip = "Five bars equals ten minutes on a two-minute chart.",
+     group = groupGeneral
+)
 
-
-def _normalize_tv_ticker(raw: Any) -> str:
-    s = str(raw or "").upper().strip()
-    if ":" in s:
-        s = s.split(":")[-1]
-    return s.replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
-
-
-def _normalize_tv_interval(raw: Any) -> str:
-    s = str(raw or "").strip().lower()
-    return f"{s}m" if s.isdigit() else s
-
-
-class EvaluateRequest(BaseModel):
-    payload: Optional[Dict[str, Any]] = None
-    account: Optional[Dict[str, Any]] = None
-    # Ground-truth pair symbol from the calling Make scenario (e.g. "AUDUSD"),
-    # independent of whatever the Pine Script payload's instrument.* fields
-    # say. Optional and backward compatible: callers that don't send it get
-    # the old payload-self-reported behavior unchanged. See normalize_symbol().
-    authoritative_instrument: Optional[str] = None
-    model_config = {"extra": "allow"}
-
-
-@dataclass(frozen=True)
-class InstrumentConfig:
-    symbol: str
-    broker_symbol: str
-    pip_size: float
-    tick_size: float
-    contract_size: float
-    unit_step: float
-    min_units: float
-    max_units: float
-    max_risk_percent: float
-    max_spread_price: float
-    max_slippage_price: float
-    sl_atr_mult: float
-    default_rr: float
-    structure_buffer_pips: float
-    preferred_sessions: Tuple[str, ...]
-    blocked_sessions: Tuple[str, ...]
-    # True when this pair's quote currency is the same as the account
-    # currency (USD, for this practice account) - GBP/USD, EUR/USD,
-    # AUD/USD, XAU/USD, XAG/USD are all quoted in USD. False for USD/CAD
-    # and USD/JPY, whose quote currency is CAD/JPY, not USD. See the
-    # account_ccy_conversion_rate comment in plan_trade() for why this
-    # matters for position sizing.
-    quote_ccy_is_account_ccy: bool
-
-
-@dataclass(frozen=True)
-class ModelPolicy:
-    enabled: bool
-    research_only: bool
-    min_probability: float
-    min_expected_net_r: float
-    min_rr: float
-    min_pre_gate_score: float
-    preferred_regimes: Tuple[str, ...]
-    blocked_regimes: Tuple[str, ...]
-
-
-# structure_buffer_pips mirrors each Pine script's "Structure buffer, pips"
-# input (candidate generator, section "12. PROPOSED STOP AND TARGET").
-# Confirmed at 0.6 pips / 12-bar lookback across all 5 pairs as of the
-# v5.1.0 rebuild (STL_{PAIR}_2m_CandidateGenerator_v5.pine, 2026-10-03) -
-# re-verify this value if any pair's script changes it going forward.
-#
-# Trailing bool on each line below is quote_ccy_is_account_ccy: True for the
-# three XXX/USD pairs and both metals (quote currency USD == account
-# currency), False for USD/CAD and USD/JPY (quote currency CAD/JPY).
-#
-# v3.11.0 (2026-10-06): blocked_sessions narrowed to just ("unknown",) for
-# every pair, at Andy's request - previously "overnight" (all pairs) and
-# "asia" (every pair except AUD/USD) were hard-vetoed in _hard_rejection()
-# (BLOCKED_SESSION), so those sessions produced zero trades regardless of
-# signal quality - there was no way to learn whether the strategy actually
-# works outside the London/NY window because it was never allowed to try.
-# "unknown" stays blocked - that value means the Pine payload's own session
-# classification failed/was missing, a data-quality problem, not a real
-# session, so it's still treated as a hard-reject rather than something to
-# learn from. preferred_sessions is unchanged (still only the previously-
-# proven-good sessions get the +15 bonus in context_score() - everything
-# else, including the newly-unblocked ones, gets the neutral -5 "other"
-# treatment instead of the old -25 "blocked" penalty) so the model isn't
-# pre-biased toward or against asia/overnight before any real data exists on
-# them. Every other gate (spread/slippage limits, extreme-volatility block,
-# RR/probability/expected-value floors) is untouched and still applies in
-# every session - this change only removes the blanket time-of-day veto.
-INSTRUMENTS: Dict[str, InstrumentConfig] = {
-    "GBPUSD": InstrumentConfig("GBPUSD", "GBP_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.50, 1.60, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-    "EURUSD": InstrumentConfig("EURUSD", "EUR_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00020, 0.00010, 1.40, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-    "AUDUSD": InstrumentConfig("AUDUSD", "AUD_USD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00025, 0.00012, 1.45, 1.55, 0.6, ("asia", "london", "overlap_london_new_york"), ("unknown",), True),
-    "USDCAD": InstrumentConfig("USDCAD", "USD_CAD", 0.0001, 0.00001, 100000, 1, 1, 200000, 0.50, 0.00030, 0.00015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False),
-    "USDJPY": InstrumentConfig("USDJPY", "USD_JPY", 0.01, 0.001, 100000, 1, 1, 200000, 0.50, 0.030, 0.015, 1.45, 1.55, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), False),
-    "XAUUSD": InstrumentConfig("XAUUSD", "XAU_USD", 0.1, 0.01, 1, 1, 1, 500, 0.35, 0.60, 0.30, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-    "XAGUSD": InstrumentConfig("XAGUSD", "XAG_USD", 0.01, 0.001, 1, 1, 1, 5000, 0.35, 0.030, 0.015, 1.60, 1.70, 0.6, ("london", "overlap_london_new_york", "new_york"), ("unknown",), True),
-}
-
-MODEL_POLICIES: Dict[str, ModelPolicy] = {
-    "trend_pullback": ModelPolicy(True, False, 0.53, 0.05, 1.35, 72.0, ("trend", "trend_pullback"), ("extreme",)),
-    "momentum_continuation": ModelPolicy(True, False, 0.55, 0.06, 1.40, 74.0, ("trend", "breakout"), ("range", "extreme")),
-    "range_reversal": ModelPolicy(True, True, 0.58, 0.10, 1.50, 80.0, ("range", "range_to_reversal"), ("trend", "breakout", "extreme")),
-    "bb_rsi_immediate_rejection": ModelPolicy(True, True, 0.60, 0.10, 1.50, 82.0, ("range", "range_to_reversal"), ("trend", "breakout", "extreme")),
-    "bb_rsi_armed_reversal": ModelPolicy(True, True, 0.58, 0.08, 1.45, 80.0, ("range", "range_to_reversal"), ("breakout", "extreme")),
-    "mean_reversion_with_trend_filter": ModelPolicy(False, True, 0.65, 0.15, 1.60, 90.0, ("range",), ("trend", "breakout", "extreme")),
-    "unknown": ModelPolicy(False, True, 0.65, 0.15, 1.60, 90.0, tuple(), ("unknown", "extreme")),
-}
-
-REQUIRED_FIELDS = (
-    "meta.signal_id",
-    "system.strategy_id",
-    "system.strategy_version",
-    "instrument.symbol",
-    "market.timeframe",
-    "market.bar_time_utc",
-    "signal.direction",
-    "signal.entry_model",
-    "price.close",
-    "indicators.atr",
+int maximumCandidatesPerDay = input.int(
+     18,
+     "Maximum candidates per day",
+     minval = 1,
+     maxval = 100,
+     group = groupGeneral
 )
 
 
-def get_path(d: Dict[str, Any], path: str, default: Any = None) -> Any:
-    cur: Any = d
-    for part in path.split("."):
-        if not isinstance(cur, dict) or part not in cur:
-            return default
-        cur = cur[part]
-    return cur
-
-
-def set_path(d: Dict[str, Any], path: str, value: Any) -> None:
-    cur = d
-    parts = path.split(".")
-    for part in parts[:-1]:
-        if part not in cur or not isinstance(cur[part], dict):
-            cur[part] = {}
-        cur = cur[part]
-    cur[parts[-1]] = value
-
-
-def as_float(x: Any, default: Optional[float] = None) -> Optional[float]:
-    if x is None:
-        return default
-    try:
-        if isinstance(x, str):
-            x = x.replace("£", "").replace("$", "").replace(",", "").strip()
-            if x.lower() in ("", "none", "null", "nan"):
-                return default
-        value = float(x)
-        return value if isfinite(value) else default
-    except Exception:
-        return default
-
-
-def as_str(x: Any, default: str = "") -> str:
-    return default if x is None else str(x)
-
-
-def as_bool(x: Any, default: bool = False) -> bool:
-    # Make.com's HTTP templates send every field as a JSON string (e.g. "true"),
-    # not a native JSON boolean, so a strict `x is True` check silently never
-    # fires. Coerce both real booleans and their string/number spellings.
-    if x is None:
-        return default
-    if isinstance(x, bool):
-        return x
-    if isinstance(x, (int, float)):
-        return bool(x)
-    s = str(x).strip().lower()
-    if s in ("true", "1", "yes", "y", "on"):
-        return True
-    if s in ("false", "0", "no", "n", "off", ""):
-        return False
-    return default
-
-
-def clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
-
-
-def round_to_tick(price: float, tick: float) -> float:
-    return round(round(price / tick) * tick, 10) if tick > 0 else price
-
-
-def round_to_step(units: float, step: float) -> float:
-    return floor(units / step) * step if step > 0 else units
-
-
-def normalize_symbol(payload: Dict[str, Any], authoritative: Optional[str] = None) -> Tuple[Optional[str], str]:
-    # `authoritative` is a pair symbol supplied by the CALLER (Make), not by
-    # the Pine Script alert payload. Each Make scenario already hardcodes its
-    # own correct OANDA instrument for order placement (see modules
-    # 101/102), so it can supply that same value here as ground truth. This
-    # takes priority over the payload's self-reported instrument.* fields,
-    # which come straight from the TradingView alert and have been found to
-    # be wrong for pairs still running a pre-rebuild, cloned-from-EURUSD
-    # Pine script (their instrument.symbol/broker_symbol/display_name say
-    # "EURUSD" regardless of the pair actually being traded). Without this,
-    # normalize_symbol() silently picks the wrong InstrumentConfig - wrong
-    # spread/slippage limits, ATR stop multiplier, and session gating - for
-    # every one of those mislabeled pairs. This is a mitigation, not a fix:
-    # the payload's own instrument.* fields should still be corrected at the
-    # Pine Script source; this just stops the engine from being fooled by
-    # them in the meantime.
-    if authoritative:
-        key = str(authoritative).upper().replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
-        if key in INSTRUMENTS:
-            return key, "authoritative_override"
-
-    for raw in (
-        get_path(payload, "instrument.symbol"),
-        get_path(payload, "instrument.broker_symbol"),
-        get_path(payload, "instrument.display_name"),
-    ):
-        if raw:
-            key = str(raw).upper().replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
-            if key in INSTRUMENTS:
-                return key, "payload_self_reported"
-    return None, "unresolved"
-
-
-def normalize_model(payload: Dict[str, Any]) -> str:
-    raw = as_str(get_path(payload, "signal.entry_model"), "unknown").strip().lower()
-    aliases = {
-        "trend pullback": "trend_pullback",
-        "momentum continuation": "momentum_continuation",
-        "range reversal": "range_reversal",
-        "bb_rsi_exhaustion_reversal": "bb_rsi_armed_reversal",
-        "bb_rsi_reversal": "bb_rsi_armed_reversal",
-    }
-    model = aliases.get(raw, raw)
-    return model if model in MODEL_POLICIES else "unknown"
-
-
-def validate_data(payload: Dict[str, Any]) -> Tuple[bool, float, Dict[str, Any]]:
-    missing = [p for p in REQUIRED_FIELDS if get_path(payload, p) in (None, "")]
-    invalid = []
-    if as_str(get_path(payload, "signal.direction"), "").lower() not in ("long", "short"):
-        invalid.append("signal.direction")
-    if (as_float(get_path(payload, "price.close"), 0.0) or 0.0) <= 0:
-        invalid.append("price.close")
-    if (as_float(get_path(payload, "indicators.atr"), 0.0) or 0.0) <= 0:
-        invalid.append("indicators.atr")
-
-    bid = as_float(get_path(payload, "price.bid"))
-    ask = as_float(get_path(payload, "price.ask"))
-    spread = as_float(get_path(payload, "price.spread_price"))
-    execution_data_complete = bid is not None and ask is not None and ask >= bid and spread is not None
-
-    context_status = as_str(get_path(payload, "context.context_status"), "unchecked").lower()
-    score = 100.0 - 8.0 * len(missing) - 15.0 * len(invalid)
-    if not execution_data_complete:
-        score -= 20.0
-    if context_status in ("unchecked", "unknown", ""):
-        score -= 10.0
-
-    return not missing and not invalid, clamp(score, 0.0, 100.0), {
-        "missing_fields": missing,
-        "invalid_fields": invalid,
-        "execution_data_complete": execution_data_complete,
-        "context_status": context_status,
-    }
-
-
-def signal_score(payload: Dict[str, Any], model: str) -> float:
-    direction = as_str(get_path(payload, "signal.direction"), "neutral").lower()
-    rsi = as_float(get_path(payload, "indicators.rsi"))
-    ema_fast = as_float(get_path(payload, "indicators.ema_fast"))
-    ema_slow = as_float(get_path(payload, "indicators.ema_slow"))
-    macd = as_float(get_path(payload, "indicators.macd_histogram"))
-    htf = as_str(get_path(payload, "structure.higher_timeframe_bias"), "unknown").lower()
-    trend = as_str(get_path(payload, "structure.trend_bias"), "unknown").lower()
-    vol = as_str(get_path(payload, "structure.volatility_regime"), "unknown").lower()
-    adx = as_float(get_path(payload, "indicators.adx"))
-    candidate_strength = as_float(get_path(payload, "extensions.candidate_strength"), 50.0) or 50.0
-    conviction_score = as_float(get_path(payload, "signal.conviction_score"), 50.0) or 50.0
-
-    score = 45.0
-    if direction == "long":
-        if ema_fast is not None and ema_slow is not None:
-            score += 8 if ema_fast >= ema_slow else -8
-        score += 8 if trend == "bullish" else (-12 if trend == "bearish" else 0)
-        score += 10 if htf == "bullish" else (-12 if htf == "bearish" else -3)
-        score += 6 if rsi is not None and 35 <= rsi <= 62 else 0
-        score += 4 if macd is not None and macd >= 0 else 0
-    else:
-        if ema_fast is not None and ema_slow is not None:
-            score += 8 if ema_fast <= ema_slow else -8
-        score += 8 if trend == "bearish" else (-12 if trend == "bullish" else 0)
-        score += 10 if htf == "bearish" else (-12 if htf == "bullish" else -3)
-        score += 6 if rsi is not None and 38 <= rsi <= 65 else 0
-        score += 4 if macd is not None and macd <= 0 else 0
-
-    if model == "trend_pullback":
-        score += 6
-    elif model == "momentum_continuation":
-        score += 3
-    elif model in ("range_reversal", "bb_rsi_immediate_rejection", "bb_rsi_armed_reversal"):
-        score -= 5
-
-    score += 6 if vol == "normal" else (1 if vol in ("low", "high") else -12)
-    if adx is not None:
-        if model in ("range_reversal", "bb_rsi_immediate_rejection", "bb_rsi_armed_reversal"):
-            score += 6 if adx <= 25 else (-10 if adx >= 35 else 0)
-        elif 15 <= adx <= 40:
-            score += 5
-
-    score += clamp((candidate_strength - 50.0) * 0.20, -8.0, 8.0)
-    score += clamp((conviction_score - 50.0) * 0.12, -6.0, 6.0)
-    return clamp(score, 0.0, 100.0)
-
-
-def context_score(payload: Dict[str, Any], cfg: InstrumentConfig) -> float:
-    session = as_str(get_path(payload, "market.session_name"), "unknown").lower()
-    status = as_str(get_path(payload, "context.context_status"), "unchecked").lower()
-    event = as_bool(get_path(payload, "context.high_impact_event_nearby"), False)
-
-    score = 50.0
-    score += 15 if session in cfg.preferred_sessions else (-25 if session in cfg.blocked_sessions else -5)
-    score += 20 if status == "clear" else (-15 if status in ("warning", "unchecked", "unknown", "") else -50)
-    if event:
-        score -= 35
-    return clamp(score, 0.0, 100.0)
-
-
-def fit_score(payload: Dict[str, Any], policy: ModelPolicy) -> float:
-    market_regime = as_str(get_path(payload, "structure.market_regime"), "unknown").lower()
-    vol = as_str(get_path(payload, "structure.volatility_regime"), "unknown").lower()
-
-    if not policy.enabled:
-        return 0.0
-
-    score = 50.0
-    score += 20 if market_regime in policy.preferred_regimes else (-30 if market_regime in policy.blocked_regimes else 0)
-    score += 10 if vol == "normal" else (2 if vol in ("low", "high") else -15)
-    if policy.research_only:
-        score -= 8
-    return clamp(score, 0.0, 100.0)
-
-
-def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: InstrumentConfig, policy: ModelPolicy) -> Dict[str, Any]:
-    direction = as_str(get_path(payload, "signal.direction"), "neutral").lower()
-    entry = as_float(get_path(payload, "risk.proposed_entry")) or as_float(get_path(payload, "price.close")) or 0.0
-    atr = as_float(get_path(payload, "indicators.atr"), 0.0) or 0.0
-
-    # pine_proposal_only / allow_manus_override_sl_tp: when the candidate
-    # generator marks its own proposed_stop_loss/proposed_take_profit as a
-    # non-authoritative proposal (rather than a value to execute verbatim),
-    # and explicitly grants the engine permission to override it, the engine
-    # ignores Pine's numbers and computes its own stop/target below - the
-    # same math already used as the missing-data fallback, just now applied
-    # unconditionally rather than only when Pine sent nothing. This is what
-    # makes Manus the actual execution authority for risk placement, instead
-    # of a pass-through of Pine's suggestion.
-    pine_proposal_only = as_bool(get_path(payload, "extensions.pine_proposal_only"), False)
-    allow_override = as_bool(get_path(payload, "extensions.allow_manus_override_sl_tp"), False)
-    engine_authoritative_sl_tp = pine_proposal_only and allow_override
-
-    sl = None if engine_authoritative_sl_tp else as_float(get_path(payload, "risk.proposed_stop_loss"))
-    tp = None if engine_authoritative_sl_tp else as_float(get_path(payload, "risk.proposed_take_profit"))
-    source = "payload"
-    stop_basis = None
-
-    if sl is None or tp is None:
-        # Mirrors Pine's own stop formula exactly (candidate generator
-        # v5.0.0, section "12. PROPOSED STOP AND TARGET"): the wider of a
-        # plain ATR stop and a structure stop set just beyond the recent
-        # N-bar swing high/low plus a small buffer. structure.nearest_support
-        # / structure.nearest_resistance are Pine's own rolling
-        # ta.lowest(low, structureLookback) / ta.highest(high,
-        # structureLookback) values (confirmed forwarded by Make module 98),
-        # so this reproduces Pine's proposal rather than a cruder ATR-only
-        # approximation - the engine's fallback/authoritative stop now
-        # matches what Pine itself would have proposed.
-        buffer_price = cfg.structure_buffer_pips * cfg.pip_size
-        nearest_support = as_float(get_path(payload, "structure.nearest_support"))
-        nearest_resistance = as_float(get_path(payload, "structure.nearest_resistance"))
-        atr_dist = atr * cfg.sl_atr_mult if atr > 0 else entry * 0.001
-        rr = max(cfg.default_rr, policy.min_rr)
-
-        if direction == "long":
-            atr_stop = entry - atr_dist
-            if nearest_support is not None:
-                structure_stop = nearest_support - buffer_price
-                sl = min(atr_stop, structure_stop)
-                stop_basis = "structure" if structure_stop < atr_stop else "atr"
-            else:
-                sl = atr_stop
-                stop_basis = "atr"
-            raw_stop_dist = entry - sl
-            tp = entry + raw_stop_dist * rr
-        elif direction == "short":
-            atr_stop = entry + atr_dist
-            if nearest_resistance is not None:
-                structure_stop = nearest_resistance + buffer_price
-                sl = max(atr_stop, structure_stop)
-                stop_basis = "structure" if structure_stop > atr_stop else "atr"
-            else:
-                sl = atr_stop
-                stop_basis = "atr"
-            raw_stop_dist = sl - entry
-            tp = entry - raw_stop_dist * rr
-        else:
-            sl, tp = None, None
-        source = "manus_authoritative_atr_structure" if engine_authoritative_sl_tp else "manus_atr_structure_fallback"
-
-    if sl is None or tp is None or entry <= 0:
-        return {"entry": entry, "sl": None, "tp": None, "rr": None, "units": None, "lots": None, "account_ccy_conversion_rate": None, "source": source, "stop_basis": stop_basis}
-
-    entry, sl, tp = round_to_tick(entry, cfg.tick_size), round_to_tick(sl, cfg.tick_size), round_to_tick(tp, cfg.tick_size)
-    stop_dist = abs(entry - sl)
-    target_dist = abs(tp - entry)
-    rr = target_dist / stop_dist if stop_dist > 0 else None
-
-    equity = as_float(account.get("balance")) or as_float(account.get("margin_available")) or 10000.0
-    risk_pct = min(as_float(get_path(payload, "risk.risk_percent"), cfg.max_risk_percent) or cfg.max_risk_percent, cfg.max_risk_percent)
-    risk_cash = equity * risk_pct / 100.0
-
-    # Account-currency conversion (added v3.5.0 - see the comment above
-    # ENGINE_VERSION for the full writeup). risk_cash is in account currency
-    # (USD). stop_dist is a raw price distance in the PAIR'S QUOTE currency.
-    # units = risk_cash / stop_dist is only dimensionally correct when quote
-    # currency == account currency, i.e. cfg.quote_ccy_is_account_ccy is
-    # True (GBP/USD, EUR/USD, AUD/USD, XAU/USD, XAG/USD).
-    #
-    # For USD/CAD and USD/JPY, the quote currency is CAD/JPY: a price move
-    # of stop_dist produces a loss denominated in CAD/JPY, not USD, and that
-    # has to be converted back to USD at the live rate before it can be
-    # compared to a USD risk budget. Because these are USD/XXX pairs (base
-    # currency == account currency == USD), that live conversion rate is
-    # just the pair's own current price - by definition, "1 XXX per 1 USD"
-    # - so multiplying risk_cash by entry before dividing by stop_dist does
-    # the conversion correctly, using today's actual rate rather than a
-    # fixed guess.
-    #
-    # Before this fix, USD/JPY units came out ~100-150x too small (every
-    # JPY of notional loss was being treated as if it were a dollar), which
-    # is what the "* 100" multiplier manually added to the USD/JPY Make
-    # scenario's math module was compensating for - a static approximation
-    # of this same conversion that drifts as USD/JPY's price moves. USD/CAD
-    # had the identical bug, just quieter (~30-40% undersized, since
-    # USD/CAD trades much closer to 1.0 than USD/JPY does). That Make-side
-    # multiplier should be removed now that the engine applies the correct,
-    # live-price-based conversion itself - leaving it in place would double
-    # -apply the correction.
-    account_ccy_conversion_rate = 1.0 if cfg.quote_ccy_is_account_ccy else entry
-    units = round_to_step(risk_cash * account_ccy_conversion_rate / stop_dist, cfg.unit_step) if stop_dist > 0 else 0.0
-    units = clamp(units, cfg.min_units, cfg.max_units)
-    units = -abs(units) if direction == "short" else abs(units)
-
-    return {
-        "entry": entry,
-        "sl": sl,
-        "tp": tp,
-        "rr": rr,
-        "units": units,
-        "lots": abs(units) / cfg.contract_size,
-        "stop_distance": stop_dist,
-        "risk_percent": risk_pct,
-        "risk_cash": risk_cash,
-        "account_ccy_conversion_rate": account_ccy_conversion_rate,
-        "source": source,
-        "stop_basis": stop_basis,
-    }
-
-
-def cost_r(payload: Dict[str, Any], cfg: InstrumentConfig, plan: Dict[str, Any]) -> Tuple[float, Dict[str, Any]]:
-    spread = as_float(get_path(payload, "price.spread_price"))
-    if spread is None:
-        bid = as_float(get_path(payload, "price.bid"))
-        ask = as_float(get_path(payload, "price.ask"))
-        if bid is not None and ask is not None and ask >= bid:
-            spread = ask - bid
-
-    spread_used = spread if spread is not None else cfg.max_spread_price
-    slippage = as_float(get_path(payload, "execution.expected_slippage_price")) or as_float(get_path(payload, "risk.max_slippage_allowed")) or cfg.max_slippage_price
-    commission = as_float(get_path(payload, "costs.commission_price_equivalent"), 0.0) or 0.0
-    financing = as_float(get_path(payload, "costs.estimated_financing_price_equivalent"), 0.0) or 0.0
-    stop_dist = as_float(plan.get("stop_distance"), 0.0) or 0.0
-
-    total_price_cost = max(spread_used, 0.0) + max(slippage, 0.0) + max(commission, 0.0) + max(financing, 0.0)
-    result = total_price_cost / stop_dist if stop_dist > 0 else 1.0
-
-    return result, {
-        "spread": spread,
-        "spread_used": spread_used,
-        "spread_estimated": spread is None,
-        "slippage": slippage,
-        "commission_price_equivalent": commission,
-        "financing_price_equivalent": financing,
-        "total_price_cost": total_price_cost,
-        "cost_r": result,
-    }
-
-
-def risk_score(payload: Dict[str, Any], account: Dict[str, Any], cfg: InstrumentConfig, policy: ModelPolicy, plan: Dict[str, Any], costs: Dict[str, Any]) -> float:
-    rr = as_float(plan.get("rr"), 0.0) or 0.0
-    risk_pct = as_float(get_path(payload, "risk.risk_percent"), cfg.max_risk_percent) or cfg.max_risk_percent
-    spread = as_float(costs.get("spread"))
-    slippage = as_float(costs.get("slippage"), 0.0) or 0.0
-    cr = as_float(costs.get("cost_r"), 1.0) or 1.0
-    heat = as_float(account.get("portfolio_heat_percent"), 0.0) or 0.0
-    open_trades = as_float(account.get("open_trade_count"), 0.0) or 0.0
-
-    score = 60.0
-    score += 15 if rr >= policy.min_rr else -30
-    score += 8 if risk_pct <= cfg.max_risk_percent else -30
-    score += -15 if spread is None else (8 if spread <= cfg.max_spread_price else -30)
-    score += -12 if slippage > cfg.max_slippage_price else 0
-    score += 8 if cr <= 0.15 else (2 if cr <= 0.30 else -20)
-    score += -25 if heat > 3.0 else 0
-    score += -15 if open_trades >= 4 else 0
-    return clamp(score, 0.0, 100.0)
-
-
-def estimate_probability(signal: float, context: float, fit: float, data_quality: float, policy: ModelPolicy) -> float:
-    composite = signal * 0.35 + context * 0.20 + fit * 0.30 + data_quality * 0.15
-    probability = 0.20 + (composite / 100.0) * 0.45
-    if policy.research_only:
-        probability -= 0.05
-    if not policy.enabled:
-        probability = 0.0
-    return clamp(probability, 0.05, 0.75)
-
-
-class TradingSignalEvaluationEngine:
-    def evaluate(self, request_body: Dict[str, Any]) -> Dict[str, Any]:
-        req = EvaluateRequest(**request_body)
-        payload = req.payload if isinstance(req.payload, dict) else req.model_dump()
-        account = req.account if isinstance(req.account, dict) else {}
-
-        if not payload:
-            return self._reject({}, "Invalid or empty payload.", "schema", "INVALID_PAYLOAD")
-
-        symbol, instrument_resolved_via = normalize_symbol(payload, req.authoritative_instrument)
-        if symbol is None:
-            return self._reject(payload, "Unsupported or missing instrument.", "instrument", "UNSUPPORTED_INSTRUMENT")
-
-        cfg = INSTRUMENTS[symbol]
-        model = normalize_model(payload)
-        policy = MODEL_POLICIES[model]
-
-        dq_pass, dq_score, dq_diag = validate_data(payload)
-        sig = signal_score(payload, model)
-        ctx = context_score(payload, cfg)
-        fit = fit_score(payload, policy)
-        plan = plan_trade(payload, account, cfg, policy)
-        cr, cost_diag = cost_r(payload, cfg, plan)
-        risk = risk_score(payload, account, cfg, policy, plan, cost_diag)
-        prob = estimate_probability(sig, ctx, fit, dq_score, policy)
-
-        rr = as_float(plan.get("rr"), 0.0) or 0.0
-        gross_ev_r = prob * rr - (1.0 - prob)
-        net_ev_r = gross_ev_r - cr
-        pre_gate_score = dq_score * 0.15 + sig * 0.25 + risk * 0.25 + ctx * 0.15 + fit * 0.20
-
-        diagnostics = {
-            "engine_version": ENGINE_VERSION,
-            "ruleset_version": RULESET_VERSION,
-            "calibration_version": CALIBRATION_VERSION,
-            "probability_is_calibrated": False,
-            "instrument_resolved_via": instrument_resolved_via,
-            "data_quality": dq_diag,
-            "costs": cost_diag,
-            "trade_plan_preview": plan,
-            "policy": policy.__dict__,
-        }
-
-        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag)
-        if rejection:
-            stage, reason, code = rejection
-            return self._result(payload, cfg, model, "rejected", stage, reason, code, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
-
-        passed = (
-            pre_gate_score >= policy.min_pre_gate_score
-            and prob >= policy.min_probability
-            and net_ev_r >= policy.min_expected_net_r
+// ----------------------------------------------------------------------------
+
+string groupTrend = "Trend features (classification/scoring only -- the entry model below does not gate on these)"
+
+int emaFastLength = input.int(
+     20,
+     "Fast EMA",
+     minval = 2,
+     group = groupTrend
+)
+
+int emaSlowLength = input.int(
+     50,
+     "Slow EMA",
+     minval = 5,
+     group = groupTrend
+)
+
+int emaRegimeLength = input.int(
+     200,
+     "Regime EMA",
+     minval = 20,
+     group = groupTrend
+)
+
+int htfEmaLength = input.int(
+     50,
+     "Higher-timeframe EMA",
+     minval = 5,
+     group = groupTrend
+)
+
+string higherTimeframe = input.timeframe(
+     "10",
+     "Higher timeframe",
+     group = groupTrend
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupMomentum = "Momentum features"
+
+int rsiLength = input.int(
+     14,
+     "RSI length",
+     minval = 2,
+     group = groupMomentum
+)
+
+int macdFastLength = input.int(
+     12,
+     "MACD fast",
+     minval = 2,
+     group = groupMomentum
+)
+
+int macdSlowLength = input.int(
+     26,
+     "MACD slow",
+     minval = 3,
+     group = groupMomentum
+)
+
+int macdSignalLength = input.int(
+     9,
+     "MACD signal",
+     minval = 2,
+     group = groupMomentum
+)
+
+int adxLength = input.int(
+     14,
+     "ADX length",
+     minval = 2,
+     group = groupMomentum
+)
+
+float minimumAdx = input.float(
+     15.0,
+     "Minimum ADX (classification only)",
+     minval = 0.0,
+     step = 0.5,
+     tooltip = "Used only for the trendBias/marketRegime classification fields in the payload and for scoring. The entry model below does not require a minimum ADX -- engine.py's bb_rsi_armed_reversal policy deliberately does not block the trend regime, since an exhaustion fade is meant to fire inside an established trend's pullback, not only in a range.",
+     group = groupMomentum
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupVolatility = "Volatility features"
+
+int atrLength = input.int(
+     14,
+     "ATR length",
+     minval = 2,
+     group = groupVolatility
+)
+
+float minimumAtrPips = input.float(
+     2.5,
+     "Minimum ATR, pips",
+     minval = 0.1,
+     step = 0.1,
+     tooltip = "Reasoned, not backtested -- no live diagnostic history exists yet for XAGUSD.",
+     group = groupVolatility
+)
+
+float maximumAtrPips = input.float(
+     15.0,
+     "Maximum ATR, pips",
+     minval = 0.2,
+     step = 0.1,
+     tooltip = "Reasoned, not backtested -- caps candidates during news-spike-style extreme ranges.",
+     group = groupVolatility
+)
+
+int bollingerLength = input.int(
+     20,
+     "Bollinger length",
+     minval = 5,
+     group = groupVolatility
+)
+
+float bollingerDeviation = input.float(
+     2.0,
+     "Bollinger deviation",
+     minval = 0.5,
+     step = 0.1,
+     group = groupVolatility
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupRisk = "Candidate risk proposal"
+
+float stopAtrMultiplier = input.float(
+     1.60,
+     "Stop ATR multiplier",
+     minval = 0.5,
+     step = 0.05,
+     tooltip = "Matches engine.py InstrumentConfig.sl_atr_mult for XAGUSD.",
+     group = groupRisk
+)
+
+float targetRiskMultiplier = input.float(
+     1.50,
+     "Target reward-to-risk",
+     minval = 1.0,
+     step = 0.05,
+     tooltip = "Matches engine.py InstrumentConfig.default_rr for XAGUSD.",
+     group = groupRisk
+)
+
+int structureLookback = input.int(
+     12,
+     "Structure lookback",
+     minval = 2,
+     maxval = 100,
+     group = groupRisk
+)
+
+float structureBufferPips = input.float(
+     0.6,
+     "Structure buffer, pips",
+     minval = 0.0,
+     step = 0.1,
+     tooltip = "Matches engine.py InstrumentConfig.structure_buffer_pips for XAGUSD.",
+     group = groupRisk
+)
+
+int simulatedMaximumHoldingBars = input.int(
+     720,
+     "Maximum simulated holding bars",
+     minval = 2,
+     tooltip = "Thirty two-minute bars equals sixty minutes.",
+     group = groupRisk
+)
+
+float accountRiskPercentInput = input.float(
+     0.35,
+     "Proposed account risk, percent",
+     minval = 0.01,
+     step = 0.01,
+     tooltip = "Proposed only; matches engine.py max_risk_percent for XAGUSD as a sensible default. The engine applies its own configured ceiling regardless of this value.",
+     group = groupRisk
+)
+
+float maxSpreadAllowedPriceInput = input.float(
+     0.030,
+     "Max spread allowed, price units",
+     minval = 0.0,
+     step = 0.001,
+     tooltip = "Matches engine.py InstrumentConfig.max_spread_price for XAGUSD. Informational only until Make/the engine sources live spread data for this instrument.",
+     group = groupRisk
+)
+
+float maxSlippageAllowedPriceInput = input.float(
+     0.015,
+     "Max slippage allowed, price units",
+     minval = 0.0,
+     step = 0.001,
+     tooltip = "Matches engine.py InstrumentConfig.max_slippage_price for XAGUSD.",
+     group = groupRisk
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupSessions = "Sessions"
+
+string tradingTimezone = input.string(
+     "America/New_York",
+     "Session timezone",
+     tooltip = "Metals are quoted against USD and trade through COMEX/NY hours as their deepest-liquidity window, so session windows here are expressed in New York local time (unlike the FX scripts, which use Europe/London).",
+     group = groupSessions
+)
+
+string londonSession = input.session(
+     "0300-0800",
+     "London session (New York local time)",
+     group = groupSessions
+)
+
+string overlapSession = input.session(
+     "0800-1100",
+     "London/New York overlap (New York local time)",
+     group = groupSessions
+)
+
+string newYorkSession = input.session(
+     "0830-1600",
+     "New York / COMEX session (New York local time)",
+     group = groupSessions
+)
+
+bool allowAsia = input.bool(
+     true,
+     "Allow Asian-session candidates",
+     tooltip = "Enabled by default while the model is still being evaluated for live trade frequency -- widens the trading window to roughly 24h. Revisit once enough live candidates have accumulated to judge Asian-session signal quality on its own.",
+     group = groupSessions
+)
+
+string asiaSession = input.session(
+     "1800-0300",
+     "Asian session (New York local time)",
+     group = groupSessions
+)
+
+// v1.2.0: closes the one gap the four windows above always left --
+// 1600-1800 NY (2000-2200 UTC) sat between New York session close and
+// Asian session open, covered by none of them, and fell through to the
+// "unknown" session label unconditionally (see validSession/
+// getSessionName() below), regardless of allowAsia or any engine.py
+// setting. Named and made independently togglable for the same reason
+// allowAsia is: so a kill-switch exists if live results say this window
+// isn't worth taking, without needing a code change.
+bool allowOvernight = input.bool(
+     true,
+     "Allow overnight (NY-close lull) candidates",
+     tooltip = "Covers the gap between the New York session closing and the Asian session opening, which previously had no session window at all and so could never produce a candidate, regardless of any other setting. Enabled by default so every hour of the day is tradeable and learnable from; disable here if live results say this window isn't worth taking.",
+     group = groupSessions
+)
+
+string overnightSession = input.session(
+     "1600-1800",
+     "Overnight / NY-close lull (New York local time)",
+     tooltip = "Fills the gap between New York session close (1600) and Asian session open (1800) so every hour of the day maps to a named, learnable session instead of silently falling through to 'unknown'.",
+     group = groupSessions
+)
+
+
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// v2.0.0 - Model D (trend pullback reclaim) and Model E (trend breakout
+// continuation), bespoke XAG/USD (Silver) defaults - see change log
+// ----------------------------------------------------------------------------
+
+string groupV6 = "Model D/E - shared filters and risk"
+
+float v6MinStopPips = input.float(
+     30.0,
+     "Minimum stop distance, pips",
+     minval = 0.0,
+     step = 0.5,
+     tooltip = "Sized to ~8.5x this instrument's round-trip cost (spread + slippage). Keep in step with Manus engine INSTRUMENTS min_stop_pips.",
+     group = groupV6
+)
+
+int v6SwingLookback = input.int(
+     6,
+     "Swing lookback for stop placement, bars",
+     minval = 2,
+     maxval = 50,
+     group = groupV6
+)
+
+float v6StopAtrPad = input.float(
+     0.30,
+     "Stop padding beyond swing, ATR",
+     minval = 0.0,
+     step = 0.05,
+     group = groupV6
+)
+
+float v6MinAtrPips = input.float(
+     2.5,
+     "Minimum ATR, pips",
+     minval = 0.0,
+     step = 0.05,
+     group = groupV6
+)
+
+float v6MinAtrRatio = input.float(
+     0.90,
+     "Minimum ATR / 50-bar ATR average",
+     minval = 0.0,
+     step = 0.05,
+     tooltip = "Skips dead, contracting markets.",
+     group = groupV6
+)
+
+int v6WindowAStartUtc = input.int(
+     7,
+     "Trading window A: from hour (UTC, inclusive)",
+     minval = 0,
+     maxval = 23,
+     group = groupV6
+)
+
+int v6WindowAEndUtc = input.int(
+     20,
+     "Trading window A: until hour (UTC, exclusive)",
+     minval = 1,
+     maxval = 24,
+     group = groupV6
+)
+
+int v6WindowBStartUtc = input.int(
+     0,
+     "Trading window B: from hour (UTC, inclusive)",
+     minval = 0,
+     maxval = 23,
+     tooltip = "Set start = end to disable window B.",
+     group = groupV6
+)
+
+int v6WindowBEndUtc = input.int(
+     0,
+     "Trading window B: until hour (UTC, exclusive)",
+     minval = 0,
+     maxval = 24,
+     group = groupV6
+)
+
+string groupV6D = "Model D - trend pullback reclaim"
+
+bool enablePullbackReclaim = input.bool(
+     true,
+     "Enable trend-pullback-reclaim candidates",
+     group = groupV6D
+)
+
+float v6StretchZ = input.float(
+     1.0,
+     "Stretch: Bollinger z beyond",
+     minval = 0.2,
+     step = 0.1,
+     tooltip = "Price counts as stretched against the trend once it closes this many Bollinger half-widths beyond the basis (1.0 = on or outside the band).",
+     group = groupV6D
+)
+
+float v6RsiStretch = input.float(
+     35.0,
+     "Stretch: RSI at or below (longs) / at or above 100 minus this (shorts)",
+     minval = 5.0,
+     maxval = 50.0,
+     step = 1.0,
+     group = groupV6D
+)
+
+int v6StretchLookback = input.int(
+     6,
+     "Stretch must have happened within N bars",
+     minval = 1,
+     maxval = 30,
+     group = groupV6D
+)
+
+float v6WickRatio = input.float(
+     0.40,
+     "Rejection wick, minimum fraction of bar range",
+     minval = 0.0,
+     maxval = 1.0,
+     step = 0.05,
+     group = groupV6D
+)
+
+float v6CheapZ = input.float(
+     0.30,
+     "Arm only while Bollinger z is still below (longs) / above minus (shorts)",
+     step = 0.05,
+     group = groupV6D
+)
+
+int v6ConfirmBars = input.int(
+     2,
+     "Confirmation window, bars",
+     minval = 1,
+     maxval = 10,
+     tooltip = "A later bar must CLOSE beyond the armed bar's extreme within this many bars, or the setup is cancelled.",
+     group = groupV6D
+)
+
+string groupV6E = "Model E - trend breakout continuation"
+
+bool enableBreakoutContinuation = input.bool(
+     false,
+     "Enable trend-breakout-continuation candidates",
+     group = groupV6E
+)
+
+int eBreakoutLookback = input.int(
+     30,
+     "Breakout: close above the highest close of the prior N bars",
+     minval = 2,
+     maxval = 200,
+     tooltip = "30 two-minute bars = 1 hour.",
+     group = groupV6E
+)
+
+int eSlopeBars = input.int(
+     60,
+     "Trend: close above (below) the close N bars ago",
+     minval = 2,
+     maxval = 500,
+     tooltip = "60 two-minute bars = 2 hours.",
+     group = groupV6E
+)
+
+int eTrendEmaLength = input.int(
+     125,
+     "Trend: close above (below) this EMA",
+     minval = 5,
+     maxval = 1000,
+     tooltip = "125 two-minute bars ~ a 50-period EMA on the 5-minute chart.",
+     group = groupV6E
+)
+
+float eRsiLow = input.float(
+     55.0,
+     "RSI band, lower (longs; shorts use 100 minus the upper)",
+     minval = 0.0,
+     maxval = 100.0,
+     step = 1.0,
+     group = groupV6E
+)
+
+float eRsiHigh = input.float(
+     70.0,
+     "RSI band, upper (longs; shorts use 100 minus the lower)",
+     minval = 0.0,
+     maxval = 100.0,
+     step = 1.0,
+     group = groupV6E
+)
+
+
+// ----------------------------------------------------------------------------
+
+string groupArmedReversal = "BB/RSI armed exhaustion reversal model"
+
+bool enableBbRsiArmedReversal = input.bool(
+     false,
+     "Enable bb_rsi_armed_reversal candidates",
+     group = groupArmedReversal
+)
+
+float rsiOversoldThreshold = input.float(
+     37.0,
+     "RSI oversold arm threshold (long/fade side)",
+     minval = 1.0,
+     maxval = 49.0,
+     step = 0.5,
+     group = groupArmedReversal
+)
+
+float rsiOverboughtThreshold = input.float(
+     77.0,
+     "RSI overbought arm threshold (short/fade side)",
+     minval = 51.0,
+     maxval = 99.0,
+     step = 0.5,
+     group = groupArmedReversal
+)
+
+int maxArmedBars = input.int(
+     8,
+     "Maximum bars to stay armed (stage 1: waiting for a fresh low/high)",
+     minval = 1,
+     maxval = 60,
+     tooltip = "Eight bars equals sixteen minutes on a two-minute chart. If no confirming extension (fresh low/high) occurs within this many bars of arming, or price recovers back through the Bollinger basis, the armed setup is invalidated.",
+     group = groupArmedReversal
+)
+
+int maxReversalWaitBars = input.int(
+     24,
+     "Maximum bars to await reversal (stage 3: waiting for confirmation)",
+     minval = 1,
+     maxval = 120,
+     tooltip = "Separate, longer budget for the reversal-confirmation stage (close back through the extend bar's high/low) -- deliberately wider than the stage-1 arm-wait budget above, since waiting for an actual confirmed turn realistically takes longer than waiting for one more fresh low/high. 24 bars equals forty-eight minutes on a two-minute chart. If no reversal closes within this many bars of the most recent extension, or price recovers back through the Bollinger basis, the setup is invalidated without entering.",
+     group = groupArmedReversal
+)
+
+
+// ============================================================================
+// 2. CHART VALIDATION
+// ============================================================================
+
+bool isTwoMinute =
+     timeframe.isminutes and
+     timeframe.multiplier == 2
+
+bool symbolCurrenciesMatch =
+     syminfo.basecurrency == pairBaseCurrency and
+     syminfo.currency == pairQuoteCurrency
+
+bool tickerNameMatches =
+     str.contains(
+         str.upper(syminfo.ticker),
+         tickerMatchString
+     )
+
+bool isCorrectPair =
+     symbolCurrenciesMatch or
+     tickerNameMatches
+
+bool validChart =
+     isTwoMinute and
+     isCorrectPair and
+     chart.is_standard
+
+
+// ============================================================================
+// 3. CORE MARKET FEATURES
+// ============================================================================
+
+float pipSize = pairPipSize
+
+float emaFast =
+     ta.ema(close, emaFastLength)
+
+float emaSlow =
+     ta.ema(close, emaSlowLength)
+
+float emaRegime =
+     ta.ema(close, emaRegimeLength)
+
+float htfClose = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     close,
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+float htfEma = request.security(
+     syminfo.tickerid,
+     higherTimeframe,
+     ta.ema(close, htfEmaLength),
+     gaps = barmerge.gaps_off,
+     lookahead = barmerge.lookahead_off
+)
+
+float rsi =
+     ta.rsi(close, rsiLength)
+
+float atr =
+     ta.atr(atrLength)
+
+float atrPips =
+     atr / pipSize
+
+float atrBandWidth =
+     maximumAtrPips - minimumAtrPips
+
+float atrSweetSpotLow =
+     minimumAtrPips + atrBandWidth / 3.0
+
+float atrSweetSpotHigh =
+     minimumAtrPips + atrBandWidth * 2.0 / 3.0
+
+float atrAverage50 =
+     ta.sma(atr, 50)
+
+float atrRatio = na
+
+if atrAverage50 > 0.0
+    atrRatio :=
+         atr / atrAverage50
+
+float atrPercent = na
+
+if close != 0.0
+    atrPercent :=
+         atr / close * 100.0
+
+[macdLine, macdSignal, macdHistogram] =
+     ta.macd(
+         close,
+         macdFastLength,
+         macdSlowLength,
+         macdSignalLength
+     )
+
+[plusDi, minusDi, adx] =
+     ta.dmi(
+         adxLength,
+         adxLength
+     )
+
+float adxDiSpread =
+     plusDi - minusDi
+
+float vwapValue =
+     ta.vwap(hlc3)
+
+float distanceToVwap =
+     close - vwapValue
+
+float bbBasis =
+     ta.sma(
+         close,
+         bollingerLength
+     )
+
+float bbDeviationValue =
+     ta.stdev(
+         close,
+         bollingerLength
+     ) * bollingerDeviation
+
+float bbUpper =
+     bbBasis + bbDeviationValue
+
+float bbLower =
+     bbBasis - bbDeviationValue
+
+float bbWidth = na
+
+if bbBasis != 0.0
+    bbWidth :=
+         (bbUpper - bbLower) / bbBasis
+
+float bbWidthAverage50 =
+     ta.sma(bbWidth, 50)
+
+float bbWidthRatio = na
+
+if bbWidthAverage50 > 0.0
+    bbWidthRatio :=
+         bbWidth / bbWidthAverage50
+
+float bbPercentB = na
+
+if (bbUpper - bbLower) != 0.0
+    bbPercentB :=
+         (close - bbLower) / (bbUpper - bbLower)
+
+float recentHigh =
+     ta.highest(
+         high,
+         structureLookback
+     )
+
+float recentLow =
+     ta.lowest(
+         low,
+         structureLookback
+     )
+
+float distanceToRecentHigh =
+     recentHigh - close
+
+float distanceToRecentLow =
+     close - recentLow
+
+float candleBody =
+     math.abs(close - open)
+
+float candleRange =
+     high - low
+
+float bodyToRange = 0.0
+float upperWickRatio = 0.0
+float lowerWickRatio = 0.0
+
+float upperWick =
+     high - math.max(open, close)
+
+float lowerWick =
+     math.min(open, close) - low
+
+if candleRange > 0.0
+    bodyToRange :=
+         candleBody / candleRange
+
+    upperWickRatio :=
+         upperWick / candleRange
+
+    lowerWickRatio :=
+         lowerWick / candleRange
+
+float typicalPrice =
+     (high + low + close) / 3.0
+
+float weightedClosePrice =
+     (high + low + 2.0 * close) / 4.0
+
+float emaSeparation =
+     math.abs(emaFast - emaSlow)
+
+float emaSeparationAtr = na
+float distanceFromVwapAtr = na
+float distanceFromFastEmaAtr = na
+
+if atr > 0.0
+    emaSeparationAtr :=
+         emaSeparation / atr
+
+    distanceFromVwapAtr :=
+         (close - vwapValue) / atr
+
+    distanceFromFastEmaAtr :=
+         (close - emaFast) / atr
+
+float rollingHigh =
+     ta.highest(high, 30)
+
+float rollingLow =
+     ta.lowest(low, 30)
+
+float rollingRange =
+     rollingHigh - rollingLow
+
+float rollingMid =
+     (rollingHigh + rollingLow) / 2.0
+
+float rollingRangeAtr = na
+
+if atr > 0.0
+    rollingRangeAtr :=
+         rollingRange / atr
+
+
+// ============================================================================
+// 4. MARKET CLASSIFICATION
+// ============================================================================
+
+bool bullishTrend =
+     emaFast > emaSlow and
+     close > emaRegime
+
+bool bearishTrend =
+     emaFast < emaSlow and
+     close < emaRegime
+
+bool htfBullish =
+     htfClose > htfEma
+
+bool htfBearish =
+     htfClose < htfEma
+
+bool volatilityPass =
+     atrPips >= minimumAtrPips and
+     atrPips <= maximumAtrPips
+
+bool momentumMarket =
+     adx >= minimumAdx and
+     emaSeparationAtr >= 0.12
+
+bool rangeMarket =
+     adx < 19.0 and
+     emaSeparationAtr < 0.40
+
+
+// ============================================================================
+// 5. CLASSIFICATION FUNCTIONS
+// ============================================================================
+
+getTrendBias() =>
+    string result = "sideways"
+
+    if bullishTrend
+        result := "bullish"
+    else if bearishTrend
+        result := "bearish"
+
+    result
+
+
+getHigherTimeframeBias() =>
+    string result = "sideways"
+
+    if htfBullish
+        result := "bullish"
+    else if htfBearish
+        result := "bearish"
+
+    result
+
+
+getVolatilityRegime() =>
+    string result = "extreme"
+
+    if atrPips < minimumAtrPips
+        result := "very_low"
+    else if atrPips < atrSweetSpotLow
+        result := "low"
+    else if atrPips <= atrSweetSpotHigh
+        result := "normal"
+    else if atrPips <= maximumAtrPips
+        result := "high"
+
+    result
+
+
+getMarketRegime() =>
+    string result = "mixed"
+
+    if rangeMarket
+        result := "range"
+    else if momentumMarket and bullishTrend
+        result := "trend"
+    else if momentumMarket and bearishTrend
+        result := "trend"
+
+    result
+
+
+string trendBias =
+     getTrendBias()
+
+string higherTimeframeBias =
+     getHigherTimeframeBias()
+
+string volatilityRegime =
+     getVolatilityRegime()
+
+string marketRegime =
+     getMarketRegime()
+
+
+// ============================================================================
+// 6. SESSION CLASSIFICATION
+// ============================================================================
+
+bool inLondon =
+     not na(
+         time(
+             timeframe.period,
+             londonSession,
+             tradingTimezone
+         )
+     )
+
+bool inOverlap =
+     not na(
+         time(
+             timeframe.period,
+             overlapSession,
+             tradingTimezone
+         )
+     )
+
+bool inNewYork =
+     not na(
+         time(
+             timeframe.period,
+             newYorkSession,
+             tradingTimezone
+         )
+     )
+
+bool inAsia =
+     not na(
+         time(
+             timeframe.period,
+             asiaSession,
+             tradingTimezone
+         )
+     )
+
+// v1.2.0: see the groupSessions input above -- fills the 1600-1800 NY gap
+// that london/overlap/new_york/asia never covered between them.
+bool inOvernight =
+     not na(
+         time(
+             timeframe.period,
+             overnightSession,
+             tradingTimezone
+         )
+     )
+
+bool validSession =
+     inLondon or
+     inOverlap or
+     inNewYork or
+     (allowAsia and inAsia) or
+     (allowOvernight and inOvernight)
+
+
+getSessionName() =>
+    string result = "unknown"
+
+    if inOverlap
+        result := "overlap_london_new_york"
+    else if inNewYork
+        result := "new_york"
+    else if inLondon
+        result := "london"
+    else if inAsia
+        result := "asia"
+    else if inOvernight
+        result := "overnight"
+
+    result
+
+
+string sessionName =
+     getSessionName()
+
+
+// ============================================================================
+// 7. ENTRY MODEL -- BB/RSI ARMED EXHAUSTION REVERSAL (bb_rsi_armed_reversal)
+//
+// Three-stage state machine per side (long/fade shown; short/fade mirrors it
+// exactly with bbUpper, rsiOverboughtThreshold and highs in place of lows):
+//
+//   1. ARM       A confirmed bar closes at/below the lower Bollinger Band
+//                while RSI is at/below rsiOversoldThreshold. The arming
+//                bar's low becomes the reference to beat. A fresh arm
+//                trigger while already ARMED ratchets the reference to the
+//                lower of the two lows and refreshes the arm timer, so a
+//                grinding selloff keeps requiring a deeper undercut before
+//                moving to stage 2.
+//
+//   2. EXTEND    A later confirmed bar's low undercuts the armed reference
+//                -- price pushes the exhaustion move one step further. This
+//                does NOT enter. It captures that bar's high as the
+//                reversal-trigger level, and its RSI / %B as the "peak
+//                extension" reference used for signal-strength scoring,
+//                then moves to stage 3.
+//
+//   3. REVERSAL  Waits for a later confirmed bar to close back above the
+//                EXTEND bar's high -- an objective, price-structure
+//                confirmation that the move has actually turned, not just
+//                extended. THIS is the entry trigger: ENTERS LONG here
+//                (fading the exhaustion), then fully disarms. A still-deeper
+//                low while waiting ratchets the trigger level and the
+//                extension reference to the new, more extreme bar and
+//                restarts the reversal-wait timer, so an ongoing selloff
+//                keeps pushing the goalposts instead of leaving the model
+//                waiting on a stale level.
+//
+//   Reaching ENTRY fully disarms the model -- stage 3 consumes the whole
+//   armed cycle, so a brand new ARM (stage 1) is required before another
+//   entry can fire, even later on the same swing. Combined with the
+//   reversal gate itself, this is what stops repeated entries chasing every
+//   fresh low on one selloff (the v1.0.0 behaviour this version replaces).
+//
+//   INVALIDATE (disarm/reset without entering, from stage 1 or stage 3) if
+//   price recovers back through the Bollinger basis, or the relevant timeout
+//   elapses with no progress to the next stage -- maxArmedBars for stage 1
+//   (waiting for a fresh low/high), maxReversalWaitBars for stage 3 (waiting
+//   for the reversal close), kept as separate, independently-tunable inputs
+//   since confirming an actual turn realistically takes longer than waiting
+//   for one more fresh low/high. The timer restarts at each stage
+//   transition.
+//
+// Short/fade side mirrors this exactly (upper band, RSI overbought
+// threshold, higher high, SHORT entry).
+//
+// State mutations only commit on confirmed bars (barstate.isconfirmed) to
+// avoid an intrabar fluctuation arming, extending, confirming or disarming
+// the setup before the bar actually closes.
+//
+// This model is intentionally NOT gated on trendBias/marketRegime: engine.py's
+// bb_rsi_armed_reversal policy does not block the "trend" regime (unlike
+// bb_rsi_immediate_rejection and range_reversal), since an exhaustion fade is
+// meant to work as a pullback-within-a-trend setup too, not only inside a
+// range. Session/volatility/cooldown/daily-cap governance is still applied
+// to the final candidate in section 11, same as the FX scripts.
+// ============================================================================
+
+bool longArmTrigger =
+     close <= bbLower and
+     rsi <= rsiOversoldThreshold
+
+bool shortArmTrigger =
+     close >= bbUpper and
+     rsi >= rsiOverboughtThreshold
+
+// Stage 1 -- ARMED (waiting for a fresh undercut/overshoot)
+var bool  longArmed             = false
+var float longArmedReferenceLow = na
+var int   longArmedBar          = na
+
+var bool  shortArmed              = false
+var float shortArmedReferenceHigh = na
+var int   shortArmedBar           = na
+
+// Stage 2/3 -- AWAITING REVERSAL (fresh extreme seen; waiting for a close
+// back through that extreme bar's high/low before entering)
+var bool  longAwaitingReversal     = false
+var float longReversalReferenceLow = na
+var float longReversalTriggerHigh  = na
+var int   longExtendBar            = na
+var float longExtendRsi            = na
+var float longExtendBbPercentB     = na
+
+var bool  shortAwaitingReversal      = false
+var float shortReversalReferenceHigh = na
+var float shortReversalTriggerLow    = na
+var int   shortExtendBar             = na
+var float shortExtendRsi             = na
+var float shortExtendBbPercentB      = na
+
+bool longExtendTrigger =
+     longArmed and
+     not longAwaitingReversal and
+     not na(longArmedBar) and
+     bar_index > longArmedBar and
+     low < longArmedReferenceLow
+
+bool shortExtendTrigger =
+     shortArmed and
+     not shortAwaitingReversal and
+     not na(shortArmedBar) and
+     bar_index > shortArmedBar and
+     high > shortArmedReferenceHigh
+
+bool longDeepenTrigger =
+     longAwaitingReversal and
+     not na(longExtendBar) and
+     bar_index > longExtendBar and
+     low < longReversalReferenceLow
+
+bool shortDeepenTrigger =
+     shortAwaitingReversal and
+     not na(shortExtendBar) and
+     bar_index > shortExtendBar and
+     high > shortReversalReferenceHigh
+
+bool longReversalTrigger =
+     longAwaitingReversal and
+     not na(longExtendBar) and
+     bar_index > longExtendBar and
+     close > longReversalTriggerHigh
+
+bool shortReversalTrigger =
+     shortAwaitingReversal and
+     not na(shortExtendBar) and
+     bar_index > shortExtendBar and
+     close < shortReversalTriggerLow
+
+bool longArmedTimeout =
+     longArmed and
+     not longAwaitingReversal and
+     not na(longArmedBar) and
+     (bar_index - longArmedBar) > maxArmedBars
+
+bool shortArmedTimeout =
+     shortArmed and
+     not shortAwaitingReversal and
+     not na(shortArmedBar) and
+     (bar_index - shortArmedBar) > maxArmedBars
+
+bool longReversalTimeout =
+     longAwaitingReversal and
+     not na(longExtendBar) and
+     (bar_index - longExtendBar) > maxReversalWaitBars
+
+bool shortReversalTimeout =
+     shortAwaitingReversal and
+     not na(shortExtendBar) and
+     (bar_index - shortExtendBar) > maxReversalWaitBars
+
+bool longArmedRecovery =
+     longArmed and
+     close > bbBasis
+
+bool shortArmedRecovery =
+     shortArmed and
+     close < bbBasis
+
+bool longAwaitingReversalRecovery =
+     longAwaitingReversal and
+     close > bbBasis
+
+bool shortAwaitingReversalRecovery =
+     shortAwaitingReversal and
+     close < bbBasis
+
+float longArmedBarsElapsed = na
+float shortArmedBarsElapsed = na
+
+float longEntryExtendRsi = na
+float longEntryExtendBbPercentB = na
+float shortEntryExtendRsi = na
+float shortEntryExtendBbPercentB = na
+
+if barstate.isconfirmed and longReversalTrigger
+    longArmedBarsElapsed :=
+         bar_index - longExtendBar
+
+    longEntryExtendRsi := longExtendRsi
+    longEntryExtendBbPercentB := longExtendBbPercentB
+
+if barstate.isconfirmed and shortReversalTrigger
+    shortArmedBarsElapsed :=
+         bar_index - shortExtendBar
+
+    shortEntryExtendRsi := shortExtendRsi
+    shortEntryExtendBbPercentB := shortExtendBbPercentB
+
+// ----------------------------------------------------------------------
+// Hoisted from Sections 10-12 (see their original headers further below,
+// now left as pointer comments) plus the validLongCandidate /
+// validShortCandidate / validFinalCandidate booleans normally built in
+// Section 17. They have to live here, ahead of the state-mutation cascade
+// below, so that cascade can tell a geometrically-true reversal trigger
+// apart from one the downstream risk/session/frequency gates would
+// actually reject. Without this, a valid reversal confirmation could fully
+// disarm (consume) the whole armed cycle on a bar where cooldown, the
+// daily cap, volatility, or risk/reward rejects the final candidate --
+// silently wasting the setup instead of leaving it free to try again on a
+// later bar. Section 17 reuses (does not redeclare) validLongCandidate /
+// validShortCandidate / validFinalCandidate for alerting and the daily
+// candidate counters; Section 18 reuses them for the simulated strategy
+// entries.
+// ----------------------------------------------------------------------
+
+// ============================================================================
+// 9b. MODEL D (TREND PULLBACK RECLAIM) AND MODEL E (TREND BREAKOUT
+//     CONTINUATION) - bespoke v6 family
+// ============================================================================
+
+float bbHalfWidth =
+     bbUpper - bbBasis
+
+float bbZ = na
+if bbHalfWidth > 0.0
+    bbZ :=
+         (close - bbBasis) / bbHalfWidth
+
+int barHourUtc =
+     hour(time, "UTC")
+
+inUtcWindow(int startHour, int endHour) =>
+    bool result = false
+    if endHour > startHour
+        result := barHourUtc >= startHour and barHourUtc < endHour
+    else if endHour < startHour
+        result := barHourUtc >= startHour or barHourUtc < endHour
+    result
+
+bool v6CoreHours =
+     inUtcWindow(v6WindowAStartUtc, v6WindowAEndUtc) or
+     inUtcWindow(v6WindowBStartUtc, v6WindowBEndUtc)
+
+bool v6VolatilityOk =
+     atrPips >= v6MinAtrPips and
+     not na(atrRatio) and
+     atrRatio >= v6MinAtrRatio
+
+// --- Model D: arm on a stretched, rejected pullback against the HTF trend,
+// confirm when a later bar closes beyond the armed bar's extreme.
+
+bool longStretchBar =
+     (not na(bbZ) and bbZ <= -v6StretchZ) or
+     rsi <= v6RsiStretch
+
+bool shortStretchBar =
+     (not na(bbZ) and bbZ >= v6StretchZ) or
+     rsi >= 100.0 - v6RsiStretch
+
+bool longStretchRecent =
+     ta.highest(longStretchBar ? 1 : 0, v6StretchLookback) > 0
+
+bool shortStretchRecent =
+     ta.highest(shortStretchBar ? 1 : 0, v6StretchLookback) > 0
+
+bool v6ArmCommon =
+     enablePullbackReclaim and
+     v6CoreHours and
+     v6VolatilityOk and
+     not na(bbZ)
+
+bool longReclaimArmTrigger =
+     v6ArmCommon and
+     htfBullish and
+     longStretchRecent and
+     lowerWickRatio >= v6WickRatio and
+     close > open and
+     bbZ < v6CheapZ
+
+bool shortReclaimArmTrigger =
+     v6ArmCommon and
+     htfBearish and
+     shortStretchRecent and
+     upperWickRatio >= v6WickRatio and
+     close < open and
+     bbZ > -v6CheapZ
+
+var float longArmHigh = na
+var float longArmLow = na
+var int longArmBar = na
+var float longArmBbZ = na
+var float longArmWick = na
+
+var float shortArmHigh = na
+var float shortArmLow = na
+var int shortArmBar = na
+var float shortArmBbZ = na
+var float shortArmWick = na
+
+bool longArmLive =
+     not na(longArmBar) and
+     bar_index > longArmBar and
+     bar_index - longArmBar <= v6ConfirmBars
+
+bool shortArmLive =
+     not na(shortArmBar) and
+     bar_index > shortArmBar and
+     bar_index - shortArmBar <= v6ConfirmBars
+
+bool longArmInvalidated =
+     longArmLive and
+     low < longArmLow
+
+bool shortArmInvalidated =
+     shortArmLive and
+     high > shortArmHigh
+
+bool longPullbackReclaim =
+     longArmLive and
+     not longArmInvalidated and
+     close > longArmHigh
+
+bool shortPullbackReclaim =
+     shortArmLive and
+     not shortArmInvalidated and
+     close < shortArmLow
+
+int v6BarsSinceArm = na
+float v6ArmBbZ = na
+float v6ArmWick = na
+if longPullbackReclaim
+    v6BarsSinceArm := bar_index - longArmBar
+    v6ArmBbZ := longArmBbZ
+    v6ArmWick := longArmWick
+else if shortPullbackReclaim
+    v6BarsSinceArm := bar_index - shortArmBar
+    v6ArmBbZ := shortArmBbZ
+    v6ArmWick := shortArmWick
+
+if longArmInvalidated or longPullbackReclaim or (not na(longArmBar) and bar_index - longArmBar > v6ConfirmBars)
+    longArmBar := na
+    longArmHigh := na
+    longArmLow := na
+
+if shortArmInvalidated or shortPullbackReclaim or (not na(shortArmBar) and bar_index - shortArmBar > v6ConfirmBars)
+    shortArmBar := na
+    shortArmHigh := na
+    shortArmLow := na
+
+if barstate.isconfirmed and longReclaimArmTrigger and not shortReclaimArmTrigger
+    longArmBar := bar_index
+    longArmHigh := high
+    longArmLow := low
+    longArmBbZ := bbZ
+    longArmWick := lowerWickRatio
+
+if barstate.isconfirmed and shortReclaimArmTrigger and not longReclaimArmTrigger
+    shortArmBar := bar_index
+    shortArmHigh := high
+    shortArmLow := low
+    shortArmBbZ := bbZ
+    shortArmWick := upperWickRatio
+
+// --- Model E: trend-aligned breakout continuation, entered on the breakout
+// bar's close. Trend = HTF agreement + 2-hour slope + ~4-hour EMA.
+
+float eTrendEma =
+     ta.ema(close, eTrendEmaLength)
+
+float ePriorHighClose =
+     ta.highest(close, eBreakoutLookback)[1]
+
+float ePriorLowClose =
+     ta.lowest(close, eBreakoutLookback)[1]
+
+bool eCommon =
+     enableBreakoutContinuation and
+     v6CoreHours and
+     v6VolatilityOk
+
+bool longBreakoutContinuation =
+     eCommon and
+     htfBullish and
+     close > close[eSlopeBars] and
+     close > eTrendEma and
+     close > ePriorHighClose and
+     rsi >= eRsiLow and
+     rsi <= eRsiHigh
+
+bool shortBreakoutContinuation =
+     eCommon and
+     htfBearish and
+     close < close[eSlopeBars] and
+     close < eTrendEma and
+     close < ePriorLowClose and
+     rsi >= 100.0 - eRsiHigh and
+     rsi <= 100.0 - eRsiLow
+
+float v6SwingLow =
+     ta.lowest(low, v6SwingLookback)
+
+float v6SwingHigh =
+     ta.highest(high, v6SwingLookback)
+
+
+bool longBbRsiArmedReversal =
+     enableBbRsiArmedReversal and
+     longReversalTrigger
+
+bool shortBbRsiArmedReversal =
+     enableBbRsiArmedReversal and
+     shortReversalTrigger
+
+bool rawLongCandidate =
+     longPullbackReclaim or
+     longBreakoutContinuation or
+     longBbRsiArmedReversal
+
+bool rawShortCandidate =
+     shortPullbackReclaim or
+     shortBreakoutContinuation or
+     shortBbRsiArmedReversal
+
+
+getLongModel() =>
+    string result = "none"
+
+    if longPullbackReclaim
+        result := "trend_pullback_reclaim"
+    else if longBreakoutContinuation
+        result := "trend_breakout_continuation"
+    else if longBbRsiArmedReversal
+        result := "bb_rsi_armed_reversal"
+
+    result
+
+
+getShortModel() =>
+    string result = "none"
+
+    if shortPullbackReclaim
+        result := "trend_pullback_reclaim"
+    else if shortBreakoutContinuation
+        result := "trend_breakout_continuation"
+    else if shortBbRsiArmedReversal
+        result := "bb_rsi_armed_reversal"
+
+    result
+
+
+string longModel =
+     getLongModel()
+
+string shortModel =
+     getShortModel()
+
+bool newDay =
+     ta.change(time("D")) != 0
+
+var int candidatesToday = 0
+var int lastCandidateBar = na
+
+if newDay
+    candidatesToday := 0
+
+bool cooldownPass =
+     na(lastCandidateBar) or
+     bar_index - lastCandidateBar >= cooldownBars
+
+bool dailyCandidateLimitPass =
+     candidatesToday < maximumCandidatesPerDay
+
+// Models D and E apply their own ATR / hour filters, so the legacy
+// volatility band only gates the legacy model(s).
+bool v6Candidate =
+     longPullbackReclaim or
+     shortPullbackReclaim or
+     longBreakoutContinuation or
+     shortBreakoutContinuation
+
+bool commonCandidatePass =
+     barstate.isconfirmed and
+     validChart and
+     validSession and
+     (volatilityPass or v6Candidate) and
+     cooldownPass and
+     dailyCandidateLimitPass
+
+bool longCandidate =
+     commonCandidatePass and
+     enableLongs and
+     rawLongCandidate
+
+bool shortCandidate =
+     commonCandidatePass and
+     enableShorts and
+     rawShortCandidate
+
+bool finalLongCandidate =
+     longCandidate and
+     not shortCandidate
+
+bool finalShortCandidate =
+     shortCandidate and
+     not longCandidate
+
+float structureBuffer =
+     structureBufferPips * pipSize
+
+float longAtrStop =
+     close - atr * stopAtrMultiplier
+
+float longStructureStop =
+     recentLow - structureBuffer
+
+float proposedLongStop =
+     math.min(
+         longAtrStop,
+         longStructureStop
+     )
+
+if longModel == "trend_pullback_reclaim" or longModel == "trend_breakout_continuation"
+    proposedLongStop :=
+         math.min(
+             v6SwingLow - atr * v6StopAtrPad,
+             close - v6MinStopPips * pipSize
+         )
+
+float shortAtrStop =
+     close + atr * stopAtrMultiplier
+
+float shortStructureStop =
+     recentHigh + structureBuffer
+
+float proposedShortStop =
+     math.max(
+         shortAtrStop,
+         shortStructureStop
+     )
+
+if shortModel == "trend_pullback_reclaim" or shortModel == "trend_breakout_continuation"
+    proposedShortStop :=
+         math.max(
+             v6SwingHigh + atr * v6StopAtrPad,
+             close + v6MinStopPips * pipSize
+         )
+
+float longStopDistance =
+     close - proposedLongStop
+
+float shortStopDistance =
+     proposedShortStop - close
+
+float proposedLongTarget =
+     close +
+     longStopDistance *
+     targetRiskMultiplier
+
+float proposedShortTarget =
+     close -
+     shortStopDistance *
+     targetRiskMultiplier
+
+float longTargetDistance =
+     proposedLongTarget - close
+
+float shortTargetDistance =
+     close - proposedShortTarget
+
+float longRewardRisk = na
+float shortRewardRisk = na
+
+if longStopDistance > 0.0
+    longRewardRisk :=
+         longTargetDistance /
+         longStopDistance
+
+if shortStopDistance > 0.0
+    shortRewardRisk :=
+         shortTargetDistance /
+         shortStopDistance
+
+bool longRiskValid =
+     longStopDistance > syminfo.mintick and
+     longRewardRisk >= 1.0
+
+bool shortRiskValid =
+     shortStopDistance > syminfo.mintick and
+     shortRewardRisk >= 1.0
+
+bool validLongCandidate =
+     finalLongCandidate and
+     longRiskValid
+
+bool validShortCandidate =
+     finalShortCandidate and
+     shortRiskValid
+
+bool validFinalCandidate =
+     validLongCandidate or
+     validShortCandidate
+
+
+if barstate.isconfirmed
+    // ---- Long/fade side ----
+    if longReversalTrigger and validLongCandidate
+        // ENTRY -- fully disarm, consuming the whole armed cycle.
+        longArmed := false
+        longArmedReferenceLow := na
+        longArmedBar := na
+        longAwaitingReversal := false
+        longReversalReferenceLow := na
+        longReversalTriggerHigh := na
+        longExtendBar := na
+        longExtendRsi := na
+        longExtendBbPercentB := na
+    else if longDeepenTrigger
+        // Still-deeper low while waiting -- ratchet the trigger level and
+        // restart the reversal-wait timer against the new, more extreme bar.
+        longReversalReferenceLow := low
+        longReversalTriggerHigh := high
+        longExtendBar := bar_index
+        longExtendRsi := rsi
+        longExtendBbPercentB := bbPercentB
+    else if longAwaitingReversal and (longReversalTimeout or longAwaitingReversalRecovery)
+        longAwaitingReversal := false
+        longReversalReferenceLow := na
+        longReversalTriggerHigh := na
+        longExtendBar := na
+        longExtendRsi := na
+        longExtendBbPercentB := na
+    else if longExtendTrigger
+        // Fresh undercut -- move from ARMED to AWAITING REVERSAL.
+        longAwaitingReversal := true
+        longReversalReferenceLow := low
+        longReversalTriggerHigh := high
+        longExtendBar := bar_index
+        longExtendRsi := rsi
+        longExtendBbPercentB := bbPercentB
+        longArmed := false
+        longArmedReferenceLow := na
+        longArmedBar := na
+    else if longArmedTimeout or longArmedRecovery
+        longArmed := false
+        longArmedReferenceLow := na
+        longArmedBar := na
+    else if longArmTrigger
+        longArmedReferenceLow := longArmed ? math.min(longArmedReferenceLow, low) : low
+        longArmedBar := bar_index
+        longArmed := true
+
+    // ---- Short/fade side ----
+    if shortReversalTrigger and validShortCandidate
+        shortArmed := false
+        shortArmedReferenceHigh := na
+        shortArmedBar := na
+        shortAwaitingReversal := false
+        shortReversalReferenceHigh := na
+        shortReversalTriggerLow := na
+        shortExtendBar := na
+        shortExtendRsi := na
+        shortExtendBbPercentB := na
+    else if shortDeepenTrigger
+        shortReversalReferenceHigh := high
+        shortReversalTriggerLow := low
+        shortExtendBar := bar_index
+        shortExtendRsi := rsi
+        shortExtendBbPercentB := bbPercentB
+    else if shortAwaitingReversal and (shortReversalTimeout or shortAwaitingReversalRecovery)
+        shortAwaitingReversal := false
+        shortReversalReferenceHigh := na
+        shortReversalTriggerLow := na
+        shortExtendBar := na
+        shortExtendRsi := na
+        shortExtendBbPercentB := na
+    else if shortExtendTrigger
+        shortAwaitingReversal := true
+        shortReversalReferenceHigh := high
+        shortReversalTriggerLow := low
+        shortExtendBar := bar_index
+        shortExtendRsi := rsi
+        shortExtendBbPercentB := bbPercentB
+        shortArmed := false
+        shortArmedReferenceHigh := na
+        shortArmedBar := na
+    else if shortArmedTimeout or shortArmedRecovery
+        shortArmed := false
+        shortArmedReferenceHigh := na
+        shortArmedBar := na
+    else if shortArmTrigger
+        shortArmedReferenceHigh := shortArmed ? math.max(shortArmedReferenceHigh, high) : high
+        shortArmedBar := bar_index
+        shortArmed := true
+
+// ============================================================================
+// 10. MODEL SELECTION / 11. FREQUENCY GOVERNANCE / 12. PROPOSED STOP AND
+// TARGET
+//
+// Relocated to immediately above the Section 9 state-mutation cascade (see
+// the long comment block right after the extend-RSI capture there) so the
+// armed-reversal disarm logic can check validLongCandidate /
+// validShortCandidate without a forward reference. longBbRsiArmedReversal,
+// shortBbRsiArmedReversal, rawLongCandidate, rawShortCandidate,
+// getLongModel/getShortModel, longModel/shortModel, the frequency-governance
+// booleans (cooldownPass, dailyCandidateLimitPass, commonCandidatePass,
+// longCandidate, shortCandidate, finalLongCandidate, finalShortCandidate),
+// and the stop/target + longRiskValid/shortRiskValid math all now live
+// there. (Section numbers 8-9 are intentionally skipped elsewhere: this
+// script carries only one entry model in this pass, bb_rsi_immediate_
+// rejection having been explicitly deferred. Numbering is kept aligned with
+// the FX template's 20-section layout for easy side-by-side comparison.)
+// ============================================================================
+
+
+// ============================================================================
+// 13. SIGNAL-STRENGTH FUNCTIONS
+// ============================================================================
+
+calculateLongStrength(string model) =>
+    float score = 50.0
+
+    if model == "trend_pullback_reclaim"
+        // Depth of the stretch and quality of the rejection.
+        if not na(v6ArmBbZ)
+            score += math.min(math.abs(v6ArmBbZ), 2.0) * 6.0
+        if not na(v6ArmWick)
+            score += math.min(v6ArmWick, 0.8) * 15.0
+
+    if not na(longEntryExtendRsi) and longEntryExtendRsi <= rsiOversoldThreshold - 5.0
+        score += 8.0
+    else if not na(longEntryExtendRsi) and longEntryExtendRsi <= rsiOversoldThreshold
+        score += 4.0
+
+    if not na(longEntryExtendBbPercentB) and longEntryExtendBbPercentB <= 0.0
+        score += 7.0
+
+    if close > open
+        score += 6.0
+
+    if lowerWickRatio >= 0.35
+        score += 5.0
+
+    if atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+        score += 6.0
+
+    if inOverlap or inNewYork
+        score += 5.0
+
+    if inLondon
+        score += 2.0
+
+    if not na(longArmedBarsElapsed) and longArmedBarsElapsed <= 3.0
+        score += 4.0
+
+    float rawScore = score
+
+    score := math.max(score, 0.0)
+    score := math.min(score, 100.0)
+
+    [score, rawScore]
+
+
+calculateShortStrength(string model) =>
+    float score = 50.0
+
+    if model == "trend_pullback_reclaim"
+        // Depth of the stretch and quality of the rejection.
+        if not na(v6ArmBbZ)
+            score += math.min(math.abs(v6ArmBbZ), 2.0) * 6.0
+        if not na(v6ArmWick)
+            score += math.min(v6ArmWick, 0.8) * 15.0
+
+    if not na(shortEntryExtendRsi) and shortEntryExtendRsi >= rsiOverboughtThreshold + 5.0
+        score += 8.0
+    else if not na(shortEntryExtendRsi) and shortEntryExtendRsi >= rsiOverboughtThreshold
+        score += 4.0
+
+    if not na(shortEntryExtendBbPercentB) and shortEntryExtendBbPercentB >= 1.0
+        score += 7.0
+
+    if close < open
+        score += 6.0
+
+    if upperWickRatio >= 0.35
+        score += 5.0
+
+    if atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+        score += 6.0
+
+    if inOverlap or inNewYork
+        score += 5.0
+
+    if inLondon
+        score += 2.0
+
+    if not na(shortArmedBarsElapsed) and shortArmedBarsElapsed <= 3.0
+        score += 4.0
+
+    float rawScore = score
+
+    score := math.max(score, 0.0)
+    score := math.min(score, 100.0)
+
+    [score, rawScore]
+
+
+// ----------------------------------------------------------------------------
+// Conviction: a breadth-of-confirmation measure, independent of the
+// magnitude-weighted strength score above. Counts how many of 6 independent
+// confirming conditions are true and expresses it as a percentage, mirroring
+// the equivalent function added to the FX scripts in their v5.1.0 follow-up.
+// ----------------------------------------------------------------------------
+
+calculateConviction(string direction) =>
+    bool isLong = direction == "long"
+
+    float extendRsi = isLong ? longEntryExtendRsi : shortEntryExtendRsi
+    float extendBbPercentB = isLong ? longEntryExtendBbPercentB : shortEntryExtendBbPercentB
+
+    bool deepExtension = isLong ? (not na(extendRsi) and extendRsi <= rsiOversoldThreshold - 5.0) : (not na(extendRsi) and extendRsi >= rsiOverboughtThreshold + 5.0)
+    bool bandBreach = isLong ? (not na(extendBbPercentB) and extendBbPercentB <= 0.0) : (not na(extendBbPercentB) and extendBbPercentB >= 1.0)
+    bool reversalCandle = isLong ? (close > open) : (close < open)
+    bool rejectionWick = isLong ? (lowerWickRatio >= 0.35) : (upperWickRatio >= 0.35)
+    bool volatilitySweetSpot = atrPips >= atrSweetSpotLow and atrPips <= atrSweetSpotHigh
+    bool sessionQuality = inOverlap or inNewYork or inLondon
+
+    int metConditions = 0
+
+    if deepExtension
+        metConditions += 1
+
+    if bandBreach
+        metConditions += 1
+
+    if reversalCandle
+        metConditions += 1
+
+    if rejectionWick
+        metConditions += 1
+
+    if volatilitySweetSpot
+        metConditions += 1
+
+    if sessionQuality
+        metConditions += 1
+
+    100.0 * metConditions / 6.0
+
+
+// ============================================================================
+// 14. JSON HELPERS
+// ============================================================================
+
+boolToJson(bool value) =>
+    string result = "false"
+
+    if value
+        result := "true"
+
+    result
+
+
+nullableFloat(float value, string numberFormat) =>
+    string result = "null"
+
+    if not na(value)
+        result := str.tostring(
+             value,
+             numberFormat
+         )
+
+    result
+
+
+nullableVolume(float value) =>
+    string result = "null"
+
+    if not na(value)
+        result := str.tostring(
+             value,
+             "#.####"
+         )
+
+    result
+
+
+// ============================================================================
+// 15. ACTIVE CANDIDATE VALUES
+// ============================================================================
+
+getCandidateDirection() =>
+    string result = "neutral"
+
+    if finalLongCandidate
+        result := "long"
+    else if finalShortCandidate
+        result := "short"
+
+    result
+
+
+getCandidateModel() =>
+    string result = "none"
+
+    if finalLongCandidate
+        result := longModel
+    else if finalShortCandidate
+        result := shortModel
+
+    result
+
+
+getSignalFamily(string model) =>
+    string result = "unknown"
+
+    if model == "bb_rsi_armed_reversal"
+        result := "reversal"
+    else if model == "trend_pullback_reclaim"
+        result := "trend"
+    else if model == "trend_breakout_continuation"
+        result := "momentum"
+
+    result
+
+
+string candidateDirection =
+     getCandidateDirection()
+
+string candidateModel =
+     getCandidateModel()
+
+string candidateFamily =
+     getSignalFamily(candidateModel)
+
+float candidateEntry =
+     close
+
+float candidateStop = na
+float candidateTarget = na
+float candidateStopDistance = na
+float candidateTargetDistance = na
+float candidateRewardRisk = na
+float candidateStrength = 0.0
+float candidateStrengthRaw = 0.0
+float candidateConviction = 0.0
+
+if finalLongCandidate
+    candidateStop :=
+         proposedLongStop
+
+    candidateTarget :=
+         proposedLongTarget
+
+    candidateStopDistance :=
+         longStopDistance
+
+    candidateTargetDistance :=
+         longTargetDistance
+
+    candidateRewardRisk :=
+         longRewardRisk
+
+    [longStrengthValue, longStrengthRawValue] =
+         calculateLongStrength(
+             candidateModel
+         )
+
+    candidateStrength := longStrengthValue
+    candidateStrengthRaw := longStrengthRawValue
+
+    candidateConviction :=
+         calculateConviction("long")
+
+else if finalShortCandidate
+    candidateStop :=
+         proposedShortStop
+
+    candidateTarget :=
+         proposedShortTarget
+
+    candidateStopDistance :=
+         shortStopDistance
+
+    candidateTargetDistance :=
+         shortTargetDistance
+
+    candidateRewardRisk :=
+         shortRewardRisk
+
+    [shortStrengthValue, shortStrengthRawValue] =
+         calculateShortStrength(
+             candidateModel
+         )
+
+    candidateStrength := shortStrengthValue
+    candidateStrengthRaw := shortStrengthRawValue
+
+    candidateConviction :=
+         calculateConviction("short")
+
+
+getStrengthLabel(float score) =>
+    string result = "very_weak"
+
+    if score >= 80.0
+        result := "very_strong"
+    else if score >= 70.0
+        result := "strong"
+    else if score >= 60.0
+        result := "moderate"
+    else if score >= 50.0
+        result := "weak"
+
+    result
+
+
+string strengthLabel =
+     getStrengthLabel(
+         candidateStrength
+     )
+
+string candidateSide =
+     candidateDirection == "long" ? "buy" : candidateDirection == "short" ? "sell" : "none"
+
+string candidatePriority =
+     candidateStrength >= 70.0 ? "high" : "normal"
+
+bool candidateIsShort =
+     candidateDirection == "short"
+
+bool candidateIsTrendFollowing =
+     false
+
+string candidateNotes =
+     candidateModel + " " + candidateDirection +
+     " candidate (fade/reversal); RSI=" + str.tostring(rsi, "#.#") +
+     ", ADX=" + str.tostring(adx, "#.#") +
+     ", ATRpips=" + str.tostring(atrPips, "#.#")
+
+string signalId =
+     signalIdPrefix + "-" +
+     str.tostring(time) +
+     "-" +
+     candidateDirection +
+     "-" +
+     candidateModel
+
+
+// ============================================================================
+// 16. CANONICAL PAYLOAD BUILDER
+// ============================================================================
+
+buildCanonicalPayload() =>
+    string generatedUtc =
+         str.format_time(
+             time,
+             "yyyy-MM-dd'T'HH:mm:ss'Z'",
+             "UTC"
+         )
+
+    string payload = "{"
+
+    payload := payload +
+         "\"schema_name\":\"st_ludaetuc_canonical_payload\","
+
+    payload := payload +
+         "\"schema_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"event_type\":\"signal\","
+
+    payload := payload + "\"meta\":{"
+
+    payload := payload +
+         "\"signal_id\":\"" +
+         signalId +
+         "\","
+
+    payload := payload +
+         "\"event_id\":\"" +
+         signalId +
+         "\","
+
+    payload := payload +
+         "\"parent_signal_id\":null,"
+
+    payload := payload +
+         "\"generated_at_utc\":\"" +
+         generatedUtc +
+         "\","
+
+    payload := payload +
+         "\"sequence_no\":1"
+
+    payload := payload + "},"
+
+    payload := payload + "\"system\":{"
+
+    payload := payload +
+         "\"name\":\"St Ludaetuc\","
+
+    payload := payload +
+         "\"environment\":\"paper\","
+
+    payload := payload +
+         "\"source\":\"tradingview\","
+
+    payload := payload +
+         "\"source_platform\":\"tradingview\","
+
+    payload := payload +
+         "\"strategy_id\":\"" +
+         strategyIdSlug +
+         "\","
+
+    payload := payload +
+         "\"strategy_name\":\"" +
+         strategyDisplayName +
+         "\","
+
+    payload := payload +
+         "\"strategy_version\":\"" +
+         strategyVersionString +
+         "\","
+
+    payload := payload +
+         "\"alert_version\":\"tv_alert_v1\","
+
+    payload := payload +
+         "\"payload_schema_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"payload_spec_version\":\"1.0\","
+
+    payload := payload +
+         "\"canonical_payload_version\":\"" +
+         schemaVersionString +
+         "\","
+
+    payload := payload +
+         "\"model_family\":\"rule_based_pine_strategy\","
+
+    payload := payload +
+         "\"model_version\":\"" +
+         strategyVersionString +
+         "\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"instrument\":{"
+
+    payload := payload +
+         "\"symbol\":\"" +
+         pairSymbol +
+         "\","
+
+    payload := payload +
+         "\"display_name\":\"" +
+         pairDisplayName +
+         "\","
+
+    payload := payload +
+         "\"asset_class\":\"metal\","
+
+    payload := payload +
+         "\"subtype\":\"precious_metal\","
+
+    payload := payload +
+         "\"market_type\":\"spot_metal\","
+
+    payload := payload +
+         "\"broker_symbol\":\"" +
+         pairBrokerSymbol +
+         "\","
+
+    payload := payload +
+         "\"broker_instrument_name\":\"" +
+         pairDisplayName +
+         "\","
+
+    payload := payload +
+         "\"exchange_timezone\":\"UTC\","
+
+    payload := payload +
+         "\"base_currency\":\"" +
+         pairBaseCurrency +
+         "\","
+
+    payload := payload +
+         "\"quote_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"settlement_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"margin_currency\":\"" +
+         pairQuoteCurrency +
+         "\","
+
+    payload := payload +
+         "\"tick_size\":" +
+         str.tostring(
+             syminfo.mintick,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"pip_size\":" +
+         str.tostring(
+             pipSize,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"contract_size\":" +
+         str.tostring(pairContractSize, "#") +
+         ","
+
+    payload := payload +
+         "\"unit_step\":" +
+         str.tostring(pairUnitStep, "#") +
+         ","
+
+    payload := payload +
+         "\"min_units\":" +
+         str.tostring(pairMinUnits, "#") +
+         ","
+
+    payload := payload +
+         "\"max_units\":" +
+         str.tostring(pairMaxUnits, "#") +
+         ","
+
+    payload := payload +
+         "\"quantity_decimals\":0,"
+
+    payload := payload +
+         "\"price_decimals\":" +
+         str.tostring(pairPriceDecimals, "#") +
+         ","
+
+    payload := payload +
+         "\"fee_model\":\"spread_only\","
+
+    payload := payload +
+         "\"swap_model\":\"oanda_daily_financing\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"market\":{"
+
+    payload := payload +
+         "\"timeframe\":\"2m\","
+
+    payload := payload +
+         "\"timeframe_seconds\":120,"
+
+    payload := payload +
+         "\"session_name\":\"" +
+         sessionName +
+         "\","
+
+    payload := payload +
+         "\"session_phase\":\"active\","
+
+    payload := payload +
+         "\"market_state\":\"open\","
+
+    payload := payload +
+         "\"bar_time_utc\":\"" +
+         generatedUtc +
+         "\","
+
+    payload := payload +
+         "\"bar_index\":" +
+         str.tostring(bar_index) +
+         ","
+
+    payload := payload +
+         "\"is_realtime\":" +
+         boolToJson(
+             barstate.isrealtime
+         ) +
+         ","
+
+    payload := payload +
+         "\"is_confirmed_bar\":" +
+         boolToJson(
+             barstate.isconfirmed
+         ) +
+         ","
+
+    payload := payload +
+         "\"weekday\":" +
+         str.tostring(dayofweek(time, "UTC")) +
+         ","
+
+    payload := payload +
+         "\"hour_utc\":" +
+         str.tostring(hour(time, "UTC")) +
+         ","
+
+    payload := payload +
+         "\"minute_utc\":" +
+         str.tostring(minute(time, "UTC"))
+
+    payload := payload + "},"
+
+    payload := payload + "\"signal\":{"
+
+    payload := payload +
+         "\"signal_type\":\"entry\","
+
+    payload := payload +
+         "\"family\":\"" +
+         candidateFamily +
+         "\","
+
+    payload := payload +
+         "\"direction\":\"" +
+         candidateDirection +
+         "\","
+
+    payload := payload +
+         "\"side\":\"" +
+         candidateSide +
+         "\","
+
+    payload := payload +
+         "\"strength_label\":\"" +
+         strengthLabel +
+         "\","
+
+    payload := payload +
+         "\"entry_model\":\"" +
+         candidateModel +
+         "\","
+
+    payload := payload +
+         "\"exit_model\":\"fixed_stop_take_profit\","
+
+    payload := payload +
+         "\"trigger_reason\":\"XAGUSD 2m candidate generator v1.0 BB/RSI armed exhaustion reversal conditions passed\","
+
+    payload := payload +
+         "\"setup_class\":\"" +
+         candidateFamily +
+         "\","
+
+    payload := payload +
+         "\"setup_subclass\":\"" +
+         candidateModel +
+         "\","
+
+    payload := payload +
+         "\"confidence_raw\":" +
+         nullableFloat(
+             candidateStrengthRaw,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"confidence_pct\":" +
+         nullableFloat(
+             candidateStrength,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"conviction_score\":" +
+         nullableFloat(
+             candidateConviction,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"quality_label\":\"" +
+         strengthLabel +
+         "\","
+
+    payload := payload +
+         "\"priority\":\"" +
+         candidatePriority +
+         "\","
+
+    payload := payload +
+         "\"is_short\":" +
+         boolToJson(candidateIsShort) +
+         ","
+
+    payload := payload +
+         "\"is_trend_following\":" +
+         boolToJson(candidateIsTrendFollowing) +
+         ","
+
+    payload := payload +
+         "\"is_scalp\":false,"
+
+    payload := payload +
+         "\"is_intraday\":true,"
+
+    payload := payload +
+         "\"regime_ok\":" +
+         boolToJson(commonCandidatePass) +
+         ","
+
+    payload := payload +
+         "\"confirmation_count\":1,"
+
+    payload := payload +
+         "\"notes\":\"" +
+         candidateNotes +
+         "\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"price\":{"
+
+    payload := payload +
+         "\"open\":" +
+         nullableFloat(
+             open,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"high\":" +
+         nullableFloat(
+             high,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"low\":" +
+         nullableFloat(
+             low,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"close\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"last\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"mark\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bid\":null,"
+
+    payload := payload +
+         "\"ask\":null,"
+
+    payload := payload +
+         "\"mid\":null,"
+
+    payload := payload +
+         "\"spread_points\":null,"
+
+    payload := payload +
+         "\"spread_price\":null,"
+
+    payload := payload +
+         "\"volume\":" +
+         nullableVolume(volume) +
+         ","
+
+    payload := payload +
+         "\"tick_volume\":" +
+         nullableVolume(volume) +
+         ","
+
+    payload := payload +
+         "\"vwap\":" +
+         nullableFloat(
+             vwapValue,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"typical\":" +
+         nullableFloat(
+             typicalPrice,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"weighted_close\":" +
+         nullableFloat(
+             weightedClosePrice,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_price\":" +
+         nullableFloat(
+             candleRange,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"body_price\":" +
+         nullableFloat(
+             candleBody,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"lower_wick_price\":" +
+         nullableFloat(
+             lowerWick,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload + "\"indicators\":{"
+
+    payload := payload +
+         "\"rsi\":" +
+         nullableFloat(
+             rsi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr\":" +
+         nullableFloat(
+             atr,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_percent_of_price\":" +
+         nullableFloat(
+             atrPercent,
+             "#.######"
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_fast\":" +
+         nullableFloat(
+             emaFast,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_slow\":" +
+         nullableFloat(
+             emaSlow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_regime\":" +
+         nullableFloat(
+             emaRegime,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"higher_timeframe_ema\":" +
+         nullableFloat(
+             htfEma,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_line\":" +
+         nullableFloat(
+             macdLine,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_signal\":" +
+         nullableFloat(
+             macdSignal,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"macd_histogram\":" +
+         nullableFloat(
+             macdHistogram,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"adx\":" +
+         nullableFloat(
+             adx,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"plus_di\":" +
+         nullableFloat(
+             plusDi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"minus_di\":" +
+         nullableFloat(
+             minusDi,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_basis\":" +
+         nullableFloat(
+             bbBasis,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_upper\":" +
+         nullableFloat(
+             bbUpper,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_lower\":" +
+         nullableFloat(
+             bbLower,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_width\":" +
+         nullableFloat(
+             bbWidth,
+             "#.########"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_percent_b\":" +
+         nullableFloat(
+             bbPercentB,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"vwap_session\":" +
+         nullableFloat(
+             vwapValue,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload + "\"structure\":{"
+
+    payload := payload +
+         "\"trend_bias\":\"" +
+         trendBias +
+         "\","
+
+    payload := payload +
+         "\"volatility_regime\":\"" +
+         volatilityRegime +
+         "\","
+
+    payload := payload +
+         "\"market_regime\":\"" +
+         marketRegime +
+         "\","
+
+    payload := payload +
+         "\"market_phase\":\"" +
+         marketRegime +
+         "\","
+
+    payload := payload +
+         "\"higher_timeframe_bias\":\"" +
+         higherTimeframeBias +
+         "\","
+
+    payload := payload +
+         "\"distance_to_recent_high\":" +
+         nullableFloat(
+             distanceToRecentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_to_recent_low\":" +
+         nullableFloat(
+             distanceToRecentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_to_vwap\":" +
+         nullableFloat(
+             distanceToVwap,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"nearest_support\":" +
+         nullableFloat(
+             recentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"nearest_resistance\":" +
+         nullableFloat(
+             recentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"swing_high_1\":" +
+         nullableFloat(
+             recentHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"swing_low_1\":" +
+         nullableFloat(
+             recentLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_high\":" +
+         nullableFloat(
+             rollingHigh,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_low\":" +
+         nullableFloat(
+             rollingLow,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_mid\":" +
+         nullableFloat(
+             rollingMid,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"range_width\":" +
+         nullableFloat(
+             rollingRange,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"candle_pattern\":null"
+
+    payload := payload + "},"
+
+    payload := payload + "\"risk\":{"
+
+    payload := payload +
+         "\"risk_model\":\"atr_structure_hybrid_v1\","
+
+    payload := payload +
+         "\"account_risk_percent\":" +
+         str.tostring(accountRiskPercentInput, "#.##") +
+         ","
+
+    payload := payload +
+         "\"proposed_entry\":" +
+         nullableFloat(
+             candidateEntry,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_loss\":" +
+         nullableFloat(
+             candidateStop,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_take_profit\":" +
+         nullableFloat(
+             candidateTarget,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_distance_price\":" +
+         nullableFloat(
+             candidateStopDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_stop_distance_pips\":" +
+         nullableFloat(
+             candidateStopDistance / pipSize,
+             "#.##"
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_target_distance_price\":" +
+         nullableFloat(
+             candidateTargetDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"proposed_target_distance_pips\":" +
+         nullableFloat(
+             candidateTargetDistance / pipSize,
+             "#.##"
+         ) +
+         ","
+
+    payload := payload +
+         "\"stop_distance_price\":" +
+         nullableFloat(
+             candidateStopDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"target_distance_price\":" +
+         nullableFloat(
+             candidateTargetDistance,
+             format.mintick
+         ) +
+         ","
+
+    payload := payload +
+         "\"rr_ratio\":" +
+         nullableFloat(
+             candidateRewardRisk,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"reward_risk_multiple\":" +
+         nullableFloat(
+             candidateRewardRisk,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"risk_percent\":" +
+         str.tostring(accountRiskPercentInput, "#.##") +
+         ","
+
+    payload := payload +
+         "\"position_size_units\":null,"
+
+    payload := payload +
+         "\"position_size_units_abs\":null,"
+
+    payload := payload +
+         "\"position_size_lots\":null,"
+
+    payload := payload +
+         "\"max_spread_allowed\":" +
+         str.tostring(maxSpreadAllowedPriceInput, "#.#####") +
+         ","
+
+    payload := payload +
+         "\"max_spread_allowed_pips\":" +
+         str.tostring(maxSpreadAllowedPriceInput / pipSize, "#.##") +
+         ","
+
+    payload := payload +
+         "\"max_slippage_allowed\":" +
+         str.tostring(maxSlippageAllowedPriceInput, "#.#####") +
+         ","
+
+    payload := payload +
+         "\"max_slippage_allowed_pips\":" +
+         str.tostring(maxSlippageAllowedPriceInput / pipSize, "#.##") +
+         ","
+
+    payload := payload +
+         "\"drawdown_guard_status\":\"pass\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"costs\":{"
+
+    payload := payload +
+         "\"spread_cost_estimate\":null,"
+
+    payload := payload +
+         "\"commission_estimate\":null,"
+
+    payload := payload +
+         "\"financing_model\":\"oanda_cfd\","
+
+    payload := payload +
+         "\"financing_long_annualized\":null,"
+
+    payload := payload +
+         "\"financing_short_annualized\":null,"
+
+    payload := payload +
+         "\"estimated_overnight_cost_per_day\":null,"
+
+    payload := payload +
+         "\"triple_swap_day_flag\":null,"
+
+    payload := payload +
+         "\"rollover_basis_rate\":null,"
+
+    payload := payload +
+         "\"currency_conversion_impact\":null"
+
+    payload := payload + "},"
+
+    payload := payload + "\"context\":{"
+
+    payload := payload +
+         "\"high_impact_event_nearby\":null,"
+
+    payload := payload +
+         "\"minutes_to_next_high_impact_event\":null,"
+
+    payload := payload +
+         "\"news_risk_level\":null,"
+
+    payload := payload +
+         "\"macro_bias\":null,"
+
+    payload := payload +
+         "\"sentiment_bias\":null,"
+
+    payload := payload +
+         "\"context_status\":\"unchecked\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"asset_specific\":{"
+
+    payload := payload +
+         "\"fx\":{},"
+
+    payload := payload + "\"metals\":{"
+
+    payload := payload +
+         "\"metal_symbol\":\"" +
+         metalSymbol +
+         "\","
+
+    payload := payload +
+         "\"unit\":\"troy_ounce\","
+
+    payload := payload +
+         "\"contract_size_troy_oz\":" +
+         str.tostring(pairContractSize, "#") +
+         ","
+
+    payload := payload +
+         "\"exchange\":\"comex\","
+
+    payload := payload +
+         "\"price_per_troy_ounce\":" +
+         nullableFloat(
+             close,
+             format.mintick
+         )
+
+    payload := payload + "},"
+
+    payload := payload +
+         "\"commodities\":{},"
+
+    payload := payload +
+         "\"indices\":{},"
+
+    payload := payload +
+         "\"equities\":{},"
+
+    payload := payload +
+         "\"crypto\":{}"
+
+    payload := payload + "},"
+
+    payload := payload + "\"manus\":{"
+
+    payload := payload +
+         "\"signal_quality_score\":null,"
+
+    payload := payload +
+         "\"risk_score\":null,"
+
+    payload := payload +
+         "\"context_score\":null,"
+
+    payload := payload +
+         "\"strategy_fit_score\":null,"
+
+    payload := payload +
+         "\"expected_value_score\":null,"
+
+    payload := payload +
+         "\"approval_status\":\"pending\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"execution\":{"
+
+    payload := payload +
+         "\"execution_status\":\"not_sent\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"learning\":{"
+
+    payload := payload +
+         "\"trade_outcome\":\"unknown\""
+
+    payload := payload + "},"
+
+    payload := payload + "\"extensions\":{"
+
+    payload := payload +
+         "\"candidate_generator_version\":\"" +
+         strategyVersionString +
+         "\","
+
+    payload := payload +
+         "\"candidate_strength\":" +
+         nullableFloat(
+             candidateStrength,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_pips\":" +
+         nullableFloat(
+             atrPips,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"atr_ratio\":" +
+         nullableFloat(
+             atrRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"bb_width_ratio\":" +
+         nullableFloat(
+             bbWidthRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"ema_separation_atr\":" +
+         nullableFloat(
+             emaSeparationAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_from_vwap_atr\":" +
+         nullableFloat(
+             distanceFromVwapAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"distance_from_fast_ema_atr\":" +
+         nullableFloat(
+             distanceFromFastEmaAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"rolling_range_atr\":" +
+         nullableFloat(
+             rollingRangeAtr,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"candle_body_to_range\":" +
+         nullableFloat(
+             bodyToRange,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"upper_wick_ratio\":" +
+         nullableFloat(
+             upperWickRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"lower_wick_ratio\":" +
+         nullableFloat(
+             lowerWickRatio,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"adx_di_spread\":" +
+         nullableFloat(
+             adxDiSpread,
+             "#.####"
+         ) +
+         ","
+
+    payload := payload +
+         "\"htf_timeframe\":\"" +
+         higherTimeframe +
+         "\","
+
+    payload := payload +
+         "\"engine_expected_version\":\"" +
+         engineExpectedVersion +
+         "\","
+
+    payload := payload +
+         "\"strategy_revision_date\":\"" +
+         strategyRevisionDate +
+         "\","
+
+    payload := payload +
+         "\"allow_manus_override_sl_tp\":true,"
+
+    payload := payload +
+         "\"pine_proposal_only\":true,"
+
+    payload := payload +
+         "\"candidate_policy\":\"bespoke_xagusd_v2\","
+
+    payload := payload +
+         "\"v6_bars_since_arm\":" +
+         (na(v6BarsSinceArm) ? "null" : str.tostring(v6BarsSinceArm)) +
+         ","
+
+    payload := payload +
+         "\"v6_arm_bb_z\":" +
+         nullableFloat(v6ArmBbZ, "#.####") +
+         ","
+
+    payload := payload +
+         "\"v6_arm_wick_ratio\":" +
+         nullableFloat(v6ArmWick, "#.####") +
+         ","
+
+    payload := payload +
+         "\"v6_bb_z\":" +
+         nullableFloat(bbZ, "#.####") +
+         ","
+
+    payload := payload +
+         "\"v6_min_stop_pips\":" +
+         str.tostring(v6MinStopPips, "#.##") +
+         ","
+
+    payload := payload +
+         "\"candidates_today\":" +
+         str.tostring(candidatesToday)
+
+    payload := payload + "}"
+
+    payload := payload + "}"
+
+    payload
+
+
+// ============================================================================
+// 17. FINAL CANDIDATE VALIDATION AND ALERT EMISSION
+//
+// validLongCandidate, validShortCandidate and validFinalCandidate are now
+// declared earlier (hoisted before the Section 9 state-mutation cascade --
+// see the comment block there) so the armed-reversal disarm logic can gate
+// on them. They are reused here, not redeclared.
+// ============================================================================
+
+if validFinalCandidate
+    candidatesToday += 1
+    lastCandidateBar := bar_index
+
+    if enableAlerts
+        alert(
+             buildCanonicalPayload(),
+             alert.freq_once_per_bar_close
         )
 
-        if passed:
-            return self._result(payload, cfg, model, "approved", None, None, None, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, plan)
 
-        reasons = []
-        if pre_gate_score < policy.min_pre_gate_score:
-            reasons.append(f"pre_gate_score={pre_gate_score:.2f}<{policy.min_pre_gate_score:.2f}")
-        if prob < policy.min_probability:
-            reasons.append(f"probability={prob:.3f}<{policy.min_probability:.3f}")
-        if net_ev_r < policy.min_expected_net_r:
-            reasons.append(f"expected_net_r={net_ev_r:.3f}<{policy.min_expected_net_r:.3f}")
+// ============================================================================
+// 18. OPTIONAL STRATEGY-TESTER SIMULATION
+// ============================================================================
 
-        return self._result(payload, cfg, model, "rejected", "expected_value", "; ".join(reasons), "INSUFFICIENT_POST_GATE_EDGE", dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
+var float activeStop = na
+var float activeTarget = na
+var int simulatedEntryBar = na
 
-    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any]) -> Optional[Tuple[str, str, str]]:
-        direction = as_str(get_path(payload, "signal.direction"), "").lower()
-        session = as_str(get_path(payload, "market.session_name"), "unknown").lower()
-        vol = as_str(get_path(payload, "structure.volatility_regime"), "unknown").lower()
-        context_status = as_str(get_path(payload, "context.context_status"), "unchecked").lower()
+bool flat =
+     strategy.position_size == 0
 
-        if not dq_pass:
-            return "data_quality", "Required fields missing or invalid.", "DATA_QUALITY_FAIL"
-        if not policy.enabled:
-            return "strategy_fit", f"Model disabled or unsupported: {model}.", "MODEL_DISABLED"
-        if direction not in ("long", "short"):
-            return "signal", "Direction must be long or short.", "INVALID_DIRECTION"
-        if session in cfg.blocked_sessions:
-            return "context", f"Blocked session: {session}.", "BLOCKED_SESSION"
-        if context_status == "blocked":
-            return "context", "Context explicitly blocked.", "CONTEXT_BLOCKED"
-        if vol == "extreme":
-            return "strategy_fit", "Extreme volatility blocked.", "EXTREME_VOLATILITY"
-        if plan.get("sl") is None or plan.get("tp") is None or plan.get("units") is None:
-            return "execution_planning", "Invalid trade plan.", "INVALID_TRADE_PLAN"
-        if (as_float(plan.get("rr"), 0.0) or 0.0) < policy.min_rr:
-            return "risk", "Reward-to-risk below model minimum.", "RR_BELOW_MODEL_MINIMUM"
-        spread = as_float(costs.get("spread"))
-        if spread is not None and spread > cfg.max_spread_price:
-            return "execution_cost", "Observed spread exceeds limit.", "SPREAD_TOO_WIDE"
-        if (as_float(costs.get("slippage"), 0.0) or 0.0) > cfg.max_slippage_price:
-            return "execution_cost", "Expected slippage exceeds limit.", "SLIPPAGE_TOO_HIGH"
-        if sig < 45:
-            return "signal", "Signal quality below hard minimum.", "SIGNAL_SCORE_TOO_LOW"
-        if risk < 45:
-            return "risk", "Risk score below hard minimum.", "RISK_SCORE_TOO_LOW"
-        if ctx < 35:
-            return "context", "Context score below hard minimum.", "CONTEXT_SCORE_TOO_LOW"
-        if fit < 40:
-            return "strategy_fit", "Strategy-fit score below hard minimum.", "FIT_SCORE_TOO_LOW"
-        if (as_float(costs.get("cost_r"), 1.0) or 1.0) >= 0.50:
-            return "execution_cost", "Estimated costs consume at least 0.50R.", "COST_R_EXCESSIVE"
-        return None
+if simulateCandidates and validFinalCandidate and flat
+    activeStop :=
+         candidateStop
 
-    def _result(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, status: str, stage: Optional[str], reason: Optional[str], code: Optional[str], dq: float, sig: float, risk: float, ctx: float, fit: float, pre: float, prob: float, gross_r: float, cost_r_value: float, net_r: float, diagnostics: Dict[str, Any], plan: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        out = deepcopy(payload)
-        manus = {
-            "engine_version": ENGINE_VERSION,
-            "ruleset_version": RULESET_VERSION,
-            "calibration_version": CALIBRATION_VERSION,
-            "entry_model_normalized": model,
-            "data_quality_score": round(dq, 2),
-            "signal_quality_score": round(sig, 2),
-            "risk_score": round(risk, 2),
-            "context_score": round(ctx, 2),
-            "strategy_fit_score": round(fit, 2),
-            "pre_gate_score": round(pre, 2),
-            "confidence_score": round(prob * 100.0, 2),
-            "predicted_win_probability": round(prob, 4),
-            "predicted_tp_before_sl_probability": round(prob, 4),
-            "probability_is_calibrated": False,
-            "expected_gross_r": round(gross_r, 4),
-            "expected_cost_r": round(cost_r_value, 4),
-            "expected_net_r": round(net_r, 4),
-            "expected_value_score": round(net_r, 4),
-            "approval_status": status,
-            "approval_reason": "Approved by Manus v3.3 deterministic ruleset." if status == "approved" else None,
-            "rejection_stage": stage,
-            "rejection_reason": reason,
-            "rejection_reason_code": code,
-            "diagnostics": diagnostics,
-        }
+    activeTarget :=
+         candidateTarget
 
-        if status == "approved" and plan:
-            manus.update({
-                "final_entry": plan["entry"],
-                "final_stop_loss": plan["sl"],
-                "final_take_profit": plan["tp"],
-                "final_position_size": plan["units"],
-                "final_position_size_lots": plan["lots"],
-                "final_rr_ratio": plan["rr"],
-                "final_trade_plan": {
-                    "execution_model": "fixed_entry_fixed_exit",
-                    "instrument": cfg.symbol,
-                    "broker_symbol": cfg.broker_symbol,
-                    "entry": plan["entry"],
-                    "stop_loss": plan["sl"],
-                    "take_profit": plan["tp"],
-                    "position_size_units": plan["units"],
-                    "position_size_lots": plan["lots"],
-                    "rr_ratio": plan["rr"],
-                    "risk_percent": plan["risk_percent"],
-                    "risk_cash": plan["risk_cash"],
-                    "account_ccy_conversion_rate": plan.get("account_ccy_conversion_rate"),
-                    "planning_source": plan["source"],
-                    "stop_basis": plan.get("stop_basis"),
-                    "no_mid_trade_adjustment": True,
-                },
-            })
-        else:
-            manus.update({
-                "final_entry": None,
-                "final_stop_loss": None,
-                "final_take_profit": None,
-                "final_position_size": None,
-                "final_position_size_lots": None,
-                "final_rr_ratio": None,
-                "final_trade_plan": None,
-            })
+    simulatedEntryBar :=
+         bar_index
 
-        set_path(out, "manus", manus)
-        return {
-            "approval_status": status,
-            "approval_reason": manus["approval_reason"],
-            "rejection_stage": stage,
-            "rejection_reason": reason,
-            "rejection_reason_code": code,
-            "engine_version": ENGINE_VERSION,
-            "ruleset_version": RULESET_VERSION,
-            "calibration_version": CALIBRATION_VERSION,
-            "instrument": cfg.symbol,
-            "entry_model": model,
-            "payload": out,
-            "manus": manus,
-        }
-
-    def _reject(self, payload: Dict[str, Any], reason: str, stage: str, code: str) -> Dict[str, Any]:
-        return {
-            "approval_status": "rejected",
-            "rejection_stage": stage,
-            "rejection_reason": reason,
-            "rejection_reason_code": code,
-            "engine_version": ENGINE_VERSION,
-            "ruleset_version": RULESET_VERSION,
-            "calibration_version": CALIBRATION_VERSION,
-            "payload": payload,
-            "manus": {
-                "approval_status": "rejected",
-                "rejection_stage": stage,
-                "rejection_reason": reason,
-                "rejection_reason_code": code,
-                "probability_is_calibrated": False,
-            },
-        }
-
-
-def _build_shadow_features(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Builds the flat feature dict shadow_scorer.py expects, from engine.py's
-    nested payload. Shadow-mode only — never touches approval logic."""
-    display_name = get_path(payload, "instrument.display_name")
-    if not display_name:
-        raw_symbol = get_path(payload, "instrument.symbol") or get_path(payload, "instrument.broker_symbol") or ""
-        clean = str(raw_symbol).upper().replace("/", "").replace("_", "").replace("-", "").replace(" ", "")
-        display_name = f"{clean[:3]}/{clean[3:]}" if len(clean) == 6 else clean
-    return {
-        "indicators_rsi": get_path(payload, "indicators.rsi"),
-        "indicators_atr": get_path(payload, "indicators.atr"),
-        "indicators_atr_percent_of_price": get_path(payload, "indicators.atr_percent_of_price"),
-        "indicators_ema_fast": get_path(payload, "indicators.ema_fast"),
-        "indicators_ema_slow": get_path(payload, "indicators.ema_slow"),
-        "indicators_macd_line": get_path(payload, "indicators.macd_line"),
-        "indicators_macd_signal": get_path(payload, "indicators.macd_signal"),
-        "indicators_macd_histogram": get_path(payload, "indicators.macd_histogram"),
-        "indicators_bb_basis": get_path(payload, "indicators.bb_basis"),
-        "indicators_bb_upper": get_path(payload, "indicators.bb_upper"),
-        "indicators_bb_lower": get_path(payload, "indicators.bb_lower"),
-        "indicators_bb_width": get_path(payload, "indicators.bb_width"),
-        "structure_distance_to_recent_high": get_path(payload, "structure.distance_to_recent_high"),
-        "structure_distance_to_recent_low": get_path(payload, "structure.distance_to_recent_low"),
-        "structure_nearest_support": get_path(payload, "structure.nearest_support"),
-        "structure_nearest_resistance": get_path(payload, "structure.nearest_resistance"),
-        "instrument_norm": display_name,
-        "market_session_name": get_path(payload, "market.session_name"),
-        "market_session_phase": get_path(payload, "market.session_phase"),
-        "market_market_state": get_path(payload, "market.market_state"),
-        "signal_type": get_path(payload, "signal.type"),
-        "signal_strength_label": get_path(payload, "signal.strength_label"),
-        "signal_entry_model": get_path(payload, "signal.entry_model"),
-        "structure_trend_bias": get_path(payload, "structure.trend_bias"),
-        "structure_market_regime": get_path(payload, "structure.market_regime"),
-        "structure_higher_timeframe_bias": get_path(payload, "structure.higher_timeframe_bias"),
-        "context_context_status": get_path(payload, "context.context_status"),
-    }
-
-
-engine = TradingSignalEvaluationEngine()
-app = FastAPI(title="St Ludaetuc Manus Engine", version=ENGINE_VERSION)
-
-
-class MarketDataTick(BaseModel):
-    # TradingView's own placeholders ({{ticker}}, {{interval}}, {{time}},
-    # {{open}}/{{high}}/{{low}}/{{close}}/{{volume}}) populate these - see
-    # the shared alert message template. `extra: allow` so the same endpoint
-    # tolerates minor template tweaks without a deploy.
-    ticker: Optional[str] = None
-    symbol: Optional[str] = None
-    interval: Optional[str] = None
-    time: Optional[Any] = None
-    open: Optional[Any] = None
-    high: Optional[Any] = None
-    low: Optional[Any] = None
-    close: Optional[Any] = None
-    volume: Optional[Any] = None
-    model_config = {"extra": "allow"}
-
-
-class TradeOutcome(BaseModel):
-    trade_id: Optional[str] = None
-    instrument: Optional[str] = None
-    timeframe: Optional[str] = None
-    closed_at: Optional[Any] = None
-    outcome: Optional[str] = None  # "win" | "loss" | "breakeven" | "cancelled"
-    realized_r: Optional[float] = None
-    realized_pnl: Optional[float] = None
-    exit_price: Optional[float] = None
-    exit_reason: Optional[str] = None
-    model_config = {"extra": "allow"}
-
-
-class TradeOpened(BaseModel):
-    # trade_id here is the Pine-side meta.signal_id, matching "prediction" -
-    # NOT the OANDA trade ID (that's derived from oanda_order_response
-    # below and stored inside the payload as the open-time bridge).
-    trade_id: Optional[str] = None
-    instrument: Optional[str] = None
-    direction: Optional[str] = None  # "long" | "short"
-    opened_at: Optional[Any] = None
-    # The units/SL/TP actually submitted to OANDA, after the Make
-    # scenario's own rounding (floor/ceil to whole units, tick rounding on
-    # price) - i.e. module 107/110/115-118's results in the old blueprint,
-    # not the engine's pre-rounding final_* figures already in "prediction".
-    final_trade_plan: Optional[Dict[str, Any]] = None
-    # Same OANDA account snapshot /evaluate receives, taken fresh at
-    # order-placement time rather than at decision time - the two can
-    # differ by the few seconds/requests in between.
-    #
-    # account_snapshot / oanda_order_response accept EITHER a JSON-encoded
-    # string OR an already-parsed object. They arrive as strings in
-    # practice: the Make side builds this request body as hand-written raw
-    # JSON text, and embedding a whole nested object into that text
-    # unquoted (relying on toString() to produce something splice-safe)
-    # turned out not to be reliable - on 2026-10-02 it broke EVERY single
-    # /trade-opened call (100% 422 rate across all 5 pairs) because the
-    # unquoted embed corrupted the outer JSON body before our code ever
-    # ran. escapeJSON(toString(...)), quoted like any other string field,
-    # is the one embedding technique Make documents as safe - so that's
-    # what the Make side now sends, and _parse_json_field() below decodes
-    # it here instead of trusting FastAPI's own body parser with it.
-    account_snapshot: Optional[Union[str, Dict[str, Any]]] = None
-    # The raw, complete JSON body OANDA's POST /orders returned. Forwarded
-    # wholesale rather than hand-picked field-by-field (as the old Sheets
-    # mapper did with ~15 separate IML expressions per pair) so nothing
-    # from OANDA's response can be silently missed; _derive_oanda_fill()
-    # below extracts the handful of facts that need their own columns.
-    oanda_order_response: Optional[Union[str, Dict[str, Any]]] = None
-    model_config = {"extra": "allow"}
-
-
-def _parse_json_field(value: Any, field_name: str) -> Dict[str, Any]:
-    """Decodes account_snapshot / oanda_order_response, which now arrive as
-    escapeJSON(toString(...))-encoded JSON TEXT (a quoted string field),
-    not a bare nested object - see the comment on TradeOpened above for
-    why. Never raises: a value that isn't valid JSON gets recorded under
-    "_unparsed" rather than dropped or rejected, so a future encoding
-    mismatch degrades to a visible, queryable gap instead of silently
-    losing the whole trade-opened event the way the 2026-10-02 incident
-    did. A dict passed straight through (e.g. a future non-Make caller
-    posting real JSON) is accepted as-is."""
-    if value is None or value == "":
-        return {}
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            logging.error("trade-opened: %s was not valid JSON text: %r", field_name, value[:1000])
-            return {"_unparsed": value[:2000]}
-        return parsed if isinstance(parsed, dict) else {"_unparsed": value[:2000]}
-    return {}
-
-
-def _derive_oanda_fill(order_response: Dict[str, Any]) -> Dict[str, Any]:
-    """Extracts the same fill-status/trade-ID facts the old Sheets mapper
-    computed field-by-field with inline IML (columns 400-444 of the old
-    blueprint), from OANDA's raw POST /orders response. Centralising this
-    here - rather than in five separately hand-maintained Make scenarios -
-    is itself part of the fix: logic that decides what a trade's outcome
-    *means* belongs in the engine, not duplicated per pair in Make math."""
-    order_response = order_response or {}
-    create_tx = order_response.get("orderCreateTransaction") or {}
-    fill_tx = order_response.get("orderFillTransaction") or {}
-    cancel_tx = order_response.get("orderCancelTransaction") or {}
-    reject_tx = order_response.get("orderRejectTransaction") or {}
-    trade_opened_tx = fill_tx.get("tradeOpened") or {}
-
-    if fill_tx.get("id"):
-        fill_status = "FILLED"
-    elif cancel_tx.get("id"):
-        fill_status = "CANCELLED"
-    elif reject_tx.get("id"):
-        fill_status = "REJECTED"
-    else:
-        fill_status = "UNKNOWN"
-
-    return {
-        "fill_status": fill_status,
-        "oanda_trade_id": trade_opened_tx.get("tradeID"),
-        "order_create_transaction_id": create_tx.get("id"),
-        "order_cancel_transaction_id": cancel_tx.get("id"),
-        "order_reject_transaction_id": reject_tx.get("id"),
-        "last_transaction_id": order_response.get("lastTransactionID"),
-        "order_batch_id": create_tx.get("batchID"),
-        "order_request_id": create_tx.get("requestID"),
-        "related_transaction_ids": order_response.get("relatedTransactionIDs"),
-        "cancel_or_reject_reason": cancel_tx.get("reason") or reject_tx.get("rejectReason"),
-        "order_created_at": create_tx.get("time"),
-        "filled_at": fill_tx.get("time"),
-        "cancelled_at": cancel_tx.get("time"),
-        "rejected_at": reject_tx.get("time"),
-        "submitted_units": create_tx.get("units"),
-        "submitted_stop_loss": (create_tx.get("stopLossOnFill") or {}).get("price"),
-        "submitted_take_profit": (create_tx.get("takeProfitOnFill") or {}).get("price"),
-    }
-
-
-@app.on_event("startup")
-def _on_startup() -> None:
-    try:
-        _ensure_events_schema()
-    except Exception:
-        logging.exception("Failed to ensure events schema on startup (non-fatal)")
-
-
-@app.get("/health")
-def health() -> Dict[str, Any]:
-    return {
-        "status": "ok",
-        "engine_version": ENGINE_VERSION,
-        "ruleset_version": RULESET_VERSION,
-        "calibration_version": CALIBRATION_VERSION,
-        "supported_instruments": sorted(INSTRUMENTS.keys()),
-        "supported_entry_models": sorted(MODEL_POLICIES.keys()),
-        "probability_is_calibrated": False,
-        "events_db_configured": bool(DATABASE_URL),
-    }
-
-
-@app.post("/market-data")
-async def market_data(request: Request):
-    """Direct TradingView -> Render ingestion for the Market Data Centre.
-    Deliberately never touches Make - see the explicit 'I don't want the
-    market data going through make' decision. Must respond well inside
-    TradingView's 3s webhook timeout, so this does exactly one insert.
-
-    Takes the raw Request rather than a declared Pydantic model on
-    purpose: TradingView's {{plot(...)}} placeholders can substitute the
-    bare tokens NaN / Infinity / -Infinity (e.g. an indicator with no
-    value yet) into the message. Those are valid Pine/JS number literals
-    but not valid JSON, and FastAPI's automatic model-binding rejects the
-    whole request with a 422 before our code ever runs - which is exactly
-    what was silently dropping every tick tonight. We parse the body
-    ourselves so a bad token can be neutralised instead of losing the tick."""
-    raw_bytes = await request.body()
-    raw_text = raw_bytes.decode("utf-8", errors="replace")
-    try:
-        body = json.loads(raw_text)
-    except json.JSONDecodeError:
-        sanitized = _JSON_NAN_INF_RE.sub("null", raw_text)
-        try:
-            body = json.loads(sanitized)
-        except json.JSONDecodeError as exc:
-            logging.error("market-data: unparseable body even after sanitizing: %r", raw_text[:2000])
-            return JSONResponse(status_code=422, content={"status": "error", "error": f"invalid JSON: {exc}", "raw_body_preview": raw_text[:500]})
-    if not isinstance(body, dict):
-        return JSONResponse(status_code=422, content={"status": "error", "error": "expected a JSON object", "raw_body_preview": raw_text[:500]})
-
-    ticker_raw = body.get("ticker") or body.get("symbol")
-    instrument = _normalize_tv_ticker(ticker_raw) or None
-    timeframe = _normalize_tv_interval(body.get("interval")) or None
-    event_time = _parse_event_time(body.get("time"))
-    try:
-        event_id = log_event(
-            event_type="market_data",
-            origin="tradingview",
-            event_time=event_time,
-            payload=body,
-            instrument=instrument,
-            timeframe=timeframe,
-            status="recorded",
+    if validLongCandidate
+        strategy.entry(
+             id = "Candidate Long",
+             direction = strategy.long,
+             comment = candidateModel
         )
-    except Exception as exc:
-        logging.exception("market-data insert failed")
-        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
-    return {"status": "ok", "event_id": event_id, "instrument": instrument, "timeframe": timeframe}
 
-
-@app.post("/trade-outcome")
-def trade_outcome(outcome: TradeOutcome):
-    """Actual closed-trade result, keyed by trade_id (the same
-    meta.signal_id a 'prediction' event was logged under at evaluation
-    time), so the two can be joined to check calibration. Not yet wired to
-    the Closed Trade Data Sync Make scenario - that's a separate, deliberate
-    follow-up step, since it means touching a live trading scenario."""
-    body = outcome.model_dump()
-    trade_id = body.get("trade_id")
-    if not trade_id:
-        return JSONResponse(status_code=400, content={"status": "error", "error": "trade_id is required"})
-    event_time = _parse_event_time(body.get("closed_at"))
-    try:
-        event_id = log_event(
-            event_type="trade_outcome",
-            origin="oanda_via_make",
-            event_time=event_time,
-            payload=body,
-            event_id=hashlib.sha256(f"trade_outcome:{trade_id}".encode("utf-8")).hexdigest(),
-            trade_id=str(trade_id),
-            instrument=body.get("instrument"),
-            timeframe=body.get("timeframe"),
-            status=body.get("outcome"),
+        strategy.exit(
+             id = "Candidate Long Exit",
+             from_entry = "Candidate Long",
+             stop = activeStop,
+             limit = activeTarget
         )
-    except Exception as exc:
-        logging.exception("trade-outcome insert failed")
-        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
-    return {"status": "ok", "event_id": event_id}
 
-
-@app.post("/trade-opened")
-def trade_opened(req: TradeOpened):
-    """Logged by each pair's Make scenario immediately after an approved
-    signal's order is placed on OANDA (the BUY/SELL branches only - never
-    for a rejected signal, since /evaluate's own 'prediction' event, now
-    enriched with account_snapshot, already covers that case with no
-    order ever having been placed). This is the open-time bridge between
-    a Pine signal_id and the OANDA trade ID that signal produced -
-    replaces the Google Sheets row that used to be the only place this
-    link existed. See master_trading_log / master_decision_log for how
-    it's used.
-
-    Called strictly after the order already exists on OANDA, so - like
-    /trade-outcome - a failure here is safe to report loudly (500): it
-    can only ever mean an unlogged data point, never a blocked or
-    duplicated trade."""
-    body = req.model_dump()
-    trade_id = body.get("trade_id")
-    if not trade_id:
-        return JSONResponse(status_code=400, content={"status": "error", "error": "trade_id is required"})
-
-    account_snapshot = _parse_json_field(body.get("account_snapshot"), "account_snapshot")
-    oanda_order_response = _parse_json_field(body.get("oanda_order_response"), "oanda_order_response")
-
-    fill_facts = _derive_oanda_fill(oanda_order_response)
-    event_time = _parse_event_time(body.get("opened_at"))
-    try:
-        event_id = log_event(
-            event_type="trade_opened",
-            origin="oanda_via_make",
-            event_time=event_time,
-            payload={
-                "trade_id": trade_id,
-                "instrument": body.get("instrument"),
-                "direction": body.get("direction"),
-                "final_trade_plan": body.get("final_trade_plan"),
-                "account_snapshot": account_snapshot,
-                "oanda_order_response": oanda_order_response,
-                **fill_facts,
-            },
-            event_id=hashlib.sha256(f"trade_opened:{trade_id}".encode("utf-8")).hexdigest(),
-            trade_id=str(trade_id),
-            instrument=body.get("instrument"),
-            status=fill_facts["fill_status"],
+    if validShortCandidate
+        strategy.entry(
+             id = "Candidate Short",
+             direction = strategy.short,
+             comment = candidateModel
         )
-    except Exception as exc:
-        logging.exception("trade-opened insert failed")
-        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
-    return {
-        "status": "ok",
-        "event_id": event_id,
-        "fill_status": fill_facts["fill_status"],
-        "oanda_trade_id": fill_facts["oanda_trade_id"],
-    }
 
-
-@app.post("/evaluate")
-def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
-    result = engine.evaluate(req.model_dump())
-    try:
-        shadow_payload = req.payload if isinstance(req.payload, dict) else req.model_dump()
-        shadow_features = _build_shadow_features(shadow_payload)
-        shadow_score = shadow_score_0_100(shadow_features)
-    except Exception:
-        shadow_score = None
-    result["shadow_score_v0"] = shadow_score
-    if isinstance(result.get("manus"), dict):
-        result["manus"]["shadow_score_v0"] = shadow_score
-
-    # Best-effort prediction logging for calibration tracking. Must NEVER
-    # block or break a trade evaluation - a Postgres hiccup should be
-    # invisible to the trading path, just an unlogged data point.
-    try:
-        payload_in = req.payload if isinstance(req.payload, dict) else {}
-        trade_id = get_path(payload_in, "meta.signal_id")
-        if trade_id:
-            manus = result.get("manus") if isinstance(result.get("manus"), dict) else {}
-            event_time = _parse_event_time(get_path(payload_in, "market.bar_time_utc"))
-            # v3.10.0: diagnostics.trade_plan_preview is plan_trade()'s own
-            # raw dict, which uses "sl"/"tp" (see plan_trade() above) - NOT
-            # the "stop_loss"/"take_profit" naming final_trade_plan uses a
-            # few lines below. Renamed here so hypothetical_trade_plan and
-            # final_trade_plan share one consistent shape downstream
-            # (notably /analytics/prediction-accuracy, which reads
-            # whichever of the two is present and must not care which).
-            _plan_preview = manus.get("diagnostics", {}).get("trade_plan_preview") or {}
-            hypothetical_trade_plan = (
-                {
-                    "entry": _plan_preview.get("entry"),
-                    "stop_loss": _plan_preview.get("sl"),
-                    "take_profit": _plan_preview.get("tp"),
-                    "rr_ratio": _plan_preview.get("rr"),
-                    "position_size_units": _plan_preview.get("units"),
-                    "position_size_lots": _plan_preview.get("lots"),
-                    "planning_source": _plan_preview.get("source"),
-                    "stop_basis": _plan_preview.get("stop_basis"),
-                }
-                if _plan_preview.get("sl") is not None and _plan_preview.get("tp") is not None
-                else None
-            )
-            log_event(
-                event_type="prediction",
-                origin="manus_engine",
-                event_time=event_time,
-                payload={
-                    "signal_id": trade_id,
-                    "instrument": result.get("instrument"),
-                    "entry_model": result.get("entry_model"),
-                    "approval_status": result.get("approval_status"),
-                    "rejection_stage": result.get("rejection_stage"),
-                    "rejection_reason_code": result.get("rejection_reason_code"),
-                    "data_quality_score": manus.get("data_quality_score"),
-                    "signal_quality_score": manus.get("signal_quality_score"),
-                    "risk_score": manus.get("risk_score"),
-                    "context_score": manus.get("context_score"),
-                    "strategy_fit_score": manus.get("strategy_fit_score"),
-                    "pre_gate_score": manus.get("pre_gate_score"),
-                    "predicted_win_probability": manus.get("predicted_win_probability"),
-                    "predicted_tp_before_sl_probability": manus.get("predicted_tp_before_sl_probability"),
-                    "expected_gross_r": manus.get("expected_gross_r"),
-                    "expected_cost_r": manus.get("expected_cost_r"),
-                    "expected_net_r": manus.get("expected_net_r"),
-                    "final_trade_plan": manus.get("final_trade_plan"),
-                    # v3.10.0: plan_trade() already computes an entry/stop
-                    # loss/take profit for every signal that resolves to a
-                    # valid instrument + direction, regardless of whether
-                    # Manus approves it - diagnostics.trade_plan_preview is
-                    # that same dict, set unconditionally in _result().
-                    # Previously, only an APPROVED signal's plan survived
-                    # into this logged prediction event (final_trade_plan
-                    # above is None for every rejection), so a rejected
-                    # signal's hypothetical trade was lost the moment this
-                    # event was written - there was no way to later ask
-                    # "would this have won if we'd taken it?" for anything
-                    # Manus didn't approve. Logging the same plan here,
-                    # unconditionally, is what makes that question
-                    # answerable later by walking 1m market_data candles
-                    # forward from market.bar_time_utc against this plan's
-                    # stop_loss/take_profit - see GET
-                    # /analytics/prediction-accuracy. None whenever
-                    # plan_trade() itself couldn't produce a usable plan
-                    # (e.g. direction wasn't long/short, or entry<=0) -
-                    # that's a real "can't be scored" case, not a bug.
-                    "hypothetical_trade_plan": hypothetical_trade_plan,
-                    "shadow_score_v0": shadow_score,
-                    # The full raw signal payload (every indicator/structure/
-                    # context field the candidate generator sent), not just
-                    # Manus's derived scores. Andy's call: for the richest
-                    # possible future model-training feature set, we want
-                    # the underlying inputs archived alongside the decision,
-                    # not just the decision itself.
-                    "raw_signal_payload": payload_in,
-                    # v3.6.0: the OANDA account snapshot Make already sends
-                    # with every /evaluate call (plan_trade() reads it for
-                    # equity/risk sizing) - previously only ever reached
-                    # Google Sheets, never persisted here, so a rejected
-                    # signal's account context was lost the moment the
-                    # Sheets row was the only copy of it. Replaces that
-                    # Sheets row with no change needed on the Make side,
-                    # since this payload was already being sent to us.
-                    "account_snapshot": req.account if isinstance(req.account, dict) else None,
-                },
-                event_id=hashlib.sha256(f"prediction:{trade_id}".encode("utf-8")).hexdigest(),
-                trade_id=str(trade_id),
-                instrument=result.get("instrument"),
-                timeframe=get_path(payload_in, "market.timeframe"),
-                strategy_version=result.get("ruleset_version"),
-                model_version=result.get("engine_version"),
-                status=result.get("approval_status"),
-            )
-    except Exception:
-        logging.exception("prediction event logging failed (non-fatal, trade unaffected)")
-
-    return result
-
-
-def _jsonable(value: Any) -> Any:
-    """Recursively converts a raw psycopg2 row value (Decimal, datetime,
-    etc.) into something the default JSON encoder can handle, since this
-    endpoint hand-builds its response from RealDictCursor rows rather than
-    going through a Pydantic response model."""
-    if isinstance(value, dict):
-        return {k: _jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(v) for v in value]
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if hasattr(value, "__float__") and not isinstance(value, (int, float, bool)):
-        # Decimal and similar numeric types from numeric/::numeric columns.
-        try:
-            return float(value)
-        except Exception:
-            return str(value)
-    return value
-
-
-def _analytics_query(cur, sql: str, params: Optional[Tuple[Any, ...]] = None) -> list:
-    cur.execute(sql, params or ())
-    return [_jsonable(dict(row)) for row in cur.fetchall()]
-
-
-@app.get("/analytics/strategy-report")
-def strategy_report() -> Dict[str, Any]:
-    """Read-only diagnostic rollup for the Pine-strategy improvement effort
-    kicked off 2026-10-02. Pulls everything needed for a first performance
-    report in one call, since direct Postgres access from outside Render's
-    network is blocked by this database's (deliberately empty) IP allowlist -
-    this endpoint is the only way anything outside the engine itself can see
-    aggregate numbers.
-
-    Each section below is independent and wrapped in its own try/except:
-    the events data is still thin in places (trade_opened bridging has only
-    been reliable since today), so a query that returns zero rows or hits an
-    edge case in one section must never blank out every other section. A
-    failed section shows up under "errors" with its name and the exception
-    text rather than 500ing the whole report."""
-    pool = _get_pool()
-    if pool is None:
-        return JSONResponse(status_code=503, content={"status": "error", "error": "DATABASE_URL not configured or Postgres pool unavailable"})
-
-    report: Dict[str, Any] = {"generated_at": datetime.now(timezone.utc).isoformat(), "engine_version": ENGINE_VERSION}
-    errors: Dict[str, str] = {}
-
-    def run(name: str, sql: str, params: Optional[Tuple[Any, ...]] = None) -> None:
-        try:
-            with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
-                report[name] = _analytics_query(cur, sql, params)
-        except Exception as exc:
-            conn.rollback()  # clear the aborted-transaction state so later sections can still run
-            errors[name] = str(exc)
-            logging.exception("strategy-report section %s failed", name)
-
-    conn = pool.getconn()
-    try:
-        run(
-            "events_overview",
-            """
-            SELECT event_type, COUNT(*) AS n, MIN(event_time) AS first_event, MAX(event_time) AS last_event
-            FROM events GROUP BY event_type ORDER BY event_type
-            """,
+        strategy.exit(
+             id = "Candidate Short Exit",
+             from_entry = "Candidate Short",
+             stop = activeStop,
+             limit = activeTarget
         )
-        run(
-            "trade_outcomes_overall",
-            """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'win') AS wins,
-                COUNT(*) FILTER (WHERE status = 'loss') AS losses,
-                COUNT(*) FILTER (WHERE status NOT IN ('win', 'loss')) AS other,
-                ROUND(SUM((payload->>'realized_pnl')::numeric), 4) AS total_pnl,
-                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'win'), 4) AS avg_win_pnl,
-                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'loss'), 4) AS avg_loss_pnl,
-                MIN(event_time) AS first_trade,
-                MAX(event_time) AS last_trade
-            FROM events WHERE event_type = 'trade_outcome'
-            """,
-        )
-        run(
-            "trade_outcomes_by_instrument",
-            """
-            SELECT
-                instrument,
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'win') AS wins,
-                COUNT(*) FILTER (WHERE status = 'loss') AS losses,
-                COUNT(*) FILTER (WHERE status NOT IN ('win', 'loss')) AS other,
-                ROUND(SUM((payload->>'realized_pnl')::numeric), 4) AS total_pnl,
-                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'win'), 4) AS avg_win_pnl,
-                ROUND(AVG((payload->>'realized_pnl')::numeric) FILTER (WHERE status = 'loss'), 4) AS avg_loss_pnl,
-                MIN(event_time) AS first_trade,
-                MAX(event_time) AS last_trade
-            FROM events
-            WHERE event_type = 'trade_outcome'
-            GROUP BY instrument
-            ORDER BY total_pnl ASC NULLS LAST
-            """,
-        )
-        run(
-            "trade_outcomes_by_hour_utc",
-            """
-            SELECT
-                instrument,
-                EXTRACT(HOUR FROM event_time)::int AS hour_utc,
-                COUNT(*) AS n,
-                COUNT(*) FILTER (WHERE status = 'win') AS wins,
-                ROUND(SUM((payload->>'realized_pnl')::numeric), 4) AS total_pnl
-            FROM events
-            WHERE event_type = 'trade_outcome'
-            GROUP BY instrument, hour_utc
-            ORDER BY instrument, hour_utc
-            """,
-        )
-        run(
-            "prediction_approval_funnel",
-            """
-            SELECT instrument, payload->>'approval_status' AS approval_status, COUNT(*) AS n
-            FROM events
-            WHERE event_type = 'prediction'
-            GROUP BY instrument, approval_status
-            ORDER BY instrument, n DESC
-            """,
-        )
-        run(
-            "rejection_reasons",
-            """
-            SELECT instrument, payload->>'rejection_reason_code' AS rejection_reason_code, COUNT(*) AS n
-            FROM events
-            WHERE event_type = 'prediction' AND payload->>'approval_status' = 'rejected'
-            GROUP BY instrument, rejection_reason_code
-            ORDER BY n DESC
-            LIMIT 50
-            """,
-        )
-        run(
-            "score_distributions_by_approval_status",
-            """
-            SELECT
-                payload->>'approval_status' AS approval_status,
-                COUNT(*) AS n,
-                ROUND(AVG((payload->>'signal_quality_score')::numeric), 3) AS avg_signal_quality_score,
-                ROUND(AVG((payload->>'risk_score')::numeric), 3) AS avg_risk_score,
-                ROUND(AVG((payload->>'context_score')::numeric), 3) AS avg_context_score,
-                ROUND(AVG((payload->>'strategy_fit_score')::numeric), 3) AS avg_strategy_fit_score,
-                ROUND(AVG((payload->>'predicted_win_probability')::numeric), 4) AS avg_predicted_win_probability,
-                ROUND(AVG((payload->>'expected_net_r')::numeric), 4) AS avg_expected_net_r,
-                ROUND(AVG((payload->>'shadow_score_v0')::numeric), 3) AS avg_shadow_score_v0
-            FROM events
-            WHERE event_type = 'prediction'
-            GROUP BY approval_status
-            """,
-        )
-        run(
-            "setup_breakdown",
-            """
-            SELECT
-                instrument,
-                payload->>'approval_status' AS approval_status,
-                payload->'raw_signal_payload'->'signal'->>'setup_class' AS setup_class,
-                payload->'raw_signal_payload'->'signal'->>'entry_model' AS entry_model,
-                COUNT(*) AS n
-            FROM events
-            WHERE event_type = 'prediction'
-            GROUP BY instrument, approval_status, setup_class, entry_model
-            ORDER BY instrument, n DESC
-            LIMIT 200
-            """,
-        )
-        run(
-            "bridged_trades",
-            """
-            SELECT * FROM master_trading_log WHERE opened_at IS NOT NULL
-            ORDER BY closed_at DESC LIMIT 100
-            """,
-        )
-    finally:
-        pool.putconn(conn)
 
-    report["errors"] = errors
-    return report
+if simulateCandidates and strategy.position_size > 0
+    strategy.exit(
+         id = "Candidate Long Exit",
+         from_entry = "Candidate Long",
+         stop = activeStop,
+         limit = activeTarget
+    )
+
+if simulateCandidates and strategy.position_size < 0
+    strategy.exit(
+         id = "Candidate Short Exit",
+         from_entry = "Candidate Short",
+         stop = activeStop,
+         limit = activeTarget
+    )
+
+bool timeExit =
+     simulateCandidates and
+     strategy.position_size != 0 and
+     not na(simulatedEntryBar) and
+     bar_index - simulatedEntryBar >= simulatedMaximumHoldingBars
+
+if timeExit
+    strategy.close_all(
+         comment = "Candidate time exit"
+    )
+
+bool simulationJustClosed =
+     strategy.position_size == 0 and
+     strategy.position_size[1] != 0
+
+if simulationJustClosed
+    activeStop := na
+    activeTarget := na
+    simulatedEntryBar := na
 
 
-@app.get("/analytics/export")
-def analytics_export(
-    instrument: Optional[str] = None,
-    timeframe: Optional[str] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    limit: int = 20000,
-) -> Dict[str, Any]:
-    """Read-only bulk export, complementing /analytics/strategy-report above
-    (which only ever returns aggregates/rollups, never the underlying rows).
-    Added v3.9.0 so the raw 1m/2m/3m/5m/10m market-data candles from the
-    Market Data Loggers can actually be pulled and cross-referenced against
-    real trade outcomes - direct Postgres access from outside Render's
-    network is blocked by this database's deliberately empty IP allowlist,
-    same reason strategy_report() exists, so this is the only way an
-    external caller (this includes Claude, doing the profit-factor
-    improvement work) gets the raw rows rather than just aggregate numbers.
+// ============================================================================
+// 19. CHART VISUALS
+// ============================================================================
 
-    instrument: canonical TradingView ticker (XAUUSD, GBPUSD, ...). Required
-    to get the market_data_candles section - that series is large enough (a
-    week of 1m bars alone is on the order of several thousand rows per
-    instrument) that returning it for every instrument by default would make
-    one call unwieldy. Omit it to get only the smaller trade_outcomes /
-    predictions / trade_opened sections, across all instruments, instead.
-    timeframe: one canonical code (1m/2m/3m/5m/10m/...). Omitted -> every
-    timeframe currently logged for the given instrument.
-    start/end: ISO8601 timestamps (date or datetime; anything
-    _parse_event_time() already accepts for the rest of the engine).
-    Defaults to the 7 days ending now.
-    limit: per-section row cap (applied independently to each of the four
-    sections below) so one call can't return an unbounded payload; raise it
-    explicitly for a wider pull once you know how much a given window
-    actually returns.
-    """
-    pool = _get_pool()
-    if pool is None:
-        return JSONResponse(status_code=503, content={"status": "error", "error": "DATABASE_URL not configured or Postgres pool unavailable"})
+plot(
+     bbUpper,
+     title = "BB upper",
+     color = color.new(color.purple, 40),
+     linewidth = 1
+)
 
-    end_dt = _parse_event_time(end) if end else datetime.now(timezone.utc)
-    start_dt = _parse_event_time(start) if start else (end_dt - timedelta(days=7))
+plot(
+     bbBasis,
+     title = "BB basis",
+     color = color.new(color.gray, 40),
+     linewidth = 1
+)
 
-    report: Dict[str, Any] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "engine_version": ENGINE_VERSION,
-        "window": {"start": start_dt.isoformat(), "end": end_dt.isoformat()},
-        "instrument": instrument,
-        "timeframe": timeframe,
-        "limit": limit,
-    }
-    errors: Dict[str, str] = {}
+plot(
+     bbLower,
+     title = "BB lower",
+     color = color.new(color.purple, 40),
+     linewidth = 1
+)
 
-    def run(name: str, sql: str, params: Tuple[Any, ...]) -> None:
-        try:
-            with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
-                report[name] = _analytics_query(cur, sql, params)
-        except Exception as exc:
-            conn.rollback()  # clear the aborted-transaction state so later sections can still run
-            errors[name] = str(exc)
-            logging.exception("analytics-export section %s failed", name)
+plot(
+     vwapValue,
+     title = "VWAP",
+     linewidth = 1
+)
 
-    conn = pool.getconn()
-    try:
-        if instrument:
-            tf_clause = "AND timeframe = %s" if timeframe else ""
-            params = [instrument, start_dt, end_dt] + ([timeframe] if timeframe else []) + [limit]
-            run(
-                "market_data_candles",
-                f"""
-                SELECT
-                    instrument, timeframe, event_time,
-                    (payload->>'open')::numeric   AS open,
-                    (payload->>'high')::numeric   AS high,
-                    (payload->>'low')::numeric    AS low,
-                    (payload->>'close')::numeric  AS close,
-                    (payload->>'volume')::numeric AS volume
-                FROM events
-                WHERE event_type = 'market_data'
-                  AND instrument = %s
-                  AND event_time >= %s AND event_time < %s
-                  {tf_clause}
-                ORDER BY timeframe, event_time ASC
-                LIMIT %s
-                """,
-                tuple(params),
-            )
-        else:
-            report["market_data_candles"] = []
-            report["note"] = "Pass instrument= to also pull raw candles; without it only the trade/prediction sections below are returned."
+plotshape(
+     barstate.isconfirmed and longArmTrigger,
+     title = "Long armed",
+     style = shape.circle,
+     location = location.belowbar,
+     size = size.tiny,
+     color = color.new(color.lime, 30)
+)
 
-        instrument_clause = "AND instrument = %s" if instrument else ""
-        instrument_params = [instrument] if instrument else []
+plotshape(
+     barstate.isconfirmed and shortArmTrigger,
+     title = "Short armed",
+     style = shape.circle,
+     location = location.abovebar,
+     size = size.tiny,
+     color = color.new(color.orange, 30)
+)
 
-        run(
-            "trade_outcomes",
-            f"""
-            SELECT
-                instrument, event_time, trade_id, status AS outcome,
-                payload->>'exit_reason' AS exit_reason,
-                (payload->>'realized_pnl')::numeric AS realized_pnl,
-                (payload->>'realized_r')::numeric AS realized_r,
-                (payload->>'exit_price')::numeric AS exit_price
-            FROM events
-            WHERE event_type = 'trade_outcome'
-              AND event_time >= %s AND event_time < %s
-              {instrument_clause}
-            ORDER BY event_time ASC
-            LIMIT %s
-            """,
-            tuple([start_dt, end_dt] + instrument_params + [limit]),
-        )
-        run(
-            "predictions",
-            f"""
-            SELECT
-                instrument, event_time, trade_id,
-                payload->>'approval_status' AS approval_status,
-                payload->>'rejection_reason_code' AS rejection_reason_code,
-                (payload->>'predicted_win_probability')::numeric AS predicted_win_probability,
-                (payload->>'expected_net_r')::numeric AS expected_net_r,
-                payload->'raw_signal_payload'->'signal'->>'entry_model' AS entry_model,
-                payload->'raw_signal_payload'->'signal'->>'setup_class' AS setup_class,
-                -- v3.11.0: surfaced alongside the session hard-block being
-                -- relaxed in INSTRUMENTS (see that changelog comment) - the
-                -- Pine payload already carried market.session_name/
-                -- session_phase on every signal, it was just buried inside
-                -- raw_signal_payload. Pulled to top-level columns here so a
-                -- per-session win-rate/expectancy breakdown (join this to
-                -- trade_outcomes on trade_id) doesn't need a JSON drill-down
-                -- every time someone wants to check how asia/overnight are
-                -- actually performing now that they're no longer vetoed.
-                payload->'raw_signal_payload'->'market'->>'session_name' AS session_name,
-                payload->'raw_signal_payload'->'market'->>'session_phase' AS session_phase
-            FROM events
-            WHERE event_type = 'prediction'
-              AND event_time >= %s AND event_time < %s
-              {instrument_clause}
-            ORDER BY event_time ASC
-            LIMIT %s
-            """,
-            tuple([start_dt, end_dt] + instrument_params + [limit]),
-        )
-        run(
-            "trade_opened",
-            f"""
-            SELECT
-                instrument, event_time, trade_id,
-                payload->>'direction' AS direction,
-                status AS fill_status,
-                payload->'final_trade_plan' AS final_trade_plan
-            FROM events
-            WHERE event_type = 'trade_opened'
-              AND event_time >= %s AND event_time < %s
-              {instrument_clause}
-            ORDER BY event_time ASC
-            LIMIT %s
-            """,
-            tuple([start_dt, end_dt] + instrument_params + [limit]),
-        )
-    finally:
-        pool.putconn(conn)
+plotshape(
+     barstate.isconfirmed and (longExtendTrigger or longDeepenTrigger),
+     title = "Long extended (awaiting reversal)",
+     style = shape.xcross,
+     location = location.belowbar,
+     size = size.tiny,
+     color = color.new(color.lime, 0)
+)
 
-    report["errors"] = errors
-    return report
+plotshape(
+     barstate.isconfirmed and (shortExtendTrigger or shortDeepenTrigger),
+     title = "Short extended (awaiting reversal)",
+     style = shape.xcross,
+     location = location.abovebar,
+     size = size.tiny,
+     color = color.new(color.orange, 0)
+)
+
+plotshape(
+     validLongCandidate,
+     title = "Long candidate",
+     style = shape.triangleup,
+     location = location.belowbar,
+     size = size.small,
+     text = "L"
+)
+
+plotshape(
+     validShortCandidate,
+     title = "Short candidate",
+     style = shape.triangledown,
+     location = location.abovebar,
+     size = size.small,
+     text = "S"
+)
+
+float displayedStop = na
+float displayedTarget = na
+
+if strategy.position_size != 0
+    displayedStop :=
+         activeStop
+
+    displayedTarget :=
+         activeTarget
+
+plot(
+     displayedStop,
+     title = "Simulated stop",
+     style = plot.style_linebr,
+     linewidth = 2
+)
+
+plot(
+     displayedTarget,
+     title = "Simulated target",
+     style = plot.style_linebr,
+     linewidth = 2
+)
+
+color backgroundColour = na
+
+if not validChart
+    backgroundColour :=
+         color.new(
+             color.red,
+             85
+         )
+else if not validSession
+    backgroundColour :=
+         color.new(
+             color.gray,
+             94
+         )
+
+bgcolor(
+     backgroundColour
+)
 
 
-# --- GET /analytics/prediction-accuracy ------------------------------------
-#
-# See the v3.10.0 changelog entry above ENGINE_VERSION for the full
-# rationale. This is the read side of that change; the write side (every
-# /evaluate "prediction" event now also logs hypothetical_trade_plan for
-# rejected signals, not just approved ones) lives just above in evaluate().
-#
-# Checks every /evaluate "prediction" - approved or rejected - against what
-# the market's own 1m candles (the Market Data Centre's "market_data"
-# events, pushed straight from TradingView, timeframe "1m") actually did
-# afterwards: did price reach the predicted take-profit before the
-# predicted stop-loss, or the other way round? This is independent of
-# whether a trade was ever actually placed - that's the whole point. It
-# lets a "no trade" decision get a real win/loss label too, instead of the
-# model only ever learning from the handful of signals that became real
-# OANDA trades.
-#
-# _extract_ohlc() has to guess at the OHLC field names inside a
-# market_data event's payload, because that payload is stored exactly as
-# TradingView's alert body arrived (see POST /market-data above) - this
-# engine has never enforced a schema on it, by design, since the alert
-# JSON is authored on the Pine side and can change without a matching
-# engine deploy. It tries the common Pine alert spellings
-# (open/high/low/close, and the single-letter o/h/l/c some templates use)
-# case-insensitively, matching the lowercase field names /analytics/export
-# above already assumes. A row it can't parse is counted under
-# "unparseable_market_data_rows" in the report rather than silently
-# dropped, so a real field-name mismatch shows up as a visible number
-# instead of a quietly-thin one.
-def _extract_ohlc(payload: Any) -> Optional[Dict[str, float]]:
-    if not isinstance(payload, dict):
-        return None
-    lower = {str(k).lower(): v for k, v in payload.items()}
-    o = as_float(lower.get("open", lower.get("o")))
-    h = as_float(lower.get("high", lower.get("h")))
-    l = as_float(lower.get("low", lower.get("l")))
-    c = as_float(lower.get("close", lower.get("c")))
-    if o is None or h is None or l is None or c is None:
-        return None
-    return {"open": o, "high": h, "low": l, "close": c}
+// ============================================================================
+// 20. DIAGNOSTIC DASHBOARD
+// ============================================================================
 
+var table dashboard =
+     table.new(
+         position.top_right,
+         2,
+         19,
+         border_width = 1
+     )
 
-def _score_prediction_against_candles(
-    direction: str,
-    stop_loss: float,
-    take_profit: float,
-    candles: list,
-) -> Tuple[str, Optional[str]]:
-    """Walks candles (ascending by time, each a dict from _extract_ohlc plus
-    an injected "_event_time") and returns (outcome, hit_at_iso).
+if barstate.islast
+    table.cell(
+         dashboard,
+         0,
+         0,
+         "St Ludaetuc"
+    )
 
-    outcome is "win" (take-profit reached first), "loss" (stop-loss reached
-    first), or "undetermined" (ran out of candles within the lookahead
-    window without either level being touched).
+    table.cell(
+         dashboard,
+         1,
+         0,
+         "XAG/USD (Silver) CG 1.0"
+    )
 
-    A single 1m candle whose range spans BOTH levels can't be resolved from
-    OHLC alone - there's no tick data here, no guaranteed intrabar
-    sequencing. Scored conservatively as a loss in that case: a stop-loss
-    is a standing order that's already live in the market the instant
-    price reaches it, while the take-profit only matters once price gets
-    there first. Assuming the best case (take-profit) for an ambiguous bar
-    would make this report flatter the strategy exactly in the scenario -
-    a fast, violent bar - where that matters most."""
-    for candle in candles:
-        high, low = candle["high"], candle["low"]
-        if direction == "long":
-            sl_hit = low <= stop_loss
-            tp_hit = high >= take_profit
-        else:
-            sl_hit = high >= stop_loss
-            tp_hit = low <= take_profit
-        if sl_hit:
-            return "loss", candle.get("_event_time")
-        if tp_hit:
-            return "win", candle.get("_event_time")
-    return "undetermined", None
+    table.cell(
+         dashboard,
+         0,
+         1,
+         "Chart valid"
+    )
 
+    table.cell(
+         dashboard,
+         1,
+         1,
+         str.tostring(validChart)
+    )
 
-@app.get("/analytics/prediction-accuracy")
-def prediction_accuracy(lookahead_minutes: int = 240, since_hours: int = 720, max_predictions: int = 300) -> Dict[str, Any]:
-    """Read-only diagnostic: scores every /evaluate prediction (approved or
-    rejected) that has a usable entry/stop_loss/take_profit plan against
-    the instrument's own 1m market_data candles, to see whether price
-    would have reached the predicted take-profit before the predicted
-    stop-loss. See the v3.10.0 changelog entry above ENGINE_VERSION for the
-    full rationale; this is the read side of that change.
+    table.cell(
+         dashboard,
+         0,
+         2,
+         "Session"
+    )
 
-    lookahead_minutes: how far forward (in 1m candles) to walk before
-        giving up and calling a prediction "undetermined" rather than
-        win/loss. Default 240 (4h).
-    since_hours: only scores predictions decided within this many hours of
-        now. Default 720 (30 days) - this tracks accuracy going forward,
-        it isn't meant to re-walk ancient history on every call.
-    max_predictions: hard cap on how many predictions get walked in one
-        call (each issues its own market_data query), so a bare call can't
-        accidentally scan the whole table.
+    table.cell(
+         dashboard,
+         1,
+         2,
+         sessionName
+    )
 
-    Like /analytics/strategy-report, every section is independently
-    try/excepted - thin or malformed data in one place must never blank
-    out the rest of the report."""
-    pool = _get_pool()
-    if pool is None:
-        return JSONResponse(status_code=503, content={"status": "error", "error": "DATABASE_URL not configured or Postgres pool unavailable"})
+    string sessionPassText = "BLOCKED"
 
-    report: Dict[str, Any] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "engine_version": ENGINE_VERSION,
-        "lookahead_minutes": lookahead_minutes,
-        "since_hours": since_hours,
-    }
-    errors: Dict[str, str] = {}
-    scored: list = []
-    skipped = {"no_usable_plan": 0, "insufficient_market_data": 0, "unparseable_market_data_rows": 0}
+    if validSession
+        sessionPassText := "PASS"
 
-    conn = pool.getconn()
-    try:
-        try:
-            with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT
-                        trade_id AS signal_id,
-                        instrument,
-                        event_time AS predicted_at,
-                        payload->>'approval_status' AS approval_status,
-                        payload->>'rejection_reason_code' AS rejection_reason_code,
-                        NULLIF(payload->>'predicted_win_probability', '')::numeric AS predicted_win_probability,
-                        NULLIF(payload->>'predicted_tp_before_sl_probability', '')::numeric AS predicted_tp_before_sl_probability,
-                        NULLIF(payload->>'shadow_score_v0', '')::numeric AS shadow_score_v0,
-                        COALESCE(payload->'final_trade_plan', payload->'hypothetical_trade_plan') AS trade_plan
-                    FROM events
-                    WHERE event_type = 'prediction'
-                      AND event_time >= now() - (%s || ' hours')::interval
-                      AND COALESCE(payload->'final_trade_plan', payload->'hypothetical_trade_plan') IS NOT NULL
-                    ORDER BY event_time ASC
-                    LIMIT %s
-                    """,
-                    (since_hours, max_predictions),
-                )
-                predictions = [dict(row) for row in cur.fetchall()]
-        except Exception as exc:
-            conn.rollback()
-            return JSONResponse(status_code=500, content={"status": "error", "error": f"failed to load predictions: {exc}"})
+    table.cell(
+         dashboard,
+         0,
+         3,
+         "Session pass"
+    )
 
-        for pred in predictions:
-            plan = pred.get("trade_plan") or {}
-            entry = as_float(plan.get("entry"))
-            stop_loss = as_float(plan.get("stop_loss"))
-            take_profit = as_float(plan.get("take_profit"))
-            if entry is None or stop_loss is None or take_profit is None or entry <= 0:
-                skipped["no_usable_plan"] += 1
-                continue
-            direction = "long" if take_profit > entry else "short"
+    table.cell(
+         dashboard,
+         1,
+         3,
+         sessionPassText
+    )
 
-            try:
-                with conn.cursor(cursor_factory=_PgRealDictCursor) as cur:
-                    cur.execute(
-                        """
-                        SELECT event_time, payload
-                        FROM events
-                        WHERE event_type = 'market_data'
-                          AND instrument = %s
-                          AND timeframe = '1m'
-                          AND event_time >= %s
-                          AND event_time <= %s + (%s || ' minutes')::interval
-                        ORDER BY event_time ASC
-                        """,
-                        (pred["instrument"], pred["predicted_at"], pred["predicted_at"], lookahead_minutes),
-                    )
-                    candle_rows = cur.fetchall()
-            except Exception:
-                conn.rollback()
-                skipped["insufficient_market_data"] += 1
-                continue
+    table.cell(
+         dashboard,
+         0,
+         4,
+         "Market regime"
+    )
 
-            candles = []
-            unparseable = 0
-            for row in candle_rows:
-                ohlc = _extract_ohlc(row["payload"])
-                if ohlc is None:
-                    unparseable += 1
-                    continue
-                ohlc["_event_time"] = row["event_time"].isoformat()
-                candles.append(ohlc)
-            skipped["unparseable_market_data_rows"] += unparseable
+    table.cell(
+         dashboard,
+         1,
+         4,
+         marketRegime
+    )
 
-            if not candles:
-                skipped["insufficient_market_data"] += 1
-                continue
+    table.cell(
+         dashboard,
+         0,
+         5,
+         "Trend"
+    )
 
-            outcome, hit_at = _score_prediction_against_candles(direction, stop_loss, take_profit, candles)
+    table.cell(
+         dashboard,
+         1,
+         5,
+         trendBias
+    )
 
-            candles_span_minutes = None
-            try:
-                last_candle_time = datetime.fromisoformat(candles[-1]["_event_time"])
-                candles_span_minutes = round((last_candle_time - pred["predicted_at"]).total_seconds() / 60.0, 1)
-            except Exception:
-                pass
+    table.cell(
+         dashboard,
+         0,
+         6,
+         "HTF bias"
+    )
 
-            if outcome == "undetermined" and (candles_span_minutes or 0) < lookahead_minutes * 0.9:
-                # Ran out of logged candles well short of the lookahead
-                # window - market_data just hasn't caught up yet (likely
-                # for anything decided recently), not a genuine case of
-                # price sitting between the two levels for the full
-                # window. Keep this distinct from a real timeout.
-                skipped["insufficient_market_data"] += 1
-                continue
+    table.cell(
+         dashboard,
+         1,
+         6,
+         higherTimeframeBias
+    )
 
-            scored.append({
-                "signal_id": pred["signal_id"],
-                "instrument": pred["instrument"],
-                "predicted_at": _jsonable(pred["predicted_at"]),
-                "approval_status": pred["approval_status"],
-                "rejection_reason_code": pred["rejection_reason_code"],
-                "direction": direction,
-                "entry": entry,
-                "stop_loss": stop_loss,
-                "take_profit": take_profit,
-                "predicted_win_probability": _jsonable(pred["predicted_win_probability"]),
-                "predicted_tp_before_sl_probability": _jsonable(pred["predicted_tp_before_sl_probability"]),
-                "shadow_score_v0": _jsonable(pred["shadow_score_v0"]),
-                "actual_outcome": outcome,
-                "actual_outcome_at": hit_at,
-                "candles_checked": len(candles),
-                "candles_span_minutes": candles_span_minutes,
-            })
-    finally:
-        pool.putconn(conn)
+    table.cell(
+         dashboard,
+         0,
+         7,
+         "ATR pips"
+    )
 
-    report["skipped"] = skipped
-    report["scored_predictions"] = scored
-    report["scored_count"] = len(scored)
+    table.cell(
+         dashboard,
+         1,
+         7,
+         str.tostring(
+             atrPips,
+             "#.##"
+         )
+    )
 
-    # --- Aggregations (Python-side; `scored` is small enough per call,
-    # since max_predictions caps it, that this is simpler and safer than
-    # another round-trip of ad hoc SQL over a JSON blob we just built
-    # ourselves). ---
-    try:
-        determined = [s for s in scored if s["actual_outcome"] in ("win", "loss")]
-        report["determined_count"] = len(determined)
-        report["undetermined_count"] = len(scored) - len(determined)
+    table.cell(
+         dashboard,
+         0,
+         8,
+         "Volatility"
+    )
 
-        def _bucket_stats(rows: list) -> Dict[str, Any]:
-            n = len(rows)
-            wins = sum(1 for r in rows if r["actual_outcome"] == "win")
-            probs = [r["predicted_win_probability"] for r in rows if r["predicted_win_probability"] is not None]
-            return {
-                "n": n,
-                "wins": wins,
-                "actual_win_rate": round(wins / n, 4) if n else None,
-                "avg_predicted_win_probability": round(sum(probs) / len(probs), 4) if probs else None,
-            }
+    table.cell(
+         dashboard,
+         1,
+         8,
+         volatilityRegime
+    )
 
-        report["accuracy_overall"] = _bucket_stats(determined)
-        report["accuracy_by_approval_status"] = {
-            status: _bucket_stats([r for r in determined if r["approval_status"] == status])
-            for status in sorted({r["approval_status"] for r in determined if r["approval_status"]})
-        }
-        report["accuracy_by_instrument"] = {
-            instr: _bucket_stats([r for r in determined if r["instrument"] == instr])
-            for instr in sorted({r["instrument"] for r in determined if r["instrument"]})
-        }
-        report["would_have_won_by_rejection_reason"] = {
-            reason: _bucket_stats([
-                r for r in determined
-                if r["approval_status"] == "rejected" and r["rejection_reason_code"] == reason
-            ])
-            for reason in sorted({
-                r["rejection_reason_code"] for r in determined
-                if r["approval_status"] == "rejected" and r["rejection_reason_code"]
-            })
-        }
+    table.cell(
+         dashboard,
+         0,
+         9,
+         "RSI"
+    )
 
-        # Calibration: bucket by predicted_win_probability decile and
-        # compare to the realized win rate in that bucket - this is the
-        # number that actually answers "how accurate are the predictions,
-        # and are they getting better" as this report is re-run over time.
-        deciles: Dict[str, list] = {}
-        for r in determined:
-            p = r["predicted_win_probability"]
-            if p is None:
-                continue
-            lo = min(int(p * 10) * 10, 90)
-            bucket = f"{lo}-{lo + 10}%"
-            deciles.setdefault(bucket, []).append(r)
-        report["calibration_by_predicted_probability_decile"] = {
-            bucket: _bucket_stats(rows) for bucket, rows in sorted(deciles.items())
-        }
-    except Exception as exc:
-        errors["aggregations"] = str(exc)
-        logging.exception("prediction-accuracy aggregation failed")
+    table.cell(
+         dashboard,
+         1,
+         9,
+         str.tostring(
+             rsi,
+             "#.##"
+         )
+    )
 
-    report["errors"] = errors
-    return report
+    table.cell(
+         dashboard,
+         0,
+         10,
+         "ADX / +DI / -DI"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         10,
+         str.tostring(adx, "#.#") + " / " + str.tostring(plusDi, "#.#") + " / " + str.tostring(minusDi, "#.#")
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         11,
+         "Candidates today"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         11,
+         str.tostring(
+             candidatesToday
+         )
+    )
+
+    string cooldownText = "WAIT"
+
+    if cooldownPass
+        cooldownText := "PASS"
+
+    table.cell(
+         dashboard,
+         0,
+         12,
+         "Cooldown"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         12,
+         cooldownText
+    )
+
+    string longArmedText = "none"
+
+    if longArmed
+        longArmedText := "ARMED, low<" + str.tostring(longArmedReferenceLow, format.mintick)
+    else if longAwaitingReversal
+        longArmedText := "REVERSAL WAIT, close>" + str.tostring(longReversalTriggerHigh, format.mintick)
+
+    string shortArmedText = "none"
+
+    if shortArmed
+        shortArmedText := "ARMED, high>" + str.tostring(shortArmedReferenceHigh, format.mintick)
+    else if shortAwaitingReversal
+        shortArmedText := "REVERSAL WAIT, close<" + str.tostring(shortReversalTriggerLow, format.mintick)
+
+    table.cell(
+         dashboard,
+         0,
+         13,
+         "Long armed"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         13,
+         longArmedText
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         14,
+         "Short armed"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         14,
+         shortArmedText
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         15,
+         "Long model"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         15,
+         longModel
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         16,
+         "Short model"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         16,
+         shortModel
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         17,
+         "Candidate strength"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         17,
+         str.tostring(candidateStrength, "#.#") + " (" + strengthLabel + ")"
+    )
+
+    table.cell(
+         dashboard,
+         0,
+         18,
+         "Schema / engine ver"
+    )
+
+    table.cell(
+         dashboard,
+         1,
+         18,
+         schemaVersionString + " / " + engineExpectedVersion
+    )
