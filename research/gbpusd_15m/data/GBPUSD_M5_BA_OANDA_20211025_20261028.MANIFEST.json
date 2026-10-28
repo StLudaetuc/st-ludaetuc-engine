@@ -1,0 +1,27 @@
+{
+  "file": "GBPUSD_M5_BA_OANDA_20211025_20261028.csv.gz",
+  "sha256_gz": "d315e7df463d603ae9c89051f167f3e8101f1ced38f1cbf1f63ca1af7da463a3",
+  "sha256_csv_uncompressed": "43d36dcc059fde7707c7be2daee7a8bf11063b116450541c3981d32168bb44fc",
+  "rows": 374217,
+  "first_bar_open_utc": "2021-10-25 00:00:00+00:00",
+  "last_bar_open_utc": "2026-10-28 19:20:00+00:00",
+  "source": "OANDA v20 REST GET /v3/accounts/{practice}/instruments/GBP_USD/candles granularity=M5 price=BA count=5000, complete candles only",
+  "retrieved_utc": "2026-10-28T19:24-19:29Z",
+  "retrieval_route": "temporary read-only Make.com scenario (deleted after use), Make Text-parser regex compaction to time_bidOHLC_askOHLC_volume rows, parsed locally; authorised by Andy 2026-10-28",
+  "timestamp_semantics": "OANDA candle time = bar OPEN, UTC",
+  "columns": [
+    "time_utc",
+    "bid_o",
+    "bid_h",
+    "bid_l",
+    "bid_c",
+    "ask_o",
+    "ask_h",
+    "ask_l",
+    "ask_c",
+    "volume"
+  ],
+  "windows": "overlapping 5000-candle windows; duplicates removed by timestamp; no window missing",
+  "max_gap_hours": 72.08,
+  "cross_checks": "every M15 close in GBPUSD_M15_BA_OANDA_20211025_20261028.csv.gz (122,134 bars) equals the M5-derived 15m close"
+}

@@ -128,3 +128,8 @@ cd research/gbpusd_15m
 sha256sum data/GBPUSD_M15_BA_OANDA_20211025_20261028.csv.gz   # must match MANIFEST.json
 python3 backtest.py --holdout
 ```
+
+
+## 2026-10-28 update: data correction and timeframe study
+
+The M15 data file is missing 2,680 bars (two holes in Aug–Sep and Dec 2023). See `data/MANIFEST.json` (CORRECTION_2026_10_28) and `timeframe_study/README.md`, which reruns the B+F+H base on complete M5/M1 data across 3m, 5m, 10m, 15m, 30m, 45m and 1h. No timeframe shows a robust edge.

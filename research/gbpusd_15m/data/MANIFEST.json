@@ -56,5 +56,6 @@
       "0.5": 2.9,
       "0.9": 11.3
     }
-  }
+  },
+  "CORRECTION_2026_10_28": "The 'windows' note above is wrong. Cross-checking against the complete M5 download shows the M15 file is missing 2,680 bars in two multi-week holes (2023-08-15 13:00 to 2023-09-04 23:45 UTC and 2023-12-12 14:00 to 2024-01-03 00:45 UTC; the original gap check treated them as weekend gaps). Every bar that IS present is correct. Results computed on this file before 2026-10-28 19:30Z are affected (both holes fall in the development split). Use the M5 file resampled to 15m for complete data; see timeframe_study/README.md."
 }
