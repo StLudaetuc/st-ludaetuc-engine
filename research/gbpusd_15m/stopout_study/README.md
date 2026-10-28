@@ -43,6 +43,6 @@
 ## 4. What it would take to prove F2
 The GBP/USD holdout is used up, so F2 needs data it has never seen. Two options:
 - **EUR/USD 15m** (or another major) over the same 5 years, with B+F+H+F2 frozen exactly as above and evaluated once. This requires another OANDA download.
-- **Forward SHADOW** on GBP/USD: paper signals only. Roughly 6–9 months would give about 150 trades, still a wide confidence interval.
+- **Forward SHADOW** on GBP/USD: paper signals only. Roughly 6–9 months would give about 150 trades. **Correction (2026-10-29):** that is far too few to confirm an edge of a few hundredths of R. With trades varying by about 2R each, it needs thousands of trades; a short trial can only catch a clear failure.
 
 Until one of these passes, treat F2 as a hypothesis, not an edge.
