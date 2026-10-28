@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.4.0"
+ENGINE_VERSION = "4.4.1"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -2278,6 +2278,15 @@ def trade_opened(req: TradeOpened):
 @app.post("/evaluate")
 def evaluate(req: EvaluateRequest) -> Dict[str, Any]:
     result = engine.evaluate(req.model_dump())
+    # v4.4.1: one line per decision so rejections are visible in Render logs
+    # (previously only the sizing line was, and only Postgres held the reason).
+    try:
+        _p = req.payload if isinstance(req.payload, dict) else {}
+        logging.warning("decision: %s %s tf=%s %s %s %s", result.get("instrument"), get_path(_p, "signal.direction"),
+                        get_path(_p, "market.timeframe"), result.get("approval_status"),
+                        result.get("rejection_reason_code") or "", (result.get("rejection_reason") or "")[:200])
+    except Exception:
+        pass
     try:
         shadow_payload = req.payload if isinstance(req.payload, dict) else req.model_dump()
         shadow_features = _build_shadow_features(shadow_payload)
