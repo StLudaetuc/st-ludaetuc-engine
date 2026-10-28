@@ -281,7 +281,50 @@ def test_natgas_longs_and_short_timeframes_rejected_on_cost_and_carry():
     assert eng.engine.evaluate(_natgas("long"))["rejection_reason_code"] == "INSUFFICIENT_POST_GATE_EDGE"
     m15 = _natgas("short", "15", atr=0.010)
     m15["payload"]["risk"].update(proposed_stop_loss=2.761, proposed_take_profit=2.6985)
-    assert eng.engine.evaluate(m15)["rejection_reason_code"] == "COST_R_EXCESSIVE"
+    os.environ["MANUS_NATGAS_EXPERIMENT"] = "off"
+    try:
+        eng = _load("v4")
+        assert eng.engine.evaluate(m15)["rejection_reason_code"] == "COST_R_EXCESSIVE"
+    finally:
+        os.environ.pop("MANUS_NATGAS_EXPERIMENT", None)
+        _load("v4")
+
+
+def _natgas_45s(direction="short", closed=None):
+    req = _natgas(direction, "45S", atr=0.006)
+    sign = 1.0 if direction == "long" else -1.0
+    req["payload"]["risk"].update(proposed_stop_loss=2.736 - sign * 0.0074, proposed_take_profit=2.736 + sign * 0.0111)
+    req["payload"]["price"].update(bid=2.733, ask=2.7395, spread_price=0.0065)
+    if closed is not None:
+        req["account"]["natgas_closed_trades"] = {"trades": closed}
+    return req
+
+
+def test_natgas_45s_experiment_trades_at_0_1_percent_both_directions():
+    eng = _load("v4")
+    eng._latest_gbpusd_rate = lambda: (1.33, None)
+    closed = [{"closeTime": "2026-10-27T07:53:10.123456789Z", "realizedPL": "-500"},   # before the start: ignored
+              {"closeTime": "2026-10-28T09:12:33.123456789Z", "realizedPL": "-12.5", "financing": "-0.1"}]
+    for d in ("short", "long"):
+        r = eng.engine.evaluate(_natgas_45s(d, closed))
+        assert r["approval_status"] == "approved", (d, r["rejection_reason_code"], r["rejection_reason"])
+        m = r["manus"]
+        exp = m["diagnostics"]["natgas_experiment"]
+        assert exp["risk_percent"] == 0.1 and abs(exp["realised_pnl_since_start"] + 12.6) < 1e-9 and exp["closed_trades_since_start"] == 1
+        assert m["final_trade_plan"]["max_loss_account_ccy"] <= 4649.29 * 0.001 + 1e-9
+        assert abs(abs(m["final_entry"] - m["final_stop_loss"]) - 0.02) < 1e-9        # engine stop floor still applies
+        assert m["expected_net_r"] < 0                                                  # logged honestly
+
+
+def test_natgas_experiment_stops_out_and_fails_safe_without_pnl():
+    eng = _load("v4")
+    lost = [{"closeTime": "2026-10-28T10:00:00Z", "realizedPL": "-60"}, {"closeTime": "2026-10-28T11:00:00Z", "realizedPL": "-40.01"}]
+    assert eng.engine.evaluate(_natgas_45s("short", lost))["rejection_reason_code"] == "EXPERIMENT_STOPPED_OUT"
+    assert eng.engine.evaluate(_natgas_45s("short"))["rejection_reason_code"] == "EXPERIMENT_PNL_UNAVAILABLE"
+    req = _natgas_45s("short", []); req["account"]["natgas_closed_trades"] = '{"trades": []}'   # raw JSON string also accepted
+    assert eng.engine.evaluate(req)["approval_status"] == "approved"
+    req = _natgas_45s("short", []); req["account"]["instrument_open_trade_count"] = 1
+    assert eng.engine.evaluate(req)["rejection_reason_code"] == "POSITION_ALREADY_OPEN"
 
 
 def test_natgas_one_position_at_a_time():

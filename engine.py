@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.3.0"
+ENGINE_VERSION = "4.4.0"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -163,6 +163,15 @@ CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 #     metals decision is unchanged.
 #   - POSITION_ALREADY_OPEN: one NATGAS_USD trade at a time, as backtested
 #     (only enforced when Make sends account.instrument_open_trade_count).
+#
+# v4.4.0 (2026-10-28) - natural gas 45s live experiment, at Andy's request:
+#   - natgas_bb_absorption signals from charts under 1h skip COST_R_EXCESSIVE
+#     and the expected-value test (expected to lose: OANDA's ~0.0065 spread
+#     is ~0.9 of the script's typical 45s stop), at 0.1% risk, until realised
+#     NATGAS_USD P&L since 2026-10-28 08:00 UTC reaches -GBP 100
+#     (EXPERIMENT_STOPPED_OUT). Missing P&L data -> EXPERIMENT_PNL_UNAVAILABLE.
+#   - Env: MANUS_NATGAS_EXPERIMENT=off, ..._RISK_PERCENT, ..._MAX_LOSS_GBP,
+#     ..._START. Nothing else changes; H4+ natural gas keeps normal rules.
 #
 #   MANUS_DECISION_MODE=legacy (Render env var) restores the v3.11 decision
 #   path exactly - probability, pre-gate/score gates, 0.50R cost gate,
@@ -1609,6 +1618,48 @@ MAX_ENTRY_EXTENSION_Z = 0.8
 # break even - nothing in the data gets there.
 MAX_COST_R_V4 = 0.20
 
+# v4.4.0: Andy's live experiment (2026-10-28) - natural gas signals from
+# charts under 1 hour (the 45s script) trade even though the backtest says
+# OANDA's spread makes them lose: the cost gate and expected-value test are
+# skipped for them ONLY, risk is cut to 0.1%, and they stop once realised
+# NATGAS_USD losses since the start reach the stop-out. Every other gate
+# (geometry, stop floor, max spread, one trade at a time, data quality,
+# extreme volatility) still applies. Turn off with
+# MANUS_NATGAS_EXPERIMENT=off; H4+ natural gas keeps the normal rules.
+NATGAS_EXPERIMENT_ON = os.environ.get("MANUS_NATGAS_EXPERIMENT", "on").strip().lower() not in ("off", "0", "false", "no")
+NATGAS_EXPERIMENT_MAX_TF_MINUTES = 60.0
+NATGAS_EXPERIMENT_RISK_PERCENT = float(os.environ.get("MANUS_NATGAS_EXPERIMENT_RISK_PERCENT", "0.1"))
+NATGAS_EXPERIMENT_MAX_LOSS = float(os.environ.get("MANUS_NATGAS_EXPERIMENT_MAX_LOSS_GBP", "100"))
+NATGAS_EXPERIMENT_START = _parse_event_time(os.environ.get("MANUS_NATGAS_EXPERIMENT_START", "2026-10-28T08:00:00Z"))
+
+
+def natgas_experiment_pnl(account: Dict[str, Any]) -> Tuple[Optional[float], int]:
+    """Realised P&L (account currency) and count of NATGAS_USD trades closed
+    since NATGAS_EXPERIMENT_START, from the OANDA /trades?state=CLOSED
+    response Make forwards as account.natgas_closed_trades. (None, 0) when
+    it is missing or unreadable - the caller then refuses the trade."""
+    raw = account.get("natgas_closed_trades")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return None, 0
+    trades = raw.get("trades") if isinstance(raw, dict) else None
+    if not isinstance(trades, list):
+        return None, 0
+    total, n = 0.0, 0
+    for t in trades:
+        if not isinstance(t, dict) or not t.get("closeTime"):
+            continue
+        # OANDA sends nanoseconds; keep microseconds so fromisoformat parses
+        # it on every Python version.
+        close_time = re.sub(r"(\.\d{6})\d+", r"\1", str(t["closeTime"]))
+        if _parse_event_time(close_time) < NATGAS_EXPERIMENT_START:
+            continue
+        total += (as_float(t.get("realizedPL"), 0.0) or 0.0) + (as_float(t.get("financing"), 0.0) or 0.0)
+        n += 1
+    return total, n
+
 
 class TradingSignalEvaluationEngine:
     def evaluate(self, request_body: Dict[str, Any]) -> Dict[str, Any]:
@@ -1631,14 +1682,22 @@ class TradingSignalEvaluationEngine:
         sig = signal_score(payload, model)
         ctx = context_score(payload, cfg)
         fit = fit_score(payload, policy)
-        plan = plan_trade(payload, account, cfg, policy)
+        v4 = MANUS_DECISION_MODE == "v4"
+        tf_min = timeframe_minutes(get_path(payload, "market.timeframe"))
+        experiment = (v4 and NATGAS_EXPERIMENT_ON and model == "natgas_bb_absorption"
+                      and tf_min is not None and tf_min < NATGAS_EXPERIMENT_MAX_TF_MINUTES)
+        plan_payload = payload
+        if experiment:
+            plan_payload = deepcopy(payload)
+            sent = as_float(get_path(payload, "risk.risk_percent"), NATGAS_EXPERIMENT_RISK_PERCENT) or NATGAS_EXPERIMENT_RISK_PERCENT
+            set_path(plan_payload, "risk.risk_percent", min(sent, NATGAS_EXPERIMENT_RISK_PERCENT))
+        plan = plan_trade(plan_payload, account, cfg, policy)
         cr, cost_diag = cost_r(payload, cfg, plan)
         carry, carry_diag = carry_r(payload, cfg, policy, plan)
-        risk = risk_score(payload, account, cfg, policy, plan, cost_diag)
+        risk = risk_score(plan_payload, account, cfg, policy, plan, cost_diag)
         legacy_prob = estimate_probability(sig, ctx, fit, dq_score, policy)
         edge = edge_model_probability(payload, cfg, policy)
         extension_z = entry_extension(payload, cfg)
-        v4 = MANUS_DECISION_MODE == "v4"
         prob = edge["probability"] if v4 else legacy_prob
 
         rr = as_float(plan.get("rr"), 0.0) or 0.0
@@ -1664,8 +1723,19 @@ class TradingSignalEvaluationEngine:
             "trade_plan_preview": plan,
             "policy": policy.__dict__,
         }
+        if experiment:
+            pnl, n_closed = natgas_experiment_pnl(account)
+            diagnostics["natgas_experiment"] = {
+                "active": True, "timeframe_minutes": tf_min, "risk_percent": plan.get("risk_percent"),
+                "realised_pnl_since_start": pnl, "closed_trades_since_start": n_closed,
+                "stop_out_loss": NATGAS_EXPERIMENT_MAX_LOSS, "start": NATGAS_EXPERIMENT_START.isoformat(),
+            }
+            if pnl is None:
+                return self._result(payload, cfg, model, "rejected", "risk", "Natural gas experiment: closed-trade P&L not supplied, so the stop-out cannot be checked.", "EXPERIMENT_PNL_UNAVAILABLE", dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
+            if pnl <= -NATGAS_EXPERIMENT_MAX_LOSS:
+                return self._result(payload, cfg, model, "rejected", "risk", f"Natural gas experiment stopped out: {pnl:.2f} realised over {n_closed} trades (limit -{NATGAS_EXPERIMENT_MAX_LOSS:.2f}).", "EXPERIMENT_STOPPED_OUT", dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
 
-        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag, edge, extension_z, account)
+        rejection = self._hard_rejection(payload, cfg, model, policy, dq_pass, sig, risk, ctx, fit, plan, cost_diag, edge, extension_z, account, experiment)
         if rejection:
             stage, reason, code = rejection
             return self._result(payload, cfg, model, "rejected", stage, reason, code, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
@@ -1675,7 +1745,7 @@ class TradingSignalEvaluationEngine:
             # the decision. pre_gate_score and min_probability are legacy
             # (uncalibrated-scale) thresholds and are only logged - the
             # signal-score half of pre_gate_score is anti-predictive.
-            passed = net_ev_r >= policy.min_expected_net_r
+            passed = experiment or net_ev_r >= policy.min_expected_net_r
         else:
             passed = (
                 pre_gate_score >= policy.min_pre_gate_score
@@ -1684,6 +1754,8 @@ class TradingSignalEvaluationEngine:
             )
 
         if passed:
+            if experiment:
+                diagnostics["natgas_experiment"]["note"] = f"approved without the cost/EV test (expected_net_r {net_ev_r:.3f})"
             return self._result(payload, cfg, model, "approved", None, None, None, dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, plan)
 
         reasons = []
@@ -1698,7 +1770,7 @@ class TradingSignalEvaluationEngine:
 
         return self._result(payload, cfg, model, "rejected", "expected_value", "; ".join(reasons), "INSUFFICIENT_POST_GATE_EDGE", dq_score, sig, risk, ctx, fit, pre_gate_score, prob, gross_ev_r, cr, net_ev_r, diagnostics, None)
 
-    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any], edge: Optional[Dict[str, Any]] = None, extension_z: Optional[float] = None, account: Optional[Dict[str, Any]] = None) -> Optional[Tuple[str, str, str]]:
+    def _hard_rejection(self, payload: Dict[str, Any], cfg: InstrumentConfig, model: str, policy: ModelPolicy, dq_pass: bool, sig: float, risk: float, ctx: float, fit: float, plan: Dict[str, Any], costs: Dict[str, Any], edge: Optional[Dict[str, Any]] = None, extension_z: Optional[float] = None, account: Optional[Dict[str, Any]] = None, experiment: bool = False) -> Optional[Tuple[str, str, str]]:
         v4 = MANUS_DECISION_MODE == "v4"
         direction = as_str(get_path(payload, "signal.direction"), "").lower()
         session = as_str(get_path(payload, "market.session_name"), "unknown").lower()
@@ -1744,7 +1816,7 @@ class TradingSignalEvaluationEngine:
         if fit < 40:
             return "strategy_fit", "Strategy-fit score below hard minimum.", "FIT_SCORE_TOO_LOW"
         max_cost_r = MAX_COST_R_V4 if v4 else 0.50
-        if (as_float(costs.get("cost_r"), 1.0) or 1.0) >= max_cost_r:
+        if not experiment and (as_float(costs.get("cost_r"), 1.0) or 1.0) >= max_cost_r:
             return "execution_cost", f"Estimated costs consume at least {max_cost_r:.2f}R.", "COST_R_EXCESSIVE"
         return None
 
