@@ -2,7 +2,7 @@
 
 The rules and pass criteria were pre-registered in `PREREGISTRATION.md` (commit d87449a) **before** the EUR/USD data was downloaded. They were run once, unchanged (`run_test.py`, output in `result.json`).
 
-**Data:** OANDA EUR_USD M15 bid/ask, 2021-10-25 to 2026-10-28, 124,850 bars. The only gaps are holiday closures. The SHA-256 is in `../DATA_SHA256.txt`. Median spread/ATR is about 0.17, essentially the same cost burden as GBP/USD (0.167).
+**Data:** OANDA EUR_USD M15 bid/ask, 2021-10-25 to 2026-10-28, 124,850 bars. The only gaps are holiday closures. The SHA-256 is in `../DATA_SHA256.txt`. Median spread/ATR is 0.125, a **lower** cost burden than GBP/USD (0.167). Costs cannot explain the failure.
 
 | System | Costs | Trades | avgR ± SE | t | PF |
 |---|---|---|---|---|---|
