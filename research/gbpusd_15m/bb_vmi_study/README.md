@@ -40,3 +40,37 @@
 - `bbsys.py`, `vmi.py`: the system and the indicator.
 - `grid.py`, `vmi_test.py`, `vmi_test2.py`, `why.py`, `scan.py`, `val.py`: the experiments, each reproducible.
 - `grid_dev_baseline.csv`, `grid_validation.csv`: the grid results.
+
+## Follow-up: building on the breakout base to try to reach PF ≥ 1 (2026-10-28)
+Andy asked to build on the closest system, the %B breakout. Its validation PF was 0.94–0.97, but its development PF was 0.85–0.88.
+
+**Protocol:**
+- %B fixed at 36/78, the middle of the grid, so no lucky setting could be picked.
+- Eight ideas, each with a market reason, declared before testing.
+- Develop on development data only. Validation once. Holdout once.
+
+**Development results (`exp.py`).** Base: avgR −0.063, PF 0.878.
+
+| Idea | Result |
+|---|---|
+| A: wider stop, 2R | PF 0.892 |
+| **B: hold to session end, no target** | **PF 0.960** (the only change beyond noise) |
+| C: 2-ATR trailing stop | PF 0.762 |
+| D: 4H trend only | PF 0.841 |
+| E: squeeze only | PF 0.827 |
+| F: core liquid hours | PF 0.898 |
+| G: skip 12–14 London | PF 0.886 |
+| H: daily trend only | PF 0.887 |
+
+**Combinations (`exp2.py`):** the best was B+F+H, with development PF 0.990 (avgR −0.006 ± 0.046). It did **not** clear 1 in development, but as the only near-miss candidate it went to validation and holdout once each.
+
+**B+F+H out of sample:**
+
+| Period | Trades | PF at 1.0× costs | PF at 1.5× | PF at 2.0× |
+|---|---:|---:|---:|---:|
+| Validation (`val2.py`) | 430 | 1.058 (avgR +0.032 ± 0.076) | 0.987 | 0.922 |
+| **Holdout (`hold2.py`)** | 447 | **0.852** (avgR −0.089 ± 0.073) | 0.787 | 0.729 |
+
+- **Full 5 years:** PF 0.976, 2,262 trades. Average R by year: 2021 +0.08, 2022 +0.06, 2023 0.00, 2024 −0.11, 2025 +0.03, 2026 −0.07. The trades are in `bfh_trades_1x.csv`.
+
+**Verdict (VERIFIED):** no edge. The validation PF of 1.06 was within noise, and the holdout failed. Any system tuned further on this family would be fitting noise.
