@@ -1,0 +1,274 @@
+//@version=6
+// ============================================================================
+// St Ludaetuc — GBP/USD 15m Liquidity Sweep — RESEARCH ONLY, NOT FOR LIVE USE
+// ----------------------------------------------------------------------------
+// No alerts, no webhooks, no Make/engine payloads. Python replica:
+// research/gbpusd_15m/strategy.py (same rules, same defaults).
+//
+// Logic (every default has a market reason; none were fitted):
+//   1. LIQUIDITY  Asian range (00:00-07:00 session time) and the prior FX day's
+//                 high/low (FX day = 17:00-17:00 New York, the OANDA daily candle).
+//                 Each level can be taken once per day.
+//   2. SWEEP      In a kill zone (London 07:00-11:00, New York 12:30-16:00), a bar
+//                 trades through an untaken level and CLOSES back inside it.
+//                 While waiting for displacement, a further wick beyond the
+//                 extreme extends the stop run; a CLOSE beyond the level means
+//                 acceptance (a breakout) and cancels the setup.
+//   3. DISPLACE   Within 4 bars of the latest extreme, a candle in the reversal
+//                 direction with body >= 1 ATR(14) that leaves a 3-candle fair
+//                 value gap (FVG).
+//   4. ENTRY      The first confirmed bar that retraces to the FVG midpoint (and
+//                 does not close through the far edge) -> market entry at the NEXT
+//                 bar open. Setup expires 8 bars (2h) after the FVG.
+//   5. RISK       Stop beyond the swept extreme + 1.5 pips (~p90 London/NY spread);
+//                 skip if stop < 5 pips; target = minimum RR (default 2.0);
+//                 flat at 20:45 session time, before the 21:00 UTC rollover spread.
+//   6. CONTEXT    No trade against 1H or 4H swing structure (2-left/2-right
+//                 fractals on COMPLETED in-script HTF bars - no request.security,
+//                 so nothing can repaint); skip first-Friday 12:30-14:30 (NFP,
+//                 approximate calendar).
+// Known differences vs the Python replica (documented in RESULTS.md):
+//   - Python fills at OANDA bid/ask + 0.2 pip slippage; here costs are modelled
+//     by commission (0.6 pip/side) + slippage (2 ticks) on chart prices.
+//   - On the entry bar itself the target is based on the signal close; from the
+//     next bar it is re-set from the actual fill (Python uses the fill throughout).
+// ============================================================================
+strategy("STL GBPUSD 15m Liquidity Sweep — RESEARCH v1 (not for live use)", shorttitle = "STL LS15 RESEARCH",
+     overlay = true, initial_capital = 10000, pyramiding = 0, calc_on_every_tick = false,
+     commission_type = strategy.commission.cash_per_contract, commission_value = 0.00006, slippage = 2,
+     max_labels_count = 500)
+
+// ---------------------------------------------------------------- inputs ----
+g1 = "Sessions"
+tz        = input.string("Europe/London", "Session timezone", group = g1)
+lonStart  = input.int(420,  "London kill zone start (min after midnight)", group = g1, tooltip = "420 = 07:00")
+lonEnd    = input.int(660,  "London kill zone end", group = g1, tooltip = "660 = 11:00")
+nyStart   = input.int(750,  "New York kill zone start", group = g1, tooltip = "750 = 12:30")
+nyEnd     = input.int(960,  "New York kill zone end", group = g1, tooltip = "960 = 16:00")
+asiaEnd   = input.int(420,  "Asian range end (starts 00:00)", group = g1)
+flatMin   = input.int(1245, "Flat from (min after midnight)", group = g1, tooltip = "1245 = 20:45, before the rollover spread")
+
+g2 = "Setup"
+dispBars  = input.int(4,     "Displacement must come within (bars)", minval = 1, group = g2)
+dispAtr   = input.float(1.0, "Displacement body >= x ATR", step = 0.1, group = g2)
+atrLen    = input.int(14,    "ATR length", group = g2)
+expBars   = input.int(8,     "Retrace must come within (bars after FVG)", group = g2)
+useHtf    = input.bool(true, "Do not trade against 1H/4H structure", group = g2)
+skipNfp   = input.bool(true, "Skip first-Friday 12:30-14:30 (NFP, approximate)", group = g2)
+
+g3 = "Risk"
+riskPct   = input.float(0.5, "Risk per trade (% equity)", step = 0.05, group = g3)
+minRR     = input.float(2.0, "Minimum reward:risk (target)", step = 0.1, group = g3)
+bufPips   = input.float(1.5, "Stop buffer beyond swept extreme (pips)", step = 0.1, group = g3)
+minStopP  = input.float(5.0, "Skip if stop smaller than (pips)", step = 0.5, group = g3)
+
+PIP = 0.0001
+
+// ----------------------------------------------------------- HTF structure --
+// Completed in-script HTF bars only (UTC-aligned buckets); a swing is confirmed
+// two HTF bars after it forms. +1 rising highs & lows, -1 falling, else 0.
+htfBias(int key) =>
+    var int curKey = na
+    var float curH = na
+    var float curL = na
+    var array<float> hs = array.new<float>()
+    var array<float> ls = array.new<float>()
+    var float sh0 = na
+    var float sh1 = na
+    var float sl0 = na
+    var float sl1 = na
+    var int bias = 0
+    if na(curKey)
+        curKey := key
+        curH := high
+        curL := low
+    else if key != curKey
+        array.push(hs, curH)
+        array.push(ls, curL)
+        if array.size(hs) > 5
+            array.shift(hs)
+            array.shift(ls)
+        if array.size(hs) == 5
+            float m = array.get(hs, 2)
+            if m > math.max(math.max(array.get(hs, 0), array.get(hs, 1)), math.max(array.get(hs, 3), array.get(hs, 4)))
+                sh0 := sh1
+                sh1 := m
+            float n = array.get(ls, 2)
+            if n < math.min(math.min(array.get(ls, 0), array.get(ls, 1)), math.min(array.get(ls, 3), array.get(ls, 4)))
+                sl0 := sl1
+                sl1 := n
+            if not na(sh0) and not na(sl0)
+                bias := sh1 > sh0 and sl1 > sl0 ? 1 : sh1 < sh0 and sl1 < sl0 ? -1 : 0
+        curKey := key
+        curH := high
+        curL := low
+    else
+        curH := math.max(curH, high)
+        curL := math.min(curL, low)
+    bias
+
+int bias1h = htfBias(int(time / 3600000))
+int bias4h = htfBias(int(time / 14400000))
+
+// --------------------------------------------------------------- day/levels --
+fxShift = time + 7 * 3600000
+int tday = year(fxShift, "America/New_York") * 10000 + month(fxShift, "America/New_York") * 100 + dayofmonth(fxShift, "America/New_York")
+int lm = hour(time, tz) * 60 + minute(time, tz)
+atr = ta.atr(atrLen)
+
+var int day = na
+var float dH = na
+var float dL = na
+var float pdH = na
+var float pdL = na
+var float asH = na
+var float asL = na
+var bool usedAH = false
+var bool usedAL = false
+var bool usedPH = false
+var bool usedPL = false
+
+// setup state: 0 none, 1 waiting displacement, 2 waiting retrace
+var int st = 0
+var int sDir = 0
+var float sExt = na
+var float sLvl = na
+var int sBar = na
+var float fLo = na
+var float fHi = na
+var int fBar = na
+var string sName = ""
+
+newDay = tday != day
+if newDay
+    if not na(day) and not na(dH)
+        pdH := dH
+        pdL := dL
+    day := tday
+    dH := high
+    dL := low
+    asH := na
+    asL := na
+    usedAH := false
+    usedAL := false
+    usedPH := false
+    usedPL := false
+    st := 0
+else
+    dH := math.max(dH, high)
+    dL := math.min(dL, low)
+
+asiaDone = lm >= asiaEnd and lm < 17 * 60
+if lm < asiaEnd
+    asH := na(asH) ? high : math.max(asH, high)
+    asL := na(asL) ? low : math.min(asL, low)
+
+inLon = lm >= lonStart and lm < lonEnd
+inNy = lm >= nyStart and lm < nyEnd
+inKz = inLon or inNy
+nfp = skipNfp and dayofweek(time, tz) == dayofweek.friday and dayofmonth(time, tz) <= 7 and lm >= 750 and lm < 870
+flatTime = lm >= flatMin and lm < 22 * 60
+
+// sweeps of untaken levels this bar
+bool swPH = not na(pdH) and not usedPH and high > pdH
+bool swAH = asiaDone and not na(asH) and not usedAH and high > asH
+bool swPL = not na(pdL) and not usedPL and low < pdL
+bool swAL = asiaDone and not na(asL) and not usedAL and low < asL
+bool cbPH = swPH and close < pdH
+bool cbAH = swAH and close < asH
+bool cbPL = swPL and close > pdL
+bool cbAL = swAL and close > asL
+usedPH := usedPH or swPH
+usedAH := usedAH or swAH
+usedPL := usedPL or swPL
+usedAL := usedAL or swAL
+
+flat = strategy.position_size == 0
+var float pendStop = na
+var int pendDir = 0
+bool signal = false
+
+// time exit (fills next bar open)
+if not flat and flatTime and barstate.isconfirmed
+    strategy.close_all(comment = "flat before rollover")
+
+ready = not na(atr) and not flatTime
+if ready and st != 0
+    bool beyond = sDir == -1 ? high > sExt : low < sExt
+    bool accepted = sDir == -1 ? close > sLvl : close < sLvl
+    if st == 1 and accepted
+        st := 0
+    else if st == 1 and beyond
+        sExt := sDir == -1 ? high : low
+        sBar := bar_index
+    else if st == 2 and beyond
+        st := 0
+    else if st == 1
+        if bar_index - sBar > dispBars
+            st := 0
+        else if bar_index - 2 >= sBar
+            float body = math.abs(close[1] - open[1])
+            bool dispOk = body >= dispAtr * atr[1] and (close[1] - open[1]) * sDir > 0
+            bool fvg = sDir == -1 ? low[2] > high : high[2] < low
+            if dispOk and fvg
+                fLo := sDir == -1 ? high : high[2]
+                fHi := sDir == -1 ? low[2] : low
+                fBar := bar_index
+                st := 2
+                label.new(bar_index - 1, sDir == -1 ? high[1] : low[1], "DISP", style = sDir == -1 ? label.style_label_down : label.style_label_up, color = color.new(color.orange, 20), textcolor = color.white, size = size.tiny)
+    else if st == 2
+        float mid = (fLo + fHi) / 2
+        if bar_index - fBar > expBars
+            st := 0
+        else if sDir == -1 ? close > fHi : close < fLo
+            st := 0
+        else if inKz and not nfp and flat and (sDir == -1 ? high >= mid : low <= mid)
+            pendStop := sDir == -1 ? sExt + bufPips * PIP : sExt - bufPips * PIP
+            pendDir := sDir
+            signal := true
+            st := 0
+
+if ready and st == 0 and flat and inKz and not nfp and not signal
+    bool shortOk = (cbPH or cbAH) and not (swPL or swAL)
+    bool longOk = (cbPL or cbAL) and not (swPH or swAH)
+    if useHtf
+        shortOk := shortOk and bias1h != 1 and bias4h != 1
+        longOk := longOk and bias1h != -1 and bias4h != -1
+    if shortOk
+        st := 1
+        sDir := -1
+        sExt := high
+        sLvl := cbPH and cbAH ? math.max(pdH, asH) : cbPH ? pdH : asH
+        sBar := bar_index
+        sName := cbPH and cbAH ? "PDH+ASIA H" : cbPH ? "PDH" : "ASIA H"
+        label.new(bar_index, high, "SWEEP " + sName, style = label.style_label_down, color = color.new(color.red, 20), textcolor = color.white, size = size.tiny)
+    else if longOk
+        st := 1
+        sDir := 1
+        sExt := low
+        sLvl := cbPL and cbAL ? math.min(pdL, asL) : cbPL ? pdL : asL
+        sBar := bar_index
+        sName := cbPL and cbAL ? "PDL+ASIA L" : cbPL ? "PDL" : "ASIA L"
+        label.new(bar_index, low, "SWEEP " + sName, style = label.style_label_up, color = color.new(color.green, 20), textcolor = color.white, size = size.tiny)
+
+// ------------------------------------------------------------------ orders ---
+if signal and barstate.isconfirmed
+    float dist = math.abs(close - pendStop)
+    if dist >= minStopP * PIP
+        float qty = math.floor(strategy.equity * riskPct / 100 / dist)
+        float tgt = close + pendDir * minRR * dist
+        strategy.entry(pendDir == 1 ? "L" : "S", pendDir == 1 ? strategy.long : strategy.short, qty = qty)
+        strategy.exit("X", pendDir == 1 ? "L" : "S", stop = pendStop, limit = tgt)
+        label.new(bar_index, close, "ENTRY next open", style = label.style_label_left, color = color.new(color.blue, 20), textcolor = color.white, size = size.tiny)
+
+// from the bar after the fill, re-anchor the target on the actual entry price
+if not flat
+    float ep = strategy.position_avg_price
+    float d = strategy.position_size > 0 ? 1.0 : -1.0
+    strategy.exit("X", strategy.position_size > 0 ? "L" : "S", stop = pendStop, limit = ep + d * minRR * math.abs(ep - pendStop))
+
+plot(pdH, "Prior FX-day high", color.new(color.gray, 30), style = plot.style_linebr)
+plot(pdL, "Prior FX-day low", color.new(color.gray, 30), style = plot.style_linebr)
+plot(asiaDone ? asH : na, "Asian high", color.new(color.purple, 30), style = plot.style_linebr)
+plot(asiaDone ? asL : na, "Asian low", color.new(color.purple, 30), style = plot.style_linebr)
+bgcolor(inKz ? color.new(color.blue, 94) : na, title = "Kill zones")
