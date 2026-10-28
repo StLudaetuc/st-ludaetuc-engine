@@ -316,6 +316,18 @@ def test_natgas_45s_experiment_trades_at_0_1_percent_both_directions():
         assert m["expected_net_r"] < 0                                                  # logged honestly
 
 
+def test_natgas_45s_tick_rounded_rr_restored_when_stop_floor_widens():
+    # Live 10:34Z rejection: Pine rounds to 0.001, so a 0.0074/0.0111 plan
+    # arrives as 0.008/0.011 (rr 1.375 < 1.40 minimum) -> RR_BELOW_MODEL_MINIMUM.
+    eng = _load("v4")
+    eng._latest_gbpusd_rate = lambda: (1.33, None)
+    req = _natgas_45s("long", [])
+    req["payload"]["risk"].update(proposed_entry=2.736, proposed_stop_loss=2.728, proposed_take_profit=2.747, rr_ratio=1.5)
+    r = eng.engine.evaluate(req)
+    assert r["approval_status"] == "approved", (r["rejection_reason_code"], r["rejection_reason"])
+    assert abs(r["manus"]["final_rr_ratio"] - 1.5) < 0.03
+
+
 def test_natgas_experiment_stops_out_and_fails_safe_without_pnl():
     eng = _load("v4")
     lost = [{"closeTime": "2026-10-28T10:00:00Z", "realizedPL": "-60"}, {"closeTime": "2026-10-28T11:00:00Z", "realizedPL": "-40.01"}]

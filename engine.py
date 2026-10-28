@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - psycopg2 should always be installed, but
     _PgRealDictCursor = None
 
 
-ENGINE_VERSION = "4.4.1"
+ENGINE_VERSION = "4.4.2"
 RULESET_VERSION = "manus_ruleset_2026_10_v4_1"
 CALIBRATION_VERSION = "edge_logit_gbpusd_2m_2026_10_v1"
 
@@ -1289,6 +1289,13 @@ def plan_trade(payload: Dict[str, Any], account: Dict[str, Any], cfg: Instrument
         cur_dist = abs(entry - sl)
         if cur_dist < min_dist:
             rr_keep = abs(tp - entry) / cur_dist if cur_dist > 0 else max(cfg.default_rr, policy.min_rr)
+            # v4.4.2: a stop this tight has usually been distorted by Pine
+            # rounding entry/stop/target to the tick (NATGAS 45s: 0.011/0.008
+            # = 1.375 instead of 1.5). When Pine's own plan is being used,
+            # widen at the reward:risk it declared rather than the rounded one.
+            declared_rr = as_float(get_path(payload, "risk.rr_ratio"))
+            if source == "payload" and declared_rr is not None and declared_rr > 0:
+                rr_keep = declared_rr
             sign = 1.0 if direction == "long" else -1.0
             sl = entry - sign * min_dist
             tp = entry + sign * min_dist * rr_keep
