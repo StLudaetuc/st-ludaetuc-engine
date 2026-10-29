@@ -1,0 +1,56 @@
+{
+ "TREND_FX": {
+  "frictionless_sharpe": {
+   "dev": 0.12,
+   "val": -0.27,
+   "hold": -0.38,
+   "full": -0.05
+  },
+  "avg_gross_leverage": 11.87
+ },
+ "TREND_METALS": {
+  "frictionless_sharpe": {
+   "dev": 0.45,
+   "val": 0.06,
+   "hold": 0.59,
+   "full": 0.41
+  },
+  "avg_gross_leverage": 0.75
+ },
+ "TREND_INDICES": {
+  "frictionless_sharpe": {
+   "dev": 0.04,
+   "val": -0.29,
+   "hold": -0.07,
+   "full": -0.06
+  },
+  "avg_gross_leverage": 1.9
+ },
+ "TREND_BONDS": {
+  "frictionless_sharpe": {
+   "dev": 0.02,
+   "val": 1.21,
+   "hold": 0.1,
+   "full": 0.34
+  },
+  "avg_gross_leverage": 7.1
+ },
+ "TREND_COMMOD": {
+  "frictionless_sharpe": {
+   "dev": 0.14,
+   "val": 0.32,
+   "hold": 0.15,
+   "full": 0.18
+  },
+  "avg_gross_leverage": 0.69
+ },
+ "CARRY_FX": {
+  "frictionless_sharpe": {
+   "dev": -0.12,
+   "val": -0.02,
+   "hold": 0.82,
+   "full": 0.04
+  },
+  "avg_gross_leverage": 7.16
+ }
+}
