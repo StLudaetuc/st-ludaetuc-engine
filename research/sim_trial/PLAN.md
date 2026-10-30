@@ -21,7 +21,9 @@
 | Crude oil | US Crude (WTI) futures | MCL (100 bbl) |
 | US 10-year bond | US 10-Year T-Note futures | 10-year Treasury (micro or standard; contract to be confirmed) |
 
-Notional per instrument = signal × 10% / vol × equity / √5. IG stakes are £/point and can be fractional; CME contracts are whole numbers, rounded to nearest (a target below 0.5 contracts = flat). Simulated equity: IG demo default balance; NinjaTrader sim set to **$100,000** if the platform allows (whole contracts make smaller balances unrepresentative).
+Notional per instrument = signal × 10% / vol × equity / √N (N = instruments with data). Signals use OANDA practice daily mid closes (09:00 New York alignment), the same series as the backtest; execution is on the venue.
+
+**IG (amended 30 Oct 2026 after reading live contract specs):** futures-style CFD contracts are large (gold ≈ $130k per contract, minimum 0.5; others $21k–$52k, minimum 1). Size = weight × equity ÷ contract notional, rounded to 0.01; below the minimum = flat. At £10k demo equity no market can hold a position, so the trial needs either the CFD demo raised to ≈ £500k virtual funds or a spread-bet demo (£ per point). Andy chooses before the first run. NinjaTrader: whole CME micro contracts, simulator balance to be confirmed (trial status pending NinjaTrader's answers on API access and the 14-day simulator limit).
 
 ## Measurements (logged every rebalance)
 Signal, target, order, fill price, mid at order time, spread paid, commission, overnight/roll charges, and any API error. Weekly comparison against the backtest's expected cost and P&L for the same week.
@@ -33,8 +35,10 @@ Signal, target, order, fill price, mid at order time, spread paid, commission, o
 - P&L is reported but is **not** a pass criterion (too short to be meaningful).
 
 ## Safety
-- Demo/simulation addresses only; the adapter refuses any live base URL in code.
-- Circuit breaker: if simulated equity falls 15% from its peak, flatten and notify Andy (rehearses the live safeguard).
+- Demo/simulation addresses only; the adapter refuses any live base URL in code and checks the logged-in account ID. Dry run unless explicitly enabled.
+- Circuit breaker: if equity falls below 85% of the trial's starting equity, flatten and keep flat until Andy resets it (stateless, so it cannot be lost between runs).
+- Orders: marketable limit, fill-or-kill, at most 2 spreads from the current price. Contract rolls: positions move to the next expiry 5 days before IG's last rollover time.
+- Refuses to trade if the venue price is more than 5% from the OANDA price, or if total notional would exceed 3× equity.
 - Separate from the production OANDA engine and Make scenarios; nothing in production changes.
 
 ## After 6 months

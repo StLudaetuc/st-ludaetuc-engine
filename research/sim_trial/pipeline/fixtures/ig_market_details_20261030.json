@@ -1,0 +1,230 @@
+{
+ "MT.D.GC.FWM3.IP": {
+  "instrument": {
+   "epic": "MT.D.GC.FWM3.IP",
+   "expiry": "DEC-26",
+   "name": "Gold ($33.20)",
+   "lotSize": 33.2,
+   "unit": "CONTRACTS",
+   "type": "COMMODITIES",
+   "currencies": [
+    {
+     "code": "USD",
+     "baseExchangeRate": 1.3396,
+     "isDefault": false
+    }
+   ],
+   "valueOfOnePip": "33.20",
+   "onePipMeans": "1 $ per troy ounce",
+   "contractSize": "33.2",
+   "expiryDetails": {
+    "lastDealingDate": "2026-11-24T18:30"
+   },
+   "rolloverDetails": {
+    "lastRolloverTime": "2026-11-24T18:15"
+   }
+  },
+  "dealingRules": {
+   "minDealSize": {
+    "unit": "POINTS",
+    "value": 0.5
+   }
+  },
+  "snapshot": {
+   "marketStatus": "TRADEABLE",
+   "bid": 3904.6,
+   "offer": 3905.4,
+   "scalingFactor": 1
+  }
+ },
+ "MT.D.GC.FWM2.IP": {
+  "instrument": {
+   "epic": "MT.D.GC.FWM2.IP",
+   "expiry": "FEB-27",
+   "name": "Gold ($33.20)",
+   "lotSize": 33.2,
+   "unit": "CONTRACTS",
+   "type": "COMMODITIES",
+   "currencies": [
+    {
+     "code": "USD",
+     "baseExchangeRate": 1.3396,
+     "isDefault": false
+    }
+   ],
+   "valueOfOnePip": "33.20",
+   "onePipMeans": "1 $ per troy ounce",
+   "contractSize": "33.2",
+   "expiryDetails": {
+    "lastDealingDate": "2027-01-26T18:30"
+   },
+   "rolloverDetails": {
+    "lastRolloverTime": "2027-01-26T18:15"
+   }
+  },
+  "dealingRules": {
+   "minDealSize": {
+    "unit": "POINTS",
+    "value": 0.5
+   }
+  },
+  "snapshot": {
+   "marketStatus": "TRADEABLE",
+   "bid": 3936.65,
+   "offer": 3937.45,
+   "scalingFactor": 1
+  }
+ },
+ "MT.D.SI.FWM1.IP": {
+  "instrument": {
+   "epic": "MT.D.SI.FWM1.IP",
+   "expiry": "DEC-26",
+   "name": "Silver ($10)",
+   "lotSize": 10.0,
+   "unit": "CONTRACTS",
+   "type": "COMMODITIES",
+   "currencies": [
+    {
+     "code": "USD",
+     "baseExchangeRate": 1.3396,
+     "isDefault": false
+    }
+   ],
+   "valueOfOnePip": "10.00",
+   "onePipMeans": "1 cent per troy ounce",
+   "contractSize": "10.0",
+   "expiryDetails": {
+    "lastDealingDate": "2026-11-25T18:25"
+   },
+   "rolloverDetails": {
+    "lastRolloverTime": "2026-11-25T18:15"
+   }
+  },
+  "dealingRules": {
+   "minDealSize": {
+    "unit": "POINTS",
+    "value": 1.0
+   }
+  },
+  "snapshot": {
+   "marketStatus": "TRADEABLE",
+   "bid": 4913.0,
+   "offer": 4923.0,
+   "scalingFactor": 1
+  }
+ },
+ "MT.D.HG.FWM2.IP": {
+  "instrument": {
+   "epic": "MT.D.HG.FWM2.IP",
+   "expiry": "DEC-26",
+   "name": "High Grade Copper ($0.50)",
+   "lotSize": 0.5,
+   "unit": "CONTRACTS",
+   "type": "COMMODITIES",
+   "currencies": [
+    {
+     "code": "USD",
+     "baseExchangeRate": 1.3396,
+     "isDefault": false
+    }
+   ],
+   "valueOfOnePip": "0.50",
+   "onePipMeans": "0.01 cents per pound",
+   "contractSize": "0.5",
+   "expiryDetails": {
+    "lastDealingDate": "2026-11-25T18:00"
+   },
+   "rolloverDetails": {
+    "lastRolloverTime": "2026-11-25T17:45"
+   }
+  },
+  "dealingRules": {
+   "minDealSize": {
+    "unit": "POINTS",
+    "value": 1.0
+   }
+  },
+  "snapshot": {
+   "marketStatus": "TRADEABLE",
+   "bid": 64810.0,
+   "offer": 64850.0,
+   "scalingFactor": 1
+  }
+ },
+ "EN.D.CL.FWM5.IP": {
+  "instrument": {
+   "epic": "EN.D.CL.FWM5.IP",
+   "expiry": "DEC-26",
+   "name": "Oil - US Crude ($5)",
+   "lotSize": 5.0,
+   "unit": "CONTRACTS",
+   "type": "COMMODITIES",
+   "currencies": [
+    {
+     "code": "USD",
+     "baseExchangeRate": 1.3396,
+     "isDefault": false
+    }
+   ],
+   "valueOfOnePip": "5.00",
+   "onePipMeans": "1 cent per barrel",
+   "contractSize": "5.0",
+   "expiryDetails": {
+    "lastDealingDate": "2026-11-19T19:30"
+   },
+   "rolloverDetails": {
+    "lastRolloverTime": "2026-11-19T19:15"
+   }
+  },
+  "dealingRules": {
+   "minDealSize": {
+    "unit": "POINTS",
+    "value": 1.0
+   }
+  },
+  "snapshot": {
+   "marketStatus": "TRADEABLE",
+   "bid": 10457.5,
+   "offer": 10463.5,
+   "scalingFactor": 1
+  }
+ },
+ "IR.D.10YEAR100.FWM2.IP": {
+  "instrument": {
+   "epic": "IR.D.10YEAR100.FWM2.IP",
+   "expiry": "DEC-26",
+   "name": "10-Year T-Note Decimalised ($2)",
+   "lotSize": 2.0,
+   "unit": "CONTRACTS",
+   "type": "RATES",
+   "currencies": [
+    {
+     "code": "USD",
+     "baseExchangeRate": 1.3396,
+     "isDefault": false
+    }
+   ],
+   "valueOfOnePip": "2.00",
+   "onePipMeans": "1 cent",
+   "contractSize": "2.0",
+   "expiryDetails": {
+    "lastDealingDate": "2026-11-25T20:00"
+   },
+   "rolloverDetails": {
+    "lastRolloverTime": "2026-11-25T19:45"
+   }
+  },
+  "dealingRules": {
+   "minDealSize": {
+    "unit": "POINTS",
+    "value": 1.0
+   }
+  },
+  "snapshot": {
+   "marketStatus": "TRADEABLE",
+   "bid": 10658.2,
+   "offer": 10662.2,
+   "scalingFactor": 1
+  }
+ }
+}
