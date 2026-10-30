@@ -1,0 +1,50 @@
+{
+ "original rows": {
+  "OANDA": {
+   "dev": 0.24,
+   "val": 0.68,
+   "hold": 0.34,
+   "full": 0.35,
+   "ann_ret_%": 4.22
+  },
+  "IG": {
+   "dev": 0.44,
+   "val": 0.94,
+   "hold": 0.56,
+   "full": 0.57,
+   "ann_ret_%": 6.82
+  },
+  "no broker costs": {
+   "dev": 0.52,
+   "val": 1.01,
+   "hold": 0.64,
+   "full": 0.65,
+   "ann_ret_%": 7.78
+  },
+  "rows_per_year": 314.9
+ },
+ "weekdays only": {
+  "OANDA": {
+   "dev": 0.21,
+   "val": 0.41,
+   "hold": 0.06,
+   "full": 0.23,
+   "ann_ret_%": 2.5
+  },
+  "IG": {
+   "dev": 0.42,
+   "val": 0.66,
+   "hold": 0.28,
+   "full": 0.45,
+   "ann_ret_%": 4.92
+  },
+  "no broker costs": {
+   "dev": 0.5,
+   "val": 0.73,
+   "hold": 0.36,
+   "full": 0.52,
+   "ann_ret_%": 5.74
+  },
+  "rows_per_year": 259.9
+ }
+}
