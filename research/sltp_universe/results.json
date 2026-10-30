@@ -1,0 +1,1894 @@
+{
+ "per_market": {
+  "XAU_USD": {
+   "dev": {
+    "n": 56,
+    "avgR": 0.231,
+    "pf": 1.69,
+    "win": 0.393
+   },
+   "val": {
+    "n": 23,
+    "avgR": 0.437,
+    "pf": 2.05,
+    "win": 0.13
+   },
+   "hold": {
+    "n": 11,
+    "avgR": 2.29,
+    "pf": 4.94,
+    "win": 0.273
+   },
+   "full": {
+    "n": 90,
+    "avgR": 0.536,
+    "pf": 2.38,
+    "win": 0.311
+   },
+   "full_3x": {
+    "n": 90,
+    "avgR": 0.516,
+    "pf": 2.3,
+    "win": 0.311
+   },
+   "group": "metals",
+   "stop_distance_price": 214.677,
+   "price": 4053.4049999999997
+  },
+  "XAG_USD": {
+   "dev": {
+    "n": 57,
+    "avgR": 0.056,
+    "pf": 1.13,
+    "win": 0.386
+   },
+   "val": {
+    "n": 21,
+    "avgR": -0.184,
+    "pf": 0.66,
+    "win": 0.286
+   },
+   "hold": {
+    "n": 29,
+    "avgR": 0.068,
+    "pf": 1.13,
+    "win": 0.172
+   },
+   "full": {
+    "n": 107,
+    "avgR": 0.012,
+    "pf": 1.03,
+    "win": 0.308
+   },
+   "full_3x": {
+    "n": 107,
+    "avgR": -0.035,
+    "pf": 0.93,
+    "win": 0.271
+   },
+   "group": "metals",
+   "stop_distance_price": 5.3064,
+   "price": 54.247
+  },
+  "XPT_USD": {
+   "dev": {
+    "n": 68,
+    "avgR": -0.159,
+    "pf": 0.71,
+    "win": 0.235
+   },
+   "val": {
+    "n": 22,
+    "avgR": -0.294,
+    "pf": 0.39,
+    "win": 0.364
+   },
+   "hold": {
+    "n": 34,
+    "avgR": -0.151,
+    "pf": 0.7,
+    "win": 0.147
+   },
+   "full": {
+    "n": 124,
+    "avgR": -0.181,
+    "pf": 0.65,
+    "win": 0.234
+   },
+   "full_3x": {
+    "n": 124,
+    "avgR": -0.303,
+    "pf": 0.5,
+    "win": 0.185
+   },
+   "group": "metals",
+   "stop_distance_price": 145.005,
+   "price": 1536.258
+  },
+  "XPD_USD": {
+   "dev": {
+    "n": 65,
+    "avgR": 0.323,
+    "pf": 1.73,
+    "win": 0.323
+   },
+   "val": {
+    "n": 27,
+    "avgR": -0.324,
+    "pf": 0.32,
+    "win": 0.148
+   },
+   "hold": {
+    "n": 17,
+    "avgR": -0.011,
+    "pf": 0.97,
+    "win": 0.294
+   },
+   "full": {
+    "n": 109,
+    "avgR": 0.111,
+    "pf": 1.25,
+    "win": 0.275
+   },
+   "full_3x": {
+    "n": 109,
+    "avgR": -0.074,
+    "pf": 0.87,
+    "win": 0.193
+   },
+   "group": "metals",
+   "stop_distance_price": 107.3745,
+   "price": 1011.1020000000001
+  },
+  "XCU_USD": {
+   "dev": {
+    "n": 48,
+    "avgR": 0.307,
+    "pf": 1.83,
+    "win": 0.375
+   },
+   "val": {
+    "n": 20,
+    "avgR": 0.235,
+    "pf": 1.69,
+    "win": 0.35
+   },
+   "hold": {
+    "n": 25,
+    "avgR": -0.215,
+    "pf": 0.37,
+    "win": 0.32
+   },
+   "full": {
+    "n": 93,
+    "avgR": 0.151,
+    "pf": 1.42,
+    "win": 0.355
+   },
+   "full_3x": {
+    "n": 93,
+    "avgR": 0.129,
+    "pf": 1.35,
+    "win": 0.355
+   },
+   "group": "metals",
+   "stop_distance_price": 0.348242,
+   "price": 6.5954250000000005
+  },
+  "BCO_USD": {
+   "dev": {
+    "n": 69,
+    "avgR": 0.167,
+    "pf": 1.47,
+    "win": 0.406
+   },
+   "val": {
+    "n": 25,
+    "avgR": -0.165,
+    "pf": 0.72,
+    "win": 0.24
+   },
+   "hold": {
+    "n": 14,
+    "avgR": -0.024,
+    "pf": 0.92,
+    "win": 0.5
+   },
+   "full": {
+    "n": 108,
+    "avgR": 0.065,
+    "pf": 1.16,
+    "win": 0.38
+   },
+   "full_3x": {
+    "n": 108,
+    "avgR": 0.041,
+    "pf": 1.1,
+    "win": 0.38
+   },
+   "group": "energy",
+   "stop_distance_price": 12.034575,
+   "price": 115.7125
+  },
+  "WTICO_USD": {
+   "dev": {
+    "n": 61,
+    "avgR": 0.077,
+    "pf": 1.22,
+    "win": 0.361
+   },
+   "val": {
+    "n": 19,
+    "avgR": -0.017,
+    "pf": 0.97,
+    "win": 0.211
+   },
+   "hold": {
+    "n": 15,
+    "avgR": -0.055,
+    "pf": 0.81,
+    "win": 0.533
+   },
+   "full": {
+    "n": 95,
+    "avgR": 0.038,
+    "pf": 1.1,
+    "win": 0.358
+   },
+   "full_3x": {
+    "n": 95,
+    "avgR": 0.016,
+    "pf": 1.04,
+    "win": 0.337
+   },
+   "group": "energy",
+   "stop_distance_price": 11.036025,
+   "price": 103.52600000000001
+  },
+  "NATGAS_USD": {
+   "dev": {
+    "n": 56,
+    "avgR": -0.199,
+    "pf": 0.59,
+    "win": 0.268
+   },
+   "val": {
+    "n": 20,
+    "avgR": 0.073,
+    "pf": 1.17,
+    "win": 0.4
+   },
+   "hold": {
+    "n": 25,
+    "avgR": -0.261,
+    "pf": 0.38,
+    "win": 0.36
+   },
+   "full": {
+    "n": 101,
+    "avgR": -0.161,
+    "pf": 0.65,
+    "win": 0.317
+   },
+   "full_3x": {
+    "n": 101,
+    "avgR": -0.225,
+    "pf": 0.55,
+    "win": 0.297
+   },
+   "group": "energy",
+   "stop_distance_price": 0.37245,
+   "price": 2.7430000000000003
+  },
+  "CORN_USD": {
+   "dev": {
+    "n": 60,
+    "avgR": -0.045,
+    "pf": 0.91,
+    "win": 0.283
+   },
+   "val": {
+    "n": 26,
+    "avgR": -0.087,
+    "pf": 0.82,
+    "win": 0.115
+   },
+   "hold": {
+    "n": 25,
+    "avgR": -0.351,
+    "pf": 0.25,
+    "win": 0.32
+   },
+   "full": {
+    "n": 111,
+    "avgR": -0.124,
+    "pf": 0.74,
+    "win": 0.252
+   },
+   "full_3x": {
+    "n": 111,
+    "avgR": -0.222,
+    "pf": 0.6,
+    "win": 0.189
+   },
+   "group": "grains",
+   "stop_distance_price": 0.293325,
+   "price": 4.425
+  },
+  "WHEAT_USD": {
+   "dev": {
+    "n": 71,
+    "avgR": -0.317,
+    "pf": 0.4,
+    "win": 0.183
+   },
+   "val": {
+    "n": 21,
+    "avgR": -0.318,
+    "pf": 0.45,
+    "win": 0.143
+   },
+   "hold": {
+    "n": 28,
+    "avgR": -0.193,
+    "pf": 0.51,
+    "win": 0.321
+   },
+   "full": {
+    "n": 120,
+    "avgR": -0.289,
+    "pf": 0.43,
+    "win": 0.208
+   },
+   "full_3x": {
+    "n": 120,
+    "avgR": -0.349,
+    "pf": 0.36,
+    "win": 0.2
+   },
+   "group": "grains",
+   "stop_distance_price": 0.4338,
+   "price": 6.047
+  },
+  "SOYBN_USD": {
+   "dev": {
+    "n": 68,
+    "avgR": -0.154,
+    "pf": 0.72,
+    "win": 0.235
+   },
+   "val": {
+    "n": 24,
+    "avgR": 0.166,
+    "pf": 1.3,
+    "win": 0.208
+   },
+   "hold": {
+    "n": 17,
+    "avgR": -0.373,
+    "pf": 0.41,
+    "win": 0.235
+   },
+   "full": {
+    "n": 109,
+    "avgR": -0.118,
+    "pf": 0.79,
+    "win": 0.229
+   },
+   "full_3x": {
+    "n": 109,
+    "avgR": -0.188,
+    "pf": 0.69,
+    "win": 0.22
+   },
+   "group": "grains",
+   "stop_distance_price": 0.5208,
+   "price": 12.3095
+  },
+  "SUGAR_USD": {
+   "dev": {
+    "n": 53,
+    "avgR": -0.013,
+    "pf": 0.97,
+    "win": 0.302
+   },
+   "val": {
+    "n": 25,
+    "avgR": -0.113,
+    "pf": 0.81,
+    "win": 0.2
+   },
+   "hold": {
+    "n": 11,
+    "avgR": 0.176,
+    "pf": 1.36,
+    "win": 0.364
+   },
+   "full": {
+    "n": 89,
+    "avgR": -0.018,
+    "pf": 0.97,
+    "win": 0.281
+   },
+   "full_3x": {
+    "n": 89,
+    "avgR": -0.075,
+    "pf": 0.87,
+    "win": 0.281
+   },
+   "group": "grains",
+   "stop_distance_price": 0.017437,
+   "price": 0.18573499999999998
+  },
+  "SPX500_USD": {
+   "dev": {
+    "n": 37,
+    "avgR": 0.446,
+    "pf": 1.95,
+    "win": 0.243
+   },
+   "val": {
+    "n": 17,
+    "avgR": 0.004,
+    "pf": 1.01,
+    "win": 0.235
+   },
+   "hold": {
+    "n": 11,
+    "avgR": 0.713,
+    "pf": 2.93,
+    "win": 0.455
+   },
+   "full": {
+    "n": 65,
+    "avgR": 0.376,
+    "pf": 1.82,
+    "win": 0.277
+   },
+   "full_3x": {
+    "n": 65,
+    "avgR": 0.362,
+    "pf": 1.78,
+    "win": 0.277
+   },
+   "group": "indices",
+   "stop_distance_price": 232.335,
+   "price": 7744.25
+  },
+  "NAS100_USD": {
+   "dev": {
+    "n": 42,
+    "avgR": 0.376,
+    "pf": 1.72,
+    "win": 0.214
+   },
+   "val": {
+    "n": 8,
+    "avgR": 0.388,
+    "pf": 1.9,
+    "win": 0.5
+   },
+   "hold": {
+    "n": 4,
+    "avgR": 3.031,
+    "pf": 10.44,
+    "win": 0.5
+   },
+   "full": {
+    "n": 54,
+    "avgR": 0.574,
+    "pf": 2.17,
+    "win": 0.278
+   },
+   "full_3x": {
+    "n": 54,
+    "avgR": 0.565,
+    "pf": 2.14,
+    "win": 0.278
+   },
+   "group": "indices",
+   "stop_distance_price": 1587.45,
+   "price": 29765.449999999997
+  },
+  "US30_USD": {
+   "dev": {
+    "n": 46,
+    "avgR": 0.271,
+    "pf": 1.61,
+    "win": 0.283
+   },
+   "val": {
+    "n": 26,
+    "avgR": -0.391,
+    "pf": 0.29,
+    "win": 0.231
+   },
+   "hold": {
+    "n": 16,
+    "avgR": 0.11,
+    "pf": 1.29,
+    "win": 0.25
+   },
+   "full": {
+    "n": 88,
+    "avgR": 0.046,
+    "pf": 1.1,
+    "win": 0.261
+   },
+   "full_3x": {
+    "n": 88,
+    "avgR": 0.04,
+    "pf": 1.09,
+    "win": 0.261
+   },
+   "group": "indices",
+   "stop_distance_price": 1874.085,
+   "price": 52442.2
+  },
+  "US2000_USD": {
+   "dev": {
+    "n": 50,
+    "avgR": 0.075,
+    "pf": 1.22,
+    "win": 0.38
+   },
+   "val": {
+    "n": 32,
+    "avgR": 0.011,
+    "pf": 1.03,
+    "win": 0.438
+   },
+   "hold": {
+    "n": 35,
+    "avgR": -0.077,
+    "pf": 0.79,
+    "win": 0.4
+   },
+   "full": {
+    "n": 117,
+    "avgR": 0.012,
+    "pf": 1.03,
+    "win": 0.402
+   },
+   "full_3x": {
+    "n": 117,
+    "avgR": 0.005,
+    "pf": 1.01,
+    "win": 0.393
+   },
+   "group": "indices",
+   "stop_distance_price": 130.7256,
+   "price": 2822.5029999999997
+  },
+  "UK100_GBP": {
+   "dev": {
+    "n": 50,
+    "avgR": 0.029,
+    "pf": 1.07,
+    "win": 0.28
+   },
+   "val": {
+    "n": 30,
+    "avgR": -0.485,
+    "pf": 0.15,
+    "win": 0.133
+   },
+   "hold": {
+    "n": 21,
+    "avgR": -0.091,
+    "pf": 0.8,
+    "win": 0.238
+   },
+   "full": {
+    "n": 101,
+    "avgR": -0.148,
+    "pf": 0.68,
+    "win": 0.228
+   },
+   "full_3x": {
+    "n": 101,
+    "avgR": -0.157,
+    "pf": 0.66,
+    "win": 0.218
+   },
+   "group": "indices",
+   "stop_distance_price": 354.6825,
+   "price": 10707.05
+  },
+  "DE30_EUR": {
+   "dev": {
+    "n": 47,
+    "avgR": 0.178,
+    "pf": 1.42,
+    "win": 0.277
+   },
+   "val": {
+    "n": 21,
+    "avgR": -0.138,
+    "pf": 0.73,
+    "win": 0.19
+   },
+   "hold": {
+    "n": 8,
+    "avgR": 1.146,
+    "pf": 3.03,
+    "win": 0.125
+   },
+   "full": {
+    "n": 76,
+    "avgR": 0.193,
+    "pf": 1.42,
+    "win": 0.237
+   },
+   "full_3x": {
+    "n": 76,
+    "avgR": 0.186,
+    "pf": 1.4,
+    "win": 0.237
+   },
+   "group": "indices",
+   "stop_distance_price": 1045.1475,
+   "price": 25699.6
+  },
+  "FR40_EUR": {
+   "dev": {
+    "n": 59,
+    "avgR": -0.122,
+    "pf": 0.76,
+    "win": 0.22
+   },
+   "val": {
+    "n": 22,
+    "avgR": -0.096,
+    "pf": 0.73,
+    "win": 0.455
+   },
+   "hold": {
+    "n": 26,
+    "avgR": -0.464,
+    "pf": 0.13,
+    "win": 0.192
+   },
+   "full": {
+    "n": 107,
+    "avgR": -0.2,
+    "pf": 0.59,
+    "win": 0.262
+   },
+   "full_3x": {
+    "n": 107,
+    "avgR": -0.209,
+    "pf": 0.57,
+    "win": 0.252
+   },
+   "group": "indices",
+   "stop_distance_price": 308.0625,
+   "price": 7904.0
+  },
+  "EU50_EUR": {
+   "dev": {
+    "n": 61,
+    "avgR": 0.005,
+    "pf": 1.01,
+    "win": 0.328
+   },
+   "val": {
+    "n": 22,
+    "avgR": -0.186,
+    "pf": 0.58,
+    "win": 0.318
+   },
+   "hold": {
+    "n": 23,
+    "avgR": -0.558,
+    "pf": 0.12,
+    "win": 0.13
+   },
+   "full": {
+    "n": 106,
+    "avgR": -0.157,
+    "pf": 0.66,
+    "win": 0.283
+   },
+   "full_3x": {
+    "n": 106,
+    "avgR": -0.179,
+    "pf": 0.62,
+    "win": 0.274
+   },
+   "group": "indices",
+   "stop_distance_price": 261.48,
+   "price": 6176.5
+  },
+  "NL25_EUR": {
+   "dev": {
+    "n": 52,
+    "avgR": -0.173,
+    "pf": 0.61,
+    "win": 0.269
+   },
+   "val": {
+    "n": 23,
+    "avgR": -0.134,
+    "pf": 0.71,
+    "win": 0.348
+   },
+   "hold": {
+    "n": 17,
+    "avgR": -0.267,
+    "pf": 0.54,
+    "win": 0.118
+   },
+   "full": {
+    "n": 92,
+    "avgR": -0.18,
+    "pf": 0.62,
+    "win": 0.261
+   },
+   "full_3x": {
+    "n": 92,
+    "avgR": -0.199,
+    "pf": 0.59,
+    "win": 0.25
+   },
+   "group": "indices",
+   "stop_distance_price": 38.2332,
+   "price": 1133.55
+  },
+  "CH20_CHF": {
+   "dev": {
+    "n": 60,
+    "avgR": 0.052,
+    "pf": 1.12,
+    "win": 0.283
+   },
+   "val": {
+    "n": 18,
+    "avgR": 0.266,
+    "pf": 1.76,
+    "win": 0.333
+   },
+   "hold": {
+    "n": 32,
+    "avgR": -0.384,
+    "pf": 0.27,
+    "win": 0.219
+   },
+   "full": {
+    "n": 110,
+    "avgR": -0.04,
+    "pf": 0.91,
+    "win": 0.273
+   },
+   "full_3x": {
+    "n": 110,
+    "avgR": -0.048,
+    "pf": 0.9,
+    "win": 0.264
+   },
+   "group": "indices",
+   "stop_distance_price": 500.4225,
+   "price": 14541.05
+  },
+  "ESPIX_EUR": {
+   "dev": {
+    "n": 5,
+    "avgR": -0.564,
+    "pf": 0.26,
+    "win": 0.2
+   },
+   "val": {
+    "n": 26,
+    "avgR": -0.183,
+    "pf": 0.56,
+    "win": 0.385
+   },
+   "hold": {
+    "n": 1,
+    "avgR": -0.423,
+    "pf": 0.0,
+    "win": 0.0
+   },
+   "full": {
+    "n": 32,
+    "avgR": -0.25,
+    "pf": 0.47,
+    "win": 0.344
+   },
+   "full_3x": {
+    "n": 32,
+    "avgR": -0.266,
+    "pf": 0.44,
+    "win": 0.312
+   },
+   "group": "indices",
+   "stop_distance_price": 884.79,
+   "price": 19013.3
+  },
+  "JP225_USD": {
+   "dev": {
+    "n": 51,
+    "avgR": 0.205,
+    "pf": 1.46,
+    "win": 0.373
+   },
+   "val": {
+    "n": 30,
+    "avgR": -0.286,
+    "pf": 0.43,
+    "win": 0.2
+   },
+   "hold": {
+    "n": 13,
+    "avgR": -0.416,
+    "pf": 0.41,
+    "win": 0.077
+   },
+   "full": {
+    "n": 94,
+    "avgR": -0.038,
+    "pf": 0.93,
+    "win": 0.277
+   },
+   "full_3x": {
+    "n": 94,
+    "avgR": -0.065,
+    "pf": 0.87,
+    "win": 0.266
+   },
+   "group": "indices",
+   "stop_distance_price": 5014.2675,
+   "price": 64347.1
+  },
+  "AU200_AUD": {
+   "dev": {
+    "n": 55,
+    "avgR": -0.036,
+    "pf": 0.92,
+    "win": 0.291
+   },
+   "val": {
+    "n": 18,
+    "avgR": -0.195,
+    "pf": 0.62,
+    "win": 0.222
+   },
+   "hold": {
+    "n": 25,
+    "avgR": -0.318,
+    "pf": 0.43,
+    "win": 0.2
+   },
+   "full": {
+    "n": 98,
+    "avgR": -0.137,
+    "pf": 0.72,
+    "win": 0.255
+   },
+   "full_3x": {
+    "n": 98,
+    "avgR": -0.166,
+    "pf": 0.67,
+    "win": 0.224
+   },
+   "group": "indices",
+   "stop_distance_price": 314.8575,
+   "price": 8863.7
+  },
+  "HK33_HKD": {
+   "dev": {
+    "n": 42,
+    "avgR": 0.292,
+    "pf": 1.8,
+    "win": 0.5
+   },
+   "val": {
+    "n": 17,
+    "avgR": -0.08,
+    "pf": 0.84,
+    "win": 0.353
+   },
+   "hold": {
+    "n": 27,
+    "avgR": 0.072,
+    "pf": 1.19,
+    "win": 0.296
+   },
+   "full": {
+    "n": 86,
+    "avgR": 0.15,
+    "pf": 1.37,
+    "win": 0.407
+   },
+   "full_3x": {
+    "n": 86,
+    "avgR": 0.132,
+    "pf": 1.32,
+    "win": 0.407
+   },
+   "group": "indices",
+   "stop_distance_price": 1110.375,
+   "price": 23150.9
+  },
+  "CHINAH_HKD": {
+   "dev": {
+    "n": 0,
+    "avgR": null,
+    "pf": null
+   },
+   "val": {
+    "n": 1,
+    "avgR": 2.7,
+    "pf": Infinity,
+    "win": 1.0
+   },
+   "hold": {
+    "n": 22,
+    "avgR": -0.015,
+    "pf": 0.97,
+    "win": 0.273
+   },
+   "full": {
+    "n": 23,
+    "avgR": 0.103,
+    "pf": 1.25,
+    "win": 0.304
+   },
+   "full_3x": {
+    "n": 23,
+    "avgR": 0.058,
+    "pf": 1.13,
+    "win": 0.304
+   },
+   "group": "indices",
+   "stop_distance_price": 378.735,
+   "price": 7803.6
+  },
+  "CN50_USD": {
+   "dev": {
+    "n": 36,
+    "avgR": 0.156,
+    "pf": 1.27,
+    "win": 0.306
+   },
+   "val": {
+    "n": 14,
+    "avgR": 0.415,
+    "pf": 1.91,
+    "win": 0.286
+   },
+   "hold": {
+    "n": 26,
+    "avgR": -0.031,
+    "pf": 0.9,
+    "win": 0.308
+   },
+   "full": {
+    "n": 76,
+    "avgR": 0.14,
+    "pf": 1.3,
+    "win": 0.303
+   },
+   "full_3x": {
+    "n": 76,
+    "avgR": 0.115,
+    "pf": 1.24,
+    "win": 0.289
+   },
+   "group": "indices",
+   "stop_distance_price": 581.985,
+   "price": 13107.7
+  },
+  "SG30_SGD": {
+   "dev": {
+    "n": 67,
+    "avgR": 0.029,
+    "pf": 1.07,
+    "win": 0.269
+   },
+   "val": {
+    "n": 20,
+    "avgR": -0.043,
+    "pf": 0.92,
+    "win": 0.25
+   },
+   "hold": {
+    "n": 25,
+    "avgR": 0.116,
+    "pf": 1.26,
+    "win": 0.2
+   },
+   "full": {
+    "n": 112,
+    "avgR": 0.036,
+    "pf": 1.08,
+    "win": 0.25
+   },
+   "full_3x": {
+    "n": 112,
+    "avgR": -0.004,
+    "pf": 0.99,
+    "win": 0.232
+   },
+   "group": "indices",
+   "stop_distance_price": 20.99775,
+   "price": 491.195
+  },
+  "DE10YB_EUR": {
+   "dev": {
+    "n": 62,
+    "avgR": -0.059,
+    "pf": 0.88,
+    "win": 0.258
+   },
+   "val": {
+    "n": 11,
+    "avgR": 1.483,
+    "pf": 3.6,
+    "win": 0.273
+   },
+   "hold": {
+    "n": 21,
+    "avgR": -0.342,
+    "pf": 0.27,
+    "win": 0.238
+   },
+   "full": {
+    "n": 94,
+    "avgR": 0.058,
+    "pf": 1.12,
+    "win": 0.255
+   },
+   "full_3x": {
+    "n": 94,
+    "avgR": 0.042,
+    "pf": 1.08,
+    "win": 0.255
+   },
+   "group": "bonds",
+   "stop_distance_price": 2.274975,
+   "price": 122.48150000000001
+  },
+  "UK10YB_GBP": {
+   "dev": {
+    "n": 66,
+    "avgR": -0.026,
+    "pf": 0.93,
+    "win": 0.333
+   },
+   "val": {
+    "n": 20,
+    "avgR": 0.739,
+    "pf": 2.86,
+    "win": 0.35
+   },
+   "hold": {
+    "n": 23,
+    "avgR": -0.212,
+    "pf": 0.47,
+    "win": 0.391
+   },
+   "full": {
+    "n": 109,
+    "avgR": 0.075,
+    "pf": 1.19,
+    "win": 0.349
+   },
+   "full_3x": {
+    "n": 109,
+    "avgR": 0.043,
+    "pf": 1.1,
+    "win": 0.312
+   },
+   "group": "bonds",
+   "stop_distance_price": 2.44635,
+   "price": 85.208
+  },
+  "USB02Y_USD": {
+   "dev": {
+    "n": 69,
+    "avgR": 0.02,
+    "pf": 1.04,
+    "win": 0.246
+   },
+   "val": {
+    "n": 4,
+    "avgR": 10.105,
+    "pf": 13.18,
+    "win": 0.25
+   },
+   "hold": {
+    "n": 13,
+    "avgR": 0.143,
+    "pf": 1.49,
+    "win": 0.385
+   },
+   "full": {
+    "n": 86,
+    "avgR": 0.508,
+    "pf": 2.11,
+    "win": 0.267
+   },
+   "full_3x": {
+    "n": 86,
+    "avgR": 0.367,
+    "pf": 1.68,
+    "win": 0.244
+   },
+   "group": "bonds",
+   "stop_distance_price": 0.547875,
+   "price": 102.029
+  },
+  "USB05Y_USD": {
+   "dev": {
+    "n": 81,
+    "avgR": -0.048,
+    "pf": 0.91,
+    "win": 0.198
+   },
+   "val": {
+    "n": 7,
+    "avgR": 4.253,
+    "pf": 7.83,
+    "win": 0.143
+   },
+   "hold": {
+    "n": 18,
+    "avgR": -0.508,
+    "pf": 0.07,
+    "win": 0.167
+   },
+   "full": {
+    "n": 106,
+    "avgR": 0.158,
+    "pf": 1.3,
+    "win": 0.189
+   },
+   "full_3x": {
+    "n": 106,
+    "avgR": 0.107,
+    "pf": 1.19,
+    "win": 0.16
+   },
+   "group": "bonds",
+   "stop_distance_price": 1.398675,
+   "price": 104.394
+  },
+  "USB10Y_USD": {
+   "dev": {
+    "n": 69,
+    "avgR": 0.149,
+    "pf": 1.34,
+    "win": 0.319
+   },
+   "val": {
+    "n": 7,
+    "avgR": 2.207,
+    "pf": 9.33,
+    "win": 0.429
+   },
+   "hold": {
+    "n": 32,
+    "avgR": -0.419,
+    "pf": 0.09,
+    "win": 0.25
+   },
+   "full": {
+    "n": 108,
+    "avgR": 0.114,
+    "pf": 1.26,
+    "win": 0.306
+   },
+   "full_3x": {
+    "n": 108,
+    "avgR": 0.081,
+    "pf": 1.18,
+    "win": 0.278
+   },
+   "group": "bonds",
+   "stop_distance_price": 2.043,
+   "price": 106.15
+  },
+  "USB30Y_USD": {
+   "dev": {
+    "n": 54,
+    "avgR": 0.094,
+    "pf": 1.25,
+    "win": 0.352
+   },
+   "val": {
+    "n": 12,
+    "avgR": 1.562,
+    "pf": 4.3,
+    "win": 0.417
+   },
+   "hold": {
+    "n": 30,
+    "avgR": -0.364,
+    "pf": 0.24,
+    "win": 0.333
+   },
+   "full": {
+    "n": 96,
+    "avgR": 0.134,
+    "pf": 1.32,
+    "win": 0.354
+   },
+   "full_3x": {
+    "n": 96,
+    "avgR": 0.103,
+    "pf": 1.24,
+    "win": 0.344
+   },
+   "group": "bonds",
+   "stop_distance_price": 3.8586,
+   "price": 107.835
+  },
+  "EUR_USD": {
+   "dev": {
+    "n": 51,
+    "avgR": 0.397,
+    "pf": 2.24,
+    "win": 0.392
+   },
+   "val": {
+    "n": 13,
+    "avgR": 0.293,
+    "pf": 1.62,
+    "win": 0.308
+   },
+   "hold": {
+    "n": 27,
+    "avgR": -0.215,
+    "pf": 0.49,
+    "win": 0.259
+   },
+   "full": {
+    "n": 91,
+    "avgR": 0.2,
+    "pf": 1.54,
+    "win": 0.341
+   },
+   "full_3x": {
+    "n": 91,
+    "avgR": 0.185,
+    "pf": 1.49,
+    "win": 0.341
+   },
+   "group": "fx",
+   "stop_distance_price": 0.018753,
+   "price": 1.113445
+  },
+  "GBP_USD": {
+   "dev": {
+    "n": 56,
+    "avgR": 0.194,
+    "pf": 1.49,
+    "win": 0.321
+   },
+   "val": {
+    "n": 20,
+    "avgR": 0.379,
+    "pf": 2.13,
+    "win": 0.35
+   },
+   "hold": {
+    "n": 32,
+    "avgR": -0.485,
+    "pf": 0.12,
+    "win": 0.125
+   },
+   "full": {
+    "n": 108,
+    "avgR": 0.027,
+    "pf": 1.06,
+    "win": 0.269
+   },
+   "full_3x": {
+    "n": 108,
+    "avgR": 0.01,
+    "pf": 1.02,
+    "win": 0.259
+   },
+   "group": "fx",
+   "stop_distance_price": 0.020351,
+   "price": 1.3288449999999998
+  },
+  "USD_JPY": {
+   "dev": {
+    "n": 69,
+    "avgR": 0.218,
+    "pf": 1.51,
+    "win": 0.275
+   },
+   "val": {
+    "n": 17,
+    "avgR": 0.427,
+    "pf": 1.69,
+    "win": 0.235
+   },
+   "hold": {
+    "n": 17,
+    "avgR": -0.177,
+    "pf": 0.58,
+    "win": 0.176
+   },
+   "full": {
+    "n": 103,
+    "avgR": 0.187,
+    "pf": 1.41,
+    "win": 0.252
+   },
+   "full_3x": {
+    "n": 103,
+    "avgR": 0.17,
+    "pf": 1.36,
+    "win": 0.233
+   },
+   "group": "fx",
+   "stop_distance_price": 2.680575,
+   "price": 157.9535
+  },
+  "AUD_USD": {
+   "dev": {
+    "n": 49,
+    "avgR": 0.304,
+    "pf": 1.76,
+    "win": 0.388
+   },
+   "val": {
+    "n": 12,
+    "avgR": 0.14,
+    "pf": 1.38,
+    "win": 0.333
+   },
+   "hold": {
+    "n": 37,
+    "avgR": -0.079,
+    "pf": 0.74,
+    "win": 0.324
+   },
+   "full": {
+    "n": 98,
+    "avgR": 0.139,
+    "pf": 1.39,
+    "win": 0.357
+   },
+   "full_3x": {
+    "n": 98,
+    "avgR": 0.119,
+    "pf": 1.32,
+    "win": 0.357
+   },
+   "group": "fx",
+   "stop_distance_price": 0.012552,
+   "price": 0.703265
+  },
+  "USD_CAD": {
+   "dev": {
+    "n": 67,
+    "avgR": 0.056,
+    "pf": 1.13,
+    "win": 0.313
+   },
+   "val": {
+    "n": 27,
+    "avgR": -0.331,
+    "pf": 0.32,
+    "win": 0.259
+   },
+   "hold": {
+    "n": 34,
+    "avgR": -0.199,
+    "pf": 0.33,
+    "win": 0.353
+   },
+   "full": {
+    "n": 128,
+    "avgR": -0.093,
+    "pf": 0.77,
+    "win": 0.312
+   },
+   "full_3x": {
+    "n": 128,
+    "avgR": -0.114,
+    "pf": 0.72,
+    "win": 0.305
+   },
+   "group": "fx",
+   "stop_distance_price": 0.018665,
+   "price": 1.4040650000000001
+  },
+  "USD_CHF": {
+   "dev": {
+    "n": 87,
+    "avgR": -0.283,
+    "pf": 0.41,
+    "win": 0.31
+   },
+   "val": {
+    "n": 31,
+    "avgR": -0.242,
+    "pf": 0.46,
+    "win": 0.258
+   },
+   "hold": {
+    "n": 23,
+    "avgR": -0.367,
+    "pf": 0.37,
+    "win": 0.217
+   },
+   "full": {
+    "n": 141,
+    "avgR": -0.287,
+    "pf": 0.41,
+    "win": 0.284
+   },
+   "full_3x": {
+    "n": 141,
+    "avgR": -0.306,
+    "pf": 0.39,
+    "win": 0.277
+   },
+   "group": "fx",
+   "stop_distance_price": 0.015964,
+   "price": 0.8301350000000001
+  },
+  "NZD_USD": {
+   "dev": {
+    "n": 58,
+    "avgR": -0.083,
+    "pf": 0.84,
+    "win": 0.293
+   },
+   "val": {
+    "n": 31,
+    "avgR": -0.158,
+    "pf": 0.64,
+    "win": 0.29
+   },
+   "hold": {
+    "n": 50,
+    "avgR": -0.3,
+    "pf": 0.2,
+    "win": 0.26
+   },
+   "full": {
+    "n": 139,
+    "avgR": -0.178,
+    "pf": 0.6,
+    "win": 0.281
+   },
+   "full_3x": {
+    "n": 139,
+    "avgR": -0.2,
+    "pf": 0.56,
+    "win": 0.281
+   },
+   "group": "fx",
+   "stop_distance_price": 0.013185,
+   "price": 0.56154
+  },
+  "EUR_GBP": {
+   "dev": {
+    "n": 55,
+    "avgR": 0.1,
+    "pf": 1.21,
+    "win": 0.291
+   },
+   "val": {
+    "n": 19,
+    "avgR": -0.038,
+    "pf": 0.89,
+    "win": 0.421
+   },
+   "hold": {
+    "n": 29,
+    "avgR": -0.382,
+    "pf": 0.31,
+    "win": 0.207
+   },
+   "full": {
+    "n": 103,
+    "avgR": -0.061,
+    "pf": 0.87,
+    "win": 0.291
+   },
+   "full_3x": {
+    "n": 103,
+    "avgR": -0.092,
+    "pf": 0.81,
+    "win": 0.282
+   },
+   "group": "fx",
+   "stop_distance_price": 0.008204,
+   "price": 0.837915
+  },
+  "EUR_JPY": {
+   "dev": {
+    "n": 59,
+    "avgR": 0.188,
+    "pf": 1.48,
+    "win": 0.407
+   },
+   "val": {
+    "n": 24,
+    "avgR": -0.533,
+    "pf": 0.28,
+    "win": 0.125
+   },
+   "hold": {
+    "n": 27,
+    "avgR": -0.129,
+    "pf": 0.71,
+    "win": 0.259
+   },
+   "full": {
+    "n": 110,
+    "avgR": -0.047,
+    "pf": 0.9,
+    "win": 0.309
+   },
+   "full_3x": {
+    "n": 110,
+    "avgR": -0.062,
+    "pf": 0.87,
+    "win": 0.3
+   },
+   "group": "fx",
+   "stop_distance_price": 3.111225,
+   "price": 175.87099999999998
+  },
+  "GBP_JPY": {
+   "dev": {
+    "n": 43,
+    "avgR": 0.769,
+    "pf": 3.02,
+    "win": 0.349
+   },
+   "val": {
+    "n": 29,
+    "avgR": -0.232,
+    "pf": 0.5,
+    "win": 0.241
+   },
+   "hold": {
+    "n": 33,
+    "avgR": -0.152,
+    "pf": 0.6,
+    "win": 0.242
+   },
+   "full": {
+    "n": 105,
+    "avgR": 0.203,
+    "pf": 1.5,
+    "win": 0.286
+   },
+   "full_3x": {
+    "n": 105,
+    "avgR": 0.185,
+    "pf": 1.45,
+    "win": 0.286
+   },
+   "group": "fx",
+   "stop_distance_price": 3.597525,
+   "price": 209.89499999999998
+  }
+ },
+ "all_markets": {
+  "dev": {
+   "n": 2487,
+   "avgR": 0.07,
+   "pf": 1.16,
+   "win": 0.306
+  },
+  "val": {
+   "n": 902,
+   "avgR": 0.066,
+   "pf": 1.14,
+   "win": 0.273
+  },
+  "hold": {
+   "n": 1029,
+   "avgR": -0.152,
+   "pf": 0.66,
+   "win": 0.265
+  },
+  "full_3x": {
+   "n": 4418,
+   "avgR": -0.019,
+   "pf": 0.96,
+   "win": 0.275
+  },
+  "equity_1pct": {
+   "end": 9554,
+   "cagr_pct": -0.24,
+   "max_dd_pct": 93.7
+  },
+  "equity_0.5pct": {
+   "end": 11887,
+   "cagr_pct": 0.92,
+   "max_dd_pct": 73.2
+  },
+  "equity_0.5pct_dev": {
+   "end": 21381,
+   "cagr_pct": 5.89,
+   "max_dd_pct": 49.7
+  },
+  "equity_0.5pct_val": {
+   "end": 12528,
+   "cagr_pct": 4.04,
+   "max_dd_pct": 63.5
+  },
+  "equity_0.5pct_hold": {
+   "end": 4438,
+   "cagr_pct": -19.19,
+   "max_dd_pct": 69.0
+  }
+ },
+ "by_group": {
+  "metals": {
+   "dev": {
+    "n": 294,
+    "avgR": 0.14,
+    "pf": 1.32,
+    "win": 0.337
+   },
+   "val": {
+    "n": 113,
+    "avgR": -0.038,
+    "pf": 0.92,
+    "win": 0.248
+   },
+   "hold": {
+    "n": 116,
+    "avgR": 0.142,
+    "pf": 1.31,
+    "win": 0.224
+   }
+  },
+  "energy": {
+   "dev": {
+    "n": 186,
+    "avgR": 0.027,
+    "pf": 1.07,
+    "win": 0.349
+   },
+   "val": {
+    "n": 64,
+    "avgR": -0.047,
+    "pf": 0.91,
+    "win": 0.281
+   },
+   "hold": {
+    "n": 54,
+    "avgR": -0.142,
+    "pf": 0.59,
+    "win": 0.444
+   }
+  },
+  "grains": {
+   "dev": {
+    "n": 252,
+    "avgR": -0.145,
+    "pf": 0.72,
+    "win": 0.246
+   },
+   "val": {
+    "n": 96,
+    "avgR": -0.081,
+    "pf": 0.85,
+    "win": 0.167
+   },
+   "hold": {
+    "n": 81,
+    "avgR": -0.229,
+    "pf": 0.52,
+    "win": 0.309
+   }
+  },
+  "indices": {
+   "dev": {
+    "n": 760,
+    "avgR": 0.093,
+    "pf": 1.21,
+    "win": 0.299
+   },
+   "val": {
+    "n": 345,
+    "avgR": -0.113,
+    "pf": 0.76,
+    "win": 0.299
+   },
+   "hold": {
+    "n": 332,
+    "avgR": -0.077,
+    "pf": 0.84,
+    "win": 0.244
+   }
+  },
+  "bonds": {
+   "dev": {
+    "n": 401,
+    "avgR": 0.019,
+    "pf": 1.04,
+    "win": 0.279
+   },
+   "val": {
+    "n": 61,
+    "avgR": 2.221,
+    "pf": 5.6,
+    "win": 0.328
+   },
+   "hold": {
+    "n": 137,
+    "avgR": -0.318,
+    "pf": 0.29,
+    "win": 0.292
+   }
+  },
+  "fx": {
+   "dev": {
+    "n": 594,
+    "avgR": 0.143,
+    "pf": 1.34,
+    "win": 0.33
+   },
+   "val": {
+    "n": 223,
+    "avgR": -0.095,
+    "pf": 0.8,
+    "win": 0.274
+   },
+   "hold": {
+    "n": 309,
+    "avgR": -0.25,
+    "pf": 0.41,
+    "win": 0.249
+   }
+  }
+ },
+ "picking_test": {
+  "top10_by_dev": {
+   "markets": [
+    "GBP_JPY",
+    "SPX500_USD",
+    "EUR_USD",
+    "NAS100_USD",
+    "XPD_USD",
+    "XCU_USD",
+    "AUD_USD",
+    "HK33_HKD",
+    "US30_USD",
+    "XAU_USD"
+   ],
+   "val": {
+    "n": 192,
+    "avgR": -0.019,
+    "pf": 0.96,
+    "win": 0.255
+   },
+   "hold": {
+    "n": 208,
+    "avgR": 0.142,
+    "pf": 1.38,
+    "win": 0.298
+   }
+  },
+  "bottom10_by_dev": {
+   "markets": [
+    "NZD_USD",
+    "FR40_EUR",
+    "SOYBN_USD",
+    "XPT_USD",
+    "NL25_EUR",
+    "NATGAS_USD",
+    "USD_CHF",
+    "WHEAT_USD",
+    "ESPIX_EUR",
+    "CHINAH_HKD"
+   ],
+   "val": {
+    "n": 221,
+    "avgR": -0.124,
+    "pf": 0.73,
+    "win": 0.317
+   },
+   "hold": {
+    "n": 243,
+    "avgR": -0.264,
+    "pf": 0.44,
+    "win": 0.239
+   }
+  },
+  "best2_per_class_by_dev": {
+   "markets": [
+    "XPD_USD",
+    "XCU_USD",
+    "BCO_USD",
+    "WTICO_USD",
+    "SUGAR_USD",
+    "CORN_USD",
+    "SPX500_USD",
+    "NAS100_USD",
+    "USB10Y_USD",
+    "USB30Y_USD",
+    "GBP_JPY",
+    "EUR_USD"
+   ],
+   "val": {
+    "n": 228,
+    "avgR": 0.091,
+    "pf": 1.19,
+    "win": 0.246
+   },
+   "hold": {
+    "n": 244,
+    "avgR": -0.118,
+    "pf": 0.71,
+    "win": 0.328
+   }
+  },
+  "all45": {
+   "markets": [
+    "XAU_USD",
+    "XAG_USD",
+    "XPT_USD",
+    "XPD_USD",
+    "XCU_USD",
+    "BCO_USD",
+    "WTICO_USD",
+    "NATGAS_USD",
+    "CORN_USD",
+    "WHEAT_USD",
+    "SOYBN_USD",
+    "SUGAR_USD",
+    "SPX500_USD",
+    "NAS100_USD",
+    "US30_USD",
+    "US2000_USD",
+    "UK100_GBP",
+    "DE30_EUR",
+    "FR40_EUR",
+    "EU50_EUR",
+    "NL25_EUR",
+    "CH20_CHF",
+    "ESPIX_EUR",
+    "JP225_USD",
+    "AU200_AUD",
+    "HK33_HKD",
+    "CHINAH_HKD",
+    "CN50_USD",
+    "SG30_SGD",
+    "DE10YB_EUR",
+    "UK10YB_GBP",
+    "USB02Y_USD",
+    "USB05Y_USD",
+    "USB10Y_USD",
+    "USB30Y_USD",
+    "EUR_USD",
+    "GBP_USD",
+    "USD_JPY",
+    "AUD_USD",
+    "USD_CAD",
+    "USD_CHF",
+    "NZD_USD",
+    "EUR_GBP",
+    "EUR_JPY",
+    "GBP_JPY"
+   ],
+   "val": {
+    "n": 902,
+    "avgR": 0.066,
+    "pf": 1.14,
+    "win": 0.273
+   },
+   "hold": {
+    "n": 1029,
+    "avgR": -0.152,
+    "pf": 0.66,
+    "win": 0.265
+   }
+  }
+ }
+}
