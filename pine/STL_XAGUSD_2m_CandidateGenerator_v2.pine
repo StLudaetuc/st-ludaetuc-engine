@@ -17,8 +17,9 @@ strategy(
 )
 
 // ============================================================================
-// ST LUDAETUC XAG/USD (Silver) 2-MINUTE CANDIDATE GENERATOR v2.0.0
+// ST LUDAETUC XAG/USD (Silver) 2-MINUTE CANDIDATE GENERATOR v2.0.1
 //
+// C1 compile fix; no behaviour change
 // ----------------------------------------------------------------------------
 // CHANGE LOG v2.0.0 (bespoke XAG/USD (Silver) build, 2026-10-26)
 // ----------------------------------------------------------------------------
@@ -1340,11 +1341,12 @@ string sessionName =
 // to the final candidate in section 11, same as the FX scripts.
 // ============================================================================
 
-bool longArmTrigger =
+// C1: Legacy arm predicates retained intentionally unused; v6 predicates below drive arming.
+bool legacyLongArmTrigger =
      close <= bbLower and
      rsi <= rsiOversoldThreshold
 
-bool shortArmTrigger =
+bool legacyShortArmTrigger =
      close >= bbUpper and
      rsi >= rsiOverboughtThreshold
 
@@ -1544,7 +1546,7 @@ bool v6ArmCommon =
      v6VolatilityOk and
      not na(bbZ)
 
-bool longArmTrigger =
+bool v6LongArmTrigger =
      v6ArmCommon and
      htfBullish and
      longStretchRecent and
@@ -1552,7 +1554,7 @@ bool longArmTrigger =
      close > open and
      bbZ < v6CheapZ
 
-bool shortArmTrigger =
+bool v6ShortArmTrigger =
      v6ArmCommon and
      htfBearish and
      shortStretchRecent and
@@ -1622,14 +1624,14 @@ if shortArmInvalidated or shortPullbackReclaim or (not na(shortArmBar) and bar_i
     shortArmHigh := na
     shortArmLow := na
 
-if barstate.isconfirmed and longArmTrigger and not shortArmTrigger
+if barstate.isconfirmed and v6LongArmTrigger and not v6ShortArmTrigger
     longArmBar := bar_index
     longArmHigh := high
     longArmLow := low
     longArmBbZ := bbZ
     longArmWick := lowerWickRatio
 
-if barstate.isconfirmed and shortArmTrigger and not longArmTrigger
+if barstate.isconfirmed and v6ShortArmTrigger and not v6LongArmTrigger
     shortArmBar := bar_index
     shortArmHigh := high
     shortArmLow := low
@@ -1919,7 +1921,7 @@ if barstate.isconfirmed
         longArmed := false
         longArmedReferenceLow := na
         longArmedBar := na
-    else if longArmTrigger
+    else if v6LongArmTrigger
         longArmedReferenceLow := longArmed ? math.min(longArmedReferenceLow, low) : low
         longArmedBar := bar_index
         longArmed := true
@@ -1962,7 +1964,7 @@ if barstate.isconfirmed
         shortArmed := false
         shortArmedReferenceHigh := na
         shortArmedBar := na
-    else if shortArmTrigger
+    else if v6ShortArmTrigger
         shortArmedReferenceHigh := shortArmed ? math.max(shortArmedReferenceHigh, high) : high
         shortArmedBar := bar_index
         shortArmed := true
@@ -3674,7 +3676,7 @@ plot(
 )
 
 plotshape(
-     barstate.isconfirmed and longArmTrigger,
+     barstate.isconfirmed and v6LongArmTrigger,
      title = "Long armed",
      style = shape.circle,
      location = location.belowbar,
@@ -3683,7 +3685,7 @@ plotshape(
 )
 
 plotshape(
-     barstate.isconfirmed and shortArmTrigger,
+     barstate.isconfirmed and v6ShortArmTrigger,
      title = "Short armed",
      style = shape.circle,
      location = location.abovebar,
