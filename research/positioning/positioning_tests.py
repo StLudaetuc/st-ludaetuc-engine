@@ -91,7 +91,7 @@ def cot_signals(variant):
 # ---------------- Test 2: OANDA position book ----------------
 def pb_signals(variant):
     pb = pd.read_csv(os.environ['PB_FILE'], parse_dates=['date'])
-    pb = pb[pb.status == 200]
+    pb = pb[(pb.status == 200) & ((pb.long + pb.short) > 0)]   # 0/0 rows (GBP_CHF early 2017) are missing data
     out = {}
     for inst, g in pb.groupby('inst'):
         g = g.sort_values('date').drop_duplicates('date')
@@ -99,7 +99,7 @@ def pb_signals(variant):
         if variant == 'threshold':
             sig = np.where(share > 0.6, -1, np.where(share < 0.4, 1, 0))
         else:
-            sig = -np.sign(share - 0.5)
+            sig = -np.sign(share - 0.5).values
         out[inst] = pd.Series(sig, index=pd.DatetimeIndex(g.date) + pd.Timedelta(days=3))   # Friday snapshot -> Monday
     return out
 
