@@ -1,0 +1,328 @@
+{
+ "Gold": {
+  "markets": [
+   {
+    "epic": "CS.D.CFPGOLD.CFP.IP",
+    "instrumentName": "Spot Gold (\u00a31 Contract)",
+    "expiry": "-",
+    "instrumentType": "CURRENCIES",
+    "bid": 3962.98,
+    "offer": 3963.28,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.GC.FWS3.IP",
+    "instrumentName": "Gold ($100)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 3972.15,
+    "offer": 3972.95,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.GC.FWS2.IP",
+    "instrumentName": "Gold ($100)",
+    "expiry": "FEB-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 4004.95,
+    "offer": 4005.75,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.GC.FWM3.IP",
+    "instrumentName": "Gold ($33.20)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 3972.15,
+    "offer": 3972.95,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.GC.FWM2.IP",
+    "instrumentName": "Gold ($33.20)",
+    "expiry": "FEB-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 4004.95,
+    "offer": 4005.75,
+    "marketStatus": "TRADEABLE"
+   }
+  ]
+ },
+ "Silver": {
+  "markets": [
+   {
+    "epic": "CS.D.CFDSILVER.CFM.IP",
+    "instrumentName": "Mini Spot Silver (500oz)",
+    "expiry": "-",
+    "instrumentType": "CURRENCIES",
+    "bid": 5006.0,
+    "offer": 5010.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "CS.D.CFDSILVER.CFDSI.IP",
+    "instrumentName": "Spot Silver (5000oz)",
+    "expiry": "-",
+    "instrumentType": "CURRENCIES",
+    "bid": 5006.0,
+    "offer": 5010.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.SI.FWM1.IP",
+    "instrumentName": "Silver ($10)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 5006.0,
+    "offer": 5016.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.SI.FWM3.IP",
+    "instrumentName": "Silver ($10)",
+    "expiry": "MAR-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 5067.8,
+    "offer": 5077.8,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.SI.FWS1.IP",
+    "instrumentName": "Silver ($50)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 5006.0,
+    "offer": 5016.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.SI.FWS3.IP",
+    "instrumentName": "Silver ($50)",
+    "expiry": "MAR-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 5067.8,
+    "offer": 5077.8,
+    "marketStatus": "TRADEABLE"
+   }
+  ]
+ },
+ "Copper": {
+  "markets": [
+   {
+    "epic": "MT.D.HG.FWM2.IP",
+    "instrumentName": "High Grade Copper ($0.50)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 65157.5,
+    "offer": 65197.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.HG.FWM3.IP",
+    "instrumentName": "High Grade Copper ($0.50)",
+    "expiry": "MAR-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 66215.0,
+    "offer": 66255.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.HG.FWS2.IP",
+    "instrumentName": "High Grade Copper ($2.50)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 65157.5,
+    "offer": 65197.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "MT.D.HG.FWS3.IP",
+    "instrumentName": "High Grade Copper ($2.50)",
+    "expiry": "MAR-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 66215.0,
+    "offer": 66255.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "CS.D.COPPER.CFD.IP",
+    "instrumentName": "Copper",
+    "expiry": "-",
+    "instrumentType": "CURRENCIES",
+    "bid": 14216.0,
+    "offer": 14226.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "CS.D.COPPER.MINI.IP",
+    "instrumentName": "Copper ($5 Mini Contract)",
+    "expiry": "-",
+    "instrumentType": "CURRENCIES",
+    "bid": 14216.0,
+    "offer": 14226.0,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "CC.D.HG.UNC.IP",
+    "instrumentName": "High Grade Copper ($2.50)",
+    "expiry": "-",
+    "instrumentType": "COMMODITIES",
+    "bid": 65876.9,
+    "offer": 65896.9,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "CC.D.HG.UMP.IP",
+    "instrumentName": "High Grade Copper (\u00a31)",
+    "expiry": "-",
+    "instrumentType": "COMMODITIES",
+    "bid": 65876.9,
+    "offer": 65896.9,
+    "marketStatus": "TRADEABLE"
+   }
+  ]
+ },
+ "US Crude": {
+  "markets": [
+   {
+    "epic": "CC.D.CL.UNC.IP",
+    "instrumentName": "Oil - US Crude ($10)",
+    "expiry": "-",
+    "instrumentType": "COMMODITIES",
+    "bid": 10338.5,
+    "offer": 10341.3,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "CC.D.CL.UMP.IP",
+    "instrumentName": "Oil - US Crude (\u00a31)",
+    "expiry": "-",
+    "instrumentType": "COMMODITIES",
+    "bid": 10338.5,
+    "offer": 10341.3,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "EN.D.CL.FWS5.IP",
+    "instrumentName": "Oil - US Crude ($10)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 10407.5,
+    "offer": 10413.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "EN.D.CL.FWS2.IP",
+    "instrumentName": "Oil - US Crude ($10)",
+    "expiry": "JAN-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 10211.5,
+    "offer": 10217.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "EN.D.CL.FWM5.IP",
+    "instrumentName": "Oil - US Crude ($5)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 10407.5,
+    "offer": 10413.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "EN.D.CL.FWM2.IP",
+    "instrumentName": "Oil - US Crude ($5)",
+    "expiry": "JAN-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 10211.5,
+    "offer": 10217.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "EN.D.CL.FWP1.IP",
+    "instrumentName": "Oil - US Crude (\u00a31)",
+    "expiry": "DEC-26",
+    "instrumentType": "COMMODITIES",
+    "bid": 10407.5,
+    "offer": 10413.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "EN.D.CL.FWP3.IP",
+    "instrumentName": "Oil - US Crude (\u00a31)",
+    "expiry": "JAN-27",
+    "instrumentType": "COMMODITIES",
+    "bid": 10211.5,
+    "offer": 10217.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "IX.D.SUNCL.UMP.IP",
+    "instrumentName": "Weekend Oil - US Crude (GBP1)",
+    "expiry": "-",
+    "instrumentType": "COMMODITIES",
+    "bid": 10318.2,
+    "offer": 10358.2,
+    "marketStatus": "EDITS_ONLY"
+   }
+  ]
+ },
+ "T-Note": {
+  "markets": [
+   {
+    "epic": "IR.D.10YEAR100.FWS2.IP",
+    "instrumentName": "10-Year T-Note Decimalised ($10)",
+    "expiry": "DEC-26",
+    "instrumentType": "RATES",
+    "bid": 10667.5,
+    "offer": 10671.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "IR.D.10YEAR100.FWM2.IP",
+    "instrumentName": "10-Year T-Note Decimalised ($2)",
+    "expiry": "DEC-26",
+    "instrumentType": "RATES",
+    "bid": 10667.5,
+    "offer": 10671.5,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "IR.D.02YEAR100.FWS2.IP",
+    "instrumentName": "2-Year T-Note Decimalised ($10)",
+    "expiry": "DEC-26",
+    "instrumentType": "RATES",
+    "bid": 10227.7,
+    "offer": 10229.7,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "IR.D.02YEAR100.FWM2.IP",
+    "instrumentName": "2-Year T-Note Decimalised ($2)",
+    "expiry": "DEC-26",
+    "instrumentType": "RATES",
+    "bid": 10227.7,
+    "offer": 10229.7,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "IR.D.05YEAR100.FWS2.IP",
+    "instrumentName": "5-Year T-Note Decimalised ($10)",
+    "expiry": "DEC-26",
+    "instrumentType": "RATES",
+    "bid": 10491.6,
+    "offer": 10493.6,
+    "marketStatus": "TRADEABLE"
+   },
+   {
+    "epic": "IR.D.05YEAR100.FWM2.IP",
+    "instrumentName": "5-Year T-Note Decimalised ($2)",
+    "expiry": "DEC-26",
+    "instrumentType": "RATES",
+    "bid": 10491.6,
+    "offer": 10493.6,
+    "marketStatus": "TRADEABLE"
+   }
+  ]
+ }
+}

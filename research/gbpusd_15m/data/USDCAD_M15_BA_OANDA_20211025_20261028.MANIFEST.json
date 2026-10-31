@@ -1,0 +1,13 @@
+{
+  "file": "USDCAD_M15_BA_OANDA_20211025_20261028.csv.gz",
+  "sha256_gz": "7f6f809019e23a264be0f004354d1174ed6a90045d4e79e4fdffd573cd77d07d",
+  "sha256_csv_uncompressed": "50e669dfbfa4e2e3cade64952100adbfdd9f0d56d653d802fee4814dfee548dd",
+  "rows": 124860,
+  "first_bar_open_utc": "2021-10-25 00:00:00+00:00",
+  "last_bar_open_utc": "2026-10-28 23:00:00+00:00",
+  "source": "OANDA v20 REST GET /v3/accounts/{practice}/instruments/USD_CAD/candles granularity=M15 price=BA count=5000, complete candles only",
+  "retrieved_utc": "2026-10-28T23:19-23:21Z",
+  "retrieval_route": "temporary read-only Make.com scenario (deleted after use), regex-compacted; authorised by Andy 2026-10-28",
+  "timestamp_semantics": "OANDA candle time = bar OPEN, UTC",
+  "gaps": "holiday closures only, plus short OANDA feed gaps on 2022-05-12 (2h45m, also in GBP/USD)"
+}

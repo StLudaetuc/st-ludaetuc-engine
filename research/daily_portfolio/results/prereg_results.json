@@ -1,0 +1,910 @@
+{
+ "TREND_FX|1.0": {
+  "development": {
+   "ann_ret": -8.62,
+   "ann_vol": 22.24,
+   "sharpe": -0.39,
+   "pf_daily": 0.929,
+   "pf_monthly": 0.698,
+   "trades": 3997,
+   "pf_trades": 0.797,
+   "win_trades": 0.309,
+   "maxdd_pct": 189.8,
+   "cost_pa": 2.68,
+   "fin_pa": -8.13
+  },
+  "validation": {
+   "ann_ret": -18.85,
+   "ann_vol": 23.74,
+   "sharpe": -0.79,
+   "pf_daily": 0.866,
+   "pf_monthly": 0.515,
+   "trades": 1193,
+   "pf_trades": 0.548,
+   "win_trades": 0.249,
+   "maxdd_pct": 112.0,
+   "cost_pa": 2.46,
+   "fin_pa": -9.62
+  },
+  "holdout": {
+   "ann_ret": -21.47,
+   "ann_vol": 19.63,
+   "sharpe": -1.09,
+   "pf_daily": 0.824,
+   "pf_monthly": 0.361,
+   "trades": 1129,
+   "pf_trades": 0.503,
+   "win_trades": 0.233,
+   "maxdd_pct": 112.1,
+   "cost_pa": 2.39,
+   "fin_pa": -8.99
+  },
+  "full": {
+   "ann_ret": -13.08,
+   "ann_vol": 22.08,
+   "sharpe": -0.59,
+   "pf_daily": 0.896,
+   "pf_monthly": 0.585,
+   "trades": 6225,
+   "pf_trades": 0.686,
+   "win_trades": 0.279,
+   "maxdd_pct": 391.1,
+   "cost_pa": 2.58,
+   "fin_pa": -8.59
+  }
+ },
+ "TREND_METALS|1.0": {
+  "development": {
+   "ann_ret": 1.95,
+   "ann_vol": 11.85,
+   "sharpe": 0.16,
+   "pf_daily": 1.032,
+   "pf_monthly": 1.145,
+   "trades": 382,
+   "pf_trades": 1.198,
+   "win_trades": 0.314,
+   "maxdd_pct": 45.4,
+   "cost_pa": 1.86,
+   "fin_pa": -1.57
+  },
+  "validation": {
+   "ann_ret": -1.71,
+   "ann_vol": 11.12,
+   "sharpe": -0.15,
+   "pf_daily": 0.972,
+   "pf_monthly": 0.882,
+   "trades": 113,
+   "pf_trades": 0.844,
+   "win_trades": 0.292,
+   "maxdd_pct": 30.2,
+   "cost_pa": 0.81,
+   "fin_pa": -1.7
+  },
+  "holdout": {
+   "ann_ret": 5.82,
+   "ann_vol": 13.05,
+   "sharpe": 0.45,
+   "pf_daily": 1.091,
+   "pf_monthly": 1.479,
+   "trades": 113,
+   "pf_trades": 1.565,
+   "win_trades": 0.248,
+   "maxdd_pct": 24.9,
+   "cost_pa": 0.46,
+   "fin_pa": -2.79
+  },
+  "full": {
+   "ann_ret": 1.96,
+   "ann_vol": 11.95,
+   "sharpe": 0.16,
+   "pf_daily": 1.032,
+   "pf_monthly": 1.146,
+   "trades": 598,
+   "pf_trades": 1.196,
+   "win_trades": 0.291,
+   "maxdd_pct": 59.0,
+   "cost_pa": 1.39,
+   "fin_pa": -1.82
+  }
+ },
+ "TREND_INDICES|1.0": {
+  "development": {
+   "ann_ret": -3.34,
+   "ann_vol": 21.46,
+   "sharpe": -0.16,
+   "pf_daily": 0.97,
+   "pf_monthly": 0.855,
+   "trades": 1456,
+   "pf_trades": 0.861,
+   "win_trades": 0.348,
+   "maxdd_pct": 136.3,
+   "cost_pa": 0.5,
+   "fin_pa": -3.81
+  },
+  "validation": {
+   "ann_ret": -11.29,
+   "ann_vol": 24.44,
+   "sharpe": -0.46,
+   "pf_daily": 0.909,
+   "pf_monthly": 0.652,
+   "trades": 601,
+   "pf_trades": 0.619,
+   "win_trades": 0.364,
+   "maxdd_pct": 61.3,
+   "cost_pa": 0.61,
+   "fin_pa": -3.68
+  },
+  "holdout": {
+   "ann_ret": -6.78,
+   "ann_vol": 21.25,
+   "sharpe": -0.32,
+   "pf_daily": 0.942,
+   "pf_monthly": 0.762,
+   "trades": 593,
+   "pf_trades": 0.783,
+   "win_trades": 0.344,
+   "maxdd_pct": 55.2,
+   "cost_pa": 0.71,
+   "fin_pa": -8.88
+  },
+  "full": {
+   "ann_ret": -5.62,
+   "ann_vol": 22.05,
+   "sharpe": -0.25,
+   "pf_daily": 0.951,
+   "pf_monthly": 0.784,
+   "trades": 2628,
+   "pf_trades": 0.787,
+   "win_trades": 0.349,
+   "maxdd_pct": 205.8,
+   "cost_pa": 0.56,
+   "fin_pa": -4.76
+  }
+ },
+ "TREND_BONDS|1.0": {
+  "development": {
+   "ann_ret": -14.98,
+   "ann_vol": 13.64,
+   "sharpe": -1.1,
+   "pf_daily": 0.807,
+   "pf_monthly": 0.393,
+   "trades": 559,
+   "pf_trades": 0.371,
+   "win_trades": 0.277,
+   "maxdd_pct": 249.3,
+   "cost_pa": 0.85,
+   "fin_pa": -13.54
+  },
+  "validation": {
+   "ann_ret": 3.98,
+   "ann_vol": 19.82,
+   "sharpe": 0.2,
+   "pf_daily": 1.038,
+   "pf_monthly": 1.172,
+   "trades": 133,
+   "pf_trades": 1.221,
+   "win_trades": 0.353,
+   "maxdd_pct": 55.8,
+   "cost_pa": 1.05,
+   "fin_pa": -20.98
+  },
+  "holdout": {
+   "ann_ret": -8.54,
+   "ann_vol": 15.8,
+   "sharpe": -0.54,
+   "pf_daily": 0.899,
+   "pf_monthly": 0.641,
+   "trades": 196,
+   "pf_trades": 0.605,
+   "win_trades": 0.306,
+   "maxdd_pct": 79.9,
+   "cost_pa": 0.77,
+   "fin_pa": -7.38
+  },
+  "full": {
+   "ann_ret": -9.92,
+   "ann_vol": 15.5,
+   "sharpe": -0.64,
+   "pf_daily": 0.882,
+   "pf_monthly": 0.59,
+   "trades": 879,
+   "pf_trades": 0.554,
+   "win_trades": 0.288,
+   "maxdd_pct": 289.4,
+   "cost_pa": 0.87,
+   "fin_pa": -13.85
+  }
+ },
+ "TREND_COMMOD|1.0": {
+  "development": {
+   "ann_ret": -0.6,
+   "ann_vol": 10.9,
+   "sharpe": -0.05,
+   "pf_daily": 0.99,
+   "pf_monthly": 0.951,
+   "trades": 678,
+   "pf_trades": 0.973,
+   "win_trades": 0.36,
+   "maxdd_pct": 56.6,
+   "cost_pa": 0.7,
+   "fin_pa": -1.55
+  },
+  "validation": {
+   "ann_ret": 1.08,
+   "ann_vol": 12.14,
+   "sharpe": 0.09,
+   "pf_daily": 1.016,
+   "pf_monthly": 1.076,
+   "trades": 263,
+   "pf_trades": 1.08,
+   "win_trades": 0.361,
+   "maxdd_pct": 24.1,
+   "cost_pa": 1.46,
+   "fin_pa": -1.26
+  },
+  "holdout": {
+   "ann_ret": -1.19,
+   "ann_vol": 11.08,
+   "sharpe": -0.11,
+   "pf_daily": 0.982,
+   "pf_monthly": 0.904,
+   "trades": 236,
+   "pf_trades": 0.952,
+   "win_trades": 0.369,
+   "maxdd_pct": 25.9,
+   "cost_pa": 1.29,
+   "fin_pa": -0.54
+  },
+  "full": {
+   "ann_ret": -0.37,
+   "ann_vol": 11.19,
+   "sharpe": -0.03,
+   "pf_daily": 0.994,
+   "pf_monthly": 0.971,
+   "trades": 1167,
+   "pf_trades": 0.992,
+   "win_trades": 0.361,
+   "maxdd_pct": 69.9,
+   "cost_pa": 0.96,
+   "fin_pa": -1.29
+  }
+ },
+ "TREND_ALLexCOM|1.0": {
+  "development": {
+   "ann_ret": -12.86,
+   "ann_vol": 22.83,
+   "sharpe": -0.56,
+   "pf_daily": 0.899,
+   "pf_monthly": 0.569,
+   "trades": 6951,
+   "pf_trades": 0.765,
+   "win_trades": 0.341,
+   "maxdd_pct": 232.9,
+   "cost_pa": 3.84,
+   "fin_pa": -10.91
+  },
+  "validation": {
+   "ann_ret": -20.77,
+   "ann_vol": 28.17,
+   "sharpe": -0.74,
+   "pf_daily": 0.868,
+   "pf_monthly": 0.54,
+   "trades": 2236,
+   "pf_trades": 0.65,
+   "win_trades": 0.303,
+   "maxdd_pct": 121.3,
+   "cost_pa": 2.92,
+   "fin_pa": -15.39
+  },
+  "holdout": {
+   "ann_ret": -21.73,
+   "ann_vol": 22.71,
+   "sharpe": -0.96,
+   "pf_daily": 0.84,
+   "pf_monthly": 0.395,
+   "trades": 2060,
+   "pf_trades": 0.627,
+   "win_trades": 0.275,
+   "maxdd_pct": 111.1,
+   "cost_pa": 2.58,
+   "fin_pa": -14.17
+  },
+  "full": {
+   "ann_ret": -16.07,
+   "ann_vol": 23.95,
+   "sharpe": -0.67,
+   "pf_daily": 0.881,
+   "pf_monthly": 0.527,
+   "trades": 11112,
+   "pf_trades": 0.711,
+   "win_trades": 0.317,
+   "maxdd_pct": 439.9,
+   "cost_pa": 3.43,
+   "fin_pa": -12.39
+  }
+ },
+ "TREND_ALL|1.0": {
+  "development": {
+   "ann_ret": -12.13,
+   "ann_vol": 22.77,
+   "sharpe": -0.53,
+   "pf_daily": 0.904,
+   "pf_monthly": 0.59,
+   "trades": 7778,
+   "pf_trades": 0.792,
+   "win_trades": 0.348,
+   "maxdd_pct": 223.6,
+   "cost_pa": 3.96,
+   "fin_pa": -10.83
+  },
+  "validation": {
+   "ann_ret": -20.34,
+   "ann_vol": 28.22,
+   "sharpe": -0.72,
+   "pf_daily": 0.871,
+   "pf_monthly": 0.537,
+   "trades": 2543,
+   "pf_trades": 0.676,
+   "win_trades": 0.312,
+   "maxdd_pct": 116.2,
+   "cost_pa": 3.24,
+   "fin_pa": -15.11
+  },
+  "holdout": {
+   "ann_ret": -20.97,
+   "ann_vol": 22.02,
+   "sharpe": -0.95,
+   "pf_daily": 0.843,
+   "pf_monthly": 0.39,
+   "trades": 2342,
+   "pf_trades": 0.66,
+   "win_trades": 0.291,
+   "maxdd_pct": 106.4,
+   "cost_pa": 2.92,
+   "fin_pa": -13.78
+  },
+  "full": {
+   "ann_ret": -15.39,
+   "ann_vol": 23.8,
+   "sharpe": -0.65,
+   "pf_daily": 0.885,
+   "pf_monthly": 0.538,
+   "trades": 12518,
+   "pf_trades": 0.739,
+   "win_trades": 0.327,
+   "maxdd_pct": 425.1,
+   "cost_pa": 3.63,
+   "fin_pa": -12.22
+  }
+ },
+ "CARRY_FX|1.0": {
+  "development": {
+   "ann_ret": -9.36,
+   "ann_vol": 27.82,
+   "sharpe": -0.34,
+   "pf_daily": 0.942,
+   "pf_monthly": 0.744,
+   "trades": 156,
+   "pf_trades": 0.276,
+   "win_trades": 0.333,
+   "maxdd_pct": 179.4,
+   "cost_pa": 0.31,
+   "fin_pa": 6.3
+  },
+  "validation": {
+   "ann_ret": -5.53,
+   "ann_vol": 21.06,
+   "sharpe": -0.26,
+   "pf_daily": 0.954,
+   "pf_monthly": 0.797,
+   "trades": 86,
+   "pf_trades": 0.606,
+   "win_trades": 0.43,
+   "maxdd_pct": 51.9,
+   "cost_pa": 0.18,
+   "fin_pa": 5.02
+  },
+  "holdout": {
+   "ann_ret": 9.9,
+   "ann_vol": 20.29,
+   "sharpe": 0.49,
+   "pf_daily": 1.093,
+   "pf_monthly": 1.659,
+   "trades": 66,
+   "pf_trades": 3.178,
+   "win_trades": 0.652,
+   "maxdd_pct": 50.3,
+   "cost_pa": 0.17,
+   "fin_pa": 9.77
+  },
+  "full": {
+   "ann_ret": -4.95,
+   "ann_vol": 25.3,
+   "sharpe": -0.2,
+   "pf_daily": 0.965,
+   "pf_monthly": 0.838,
+   "trades": 229,
+   "pf_trades": 0.515,
+   "win_trades": 0.415,
+   "maxdd_pct": 207.1,
+   "cost_pa": 0.26,
+   "fin_pa": 6.71
+  }
+ },
+ "COMBINED|1.0": {
+  "development": {
+   "sharpe": -0.64,
+   "pf_daily": 0.888,
+   "pf_monthly": 0.535
+  },
+  "validation": {
+   "sharpe": -0.8,
+   "pf_daily": 0.866,
+   "pf_monthly": 0.455
+  },
+  "holdout": {
+   "sharpe": -0.37,
+   "pf_daily": 0.934,
+   "pf_monthly": 0.722
+  },
+  "full": {
+   "sharpe": -0.62,
+   "pf_daily": 0.892,
+   "pf_monthly": 0.551
+  }
+ },
+ "TREND_FX|2.0": {
+  "development": {
+   "ann_ret": -19.92,
+   "ann_vol": 22.25,
+   "sharpe": -0.9,
+   "pf_daily": 0.845,
+   "pf_monthly": 0.443,
+   "trades": 3997,
+   "pf_trades": 0.606,
+   "win_trades": 0.29,
+   "maxdd_pct": 346.0,
+   "cost_pa": 5.36,
+   "fin_pa": -16.75
+  },
+  "validation": {
+   "ann_ret": -31.28,
+   "ann_vol": 23.76,
+   "sharpe": -1.32,
+   "pf_daily": 0.788,
+   "pf_monthly": 0.333,
+   "trades": 1193,
+   "pf_trades": 0.383,
+   "win_trades": 0.22,
+   "maxdd_pct": 164.2,
+   "cost_pa": 4.93,
+   "fin_pa": -19.6
+  },
+  "holdout": {
+   "ann_ret": -35.44,
+   "ann_vol": 19.67,
+   "sharpe": -1.8,
+   "pf_daily": 0.726,
+   "pf_monthly": 0.193,
+   "trades": 1129,
+   "pf_trades": 0.338,
+   "win_trades": 0.209,
+   "maxdd_pct": 173.8,
+   "cost_pa": 4.78,
+   "fin_pa": -20.57
+  },
+  "full": {
+   "ann_ret": -25.11,
+   "ann_vol": 22.1,
+   "sharpe": -1.14,
+   "pf_daily": 0.81,
+   "pf_monthly": 0.365,
+   "trades": 6225,
+   "pf_trades": 0.503,
+   "win_trades": 0.257,
+   "maxdd_pct": 674.7,
+   "cost_pa": 5.17,
+   "fin_pa": -18.04
+  }
+ },
+ "TREND_METALS|2.0": {
+  "development": {
+   "ann_ret": -1.42,
+   "ann_vol": 11.9,
+   "sharpe": -0.12,
+   "pf_daily": 0.977,
+   "pf_monthly": 0.908,
+   "trades": 382,
+   "pf_trades": 0.909,
+   "win_trades": 0.28,
+   "maxdd_pct": 69.1,
+   "cost_pa": 3.72,
+   "fin_pa": -3.07
+  },
+  "validation": {
+   "ann_ret": -4.08,
+   "ann_vol": 11.12,
+   "sharpe": -0.37,
+   "pf_daily": 0.935,
+   "pf_monthly": 0.742,
+   "trades": 113,
+   "pf_trades": 0.663,
+   "win_trades": 0.265,
+   "maxdd_pct": 32.9,
+   "cost_pa": 1.62,
+   "fin_pa": -3.26
+  },
+  "holdout": {
+   "ann_ret": 3.97,
+   "ann_vol": 13.05,
+   "sharpe": 0.3,
+   "pf_daily": 1.061,
+   "pf_monthly": 1.304,
+   "trades": 113,
+   "pf_trades": 1.358,
+   "win_trades": 0.23,
+   "maxdd_pct": 29.1,
+   "cost_pa": 0.92,
+   "fin_pa": -4.18
+  },
+  "full": {
+   "ann_ret": -0.93,
+   "ann_vol": 11.98,
+   "sharpe": -0.08,
+   "pf_daily": 0.985,
+   "pf_monthly": 0.939,
+   "trades": 598,
+   "pf_trades": 0.938,
+   "win_trades": 0.261,
+   "maxdd_pct": 108.0,
+   "cost_pa": 2.78,
+   "fin_pa": -3.32
+  }
+ },
+ "TREND_INDICES|2.0": {
+  "development": {
+   "ann_ret": -7.5,
+   "ann_vol": 21.46,
+   "sharpe": -0.35,
+   "pf_daily": 0.934,
+   "pf_monthly": 0.703,
+   "trades": 1456,
+   "pf_trades": 0.714,
+   "win_trades": 0.328,
+   "maxdd_pct": 174.3,
+   "cost_pa": 1.0,
+   "fin_pa": -7.46
+  },
+  "validation": {
+   "ann_ret": -15.59,
+   "ann_vol": 24.45,
+   "sharpe": -0.64,
+   "pf_daily": 0.877,
+   "pf_monthly": 0.549,
+   "trades": 601,
+   "pf_trades": 0.515,
+   "win_trades": 0.334,
+   "maxdd_pct": 79.5,
+   "cost_pa": 1.22,
+   "fin_pa": -7.36
+  },
+  "holdout": {
+   "ann_ret": -11.99,
+   "ann_vol": 21.25,
+   "sharpe": -0.56,
+   "pf_daily": 0.9,
+   "pf_monthly": 0.613,
+   "trades": 593,
+   "pf_trades": 0.645,
+   "win_trades": 0.317,
+   "maxdd_pct": 71.1,
+   "cost_pa": 1.41,
+   "fin_pa": -13.37
+  },
+  "full": {
+   "ann_ret": -10.0,
+   "ann_vol": 22.06,
+   "sharpe": -0.45,
+   "pf_daily": 0.915,
+   "pf_monthly": 0.646,
+   "trades": 2628,
+   "pf_trades": 0.651,
+   "win_trades": 0.327,
+   "maxdd_pct": 299.9,
+   "cost_pa": 1.12,
+   "fin_pa": -8.58
+  }
+ },
+ "TREND_BONDS|2.0": {
+  "development": {
+   "ann_ret": -30.25,
+   "ann_vol": 13.71,
+   "sharpe": -2.21,
+   "pf_daily": 0.651,
+   "pf_monthly": 0.171,
+   "trades": 559,
+   "pf_trades": 0.157,
+   "win_trades": 0.222,
+   "maxdd_pct": 460.3,
+   "cost_pa": 1.69,
+   "fin_pa": -27.96
+  },
+  "validation": {
+   "ann_ret": -15.97,
+   "ann_vol": 19.88,
+   "sharpe": -0.8,
+   "pf_daily": 0.862,
+   "pf_monthly": 0.566,
+   "trades": 133,
+   "pf_trades": 0.487,
+   "win_trades": 0.316,
+   "maxdd_pct": 115.9,
+   "cost_pa": 2.11,
+   "fin_pa": -39.87
+  },
+  "holdout": {
+   "ann_ret": -18.73,
+   "ann_vol": 15.81,
+   "sharpe": -1.18,
+   "pf_daily": 0.793,
+   "pf_monthly": 0.378,
+   "trades": 196,
+   "pf_trades": 0.321,
+   "win_trades": 0.209,
+   "maxdd_pct": 115.4,
+   "cost_pa": 1.54,
+   "fin_pa": -16.8
+  },
+  "full": {
+   "ann_ret": -25.15,
+   "ann_vol": 15.55,
+   "sharpe": -1.62,
+   "pf_daily": 0.73,
+   "pf_monthly": 0.288,
+   "trades": 879,
+   "pf_trades": 0.243,
+   "win_trades": 0.231,
+   "maxdd_pct": 647.9,
+   "cost_pa": 1.75,
+   "fin_pa": -28.21
+  }
+ },
+ "TREND_COMMOD|2.0": {
+  "development": {
+   "ann_ret": -2.69,
+   "ann_vol": 10.91,
+   "sharpe": -0.25,
+   "pf_daily": 0.957,
+   "pf_monthly": 0.8,
+   "trades": 678,
+   "pf_trades": 0.862,
+   "win_trades": 0.341,
+   "maxdd_pct": 84.7,
+   "cost_pa": 1.39,
+   "fin_pa": -2.94
+  },
+  "validation": {
+   "ann_ret": -1.71,
+   "ann_vol": 12.15,
+   "sharpe": -0.14,
+   "pf_daily": 0.975,
+   "pf_monthly": 0.891,
+   "trades": 263,
+   "pf_trades": 0.946,
+   "win_trades": 0.331,
+   "maxdd_pct": 29.8,
+   "cost_pa": 2.91,
+   "fin_pa": -2.59
+  },
+  "holdout": {
+   "ann_ret": -3.98,
+   "ann_vol": 11.1,
+   "sharpe": -0.36,
+   "pf_daily": 0.94,
+   "pf_monthly": 0.714,
+   "trades": 236,
+   "pf_trades": 0.82,
+   "win_trades": 0.343,
+   "maxdd_pct": 35.3,
+   "cost_pa": 2.58,
+   "fin_pa": -2.04
+  },
+  "full": {
+   "ann_ret": -2.74,
+   "ann_vol": 11.2,
+   "sharpe": -0.24,
+   "pf_daily": 0.957,
+   "pf_monthly": 0.804,
+   "trades": 1167,
+   "pf_trades": 0.87,
+   "win_trades": 0.338,
+   "maxdd_pct": 108.8,
+   "cost_pa": 1.93,
+   "fin_pa": -2.7
+  }
+ },
+ "TREND_ALLexCOM|2.0": {
+  "development": {
+   "ann_ret": -28.31,
+   "ann_vol": 22.9,
+   "sharpe": -1.24,
+   "pf_daily": 0.791,
+   "pf_monthly": 0.286,
+   "trades": 6951,
+   "pf_trades": 0.569,
+   "win_trades": 0.317,
+   "maxdd_pct": 457.5,
+   "cost_pa": 7.69,
+   "fin_pa": -22.51
+  },
+  "validation": {
+   "ann_ret": -38.73,
+   "ann_vol": 28.2,
+   "sharpe": -1.37,
+   "pf_daily": 0.768,
+   "pf_monthly": 0.322,
+   "trades": 2236,
+   "pf_trades": 0.459,
+   "win_trades": 0.274,
+   "maxdd_pct": 199.1,
+   "cost_pa": 5.84,
+   "fin_pa": -30.43
+  },
+  "holdout": {
+   "ann_ret": -38.61,
+   "ann_vol": 22.74,
+   "sharpe": -1.7,
+   "pf_daily": 0.733,
+   "pf_monthly": 0.187,
+   "trades": 2060,
+   "pf_trades": 0.445,
+   "win_trades": 0.245,
+   "maxdd_pct": 189.8,
+   "cost_pa": 5.17,
+   "fin_pa": -28.46
+  },
+  "full": {
+   "ann_ret": -32.28,
+   "ann_vol": 24.01,
+   "sharpe": -1.34,
+   "pf_daily": 0.775,
+   "pf_monthly": 0.276,
+   "trades": 11112,
+   "pf_trades": 0.518,
+   "win_trades": 0.292,
+   "maxdd_pct": 834.8,
+   "cost_pa": 6.85,
+   "fin_pa": -25.18
+  }
+ },
+ "TREND_ALL|2.0": {
+  "development": {
+   "ann_ret": -27.55,
+   "ann_vol": 22.85,
+   "sharpe": -1.21,
+   "pf_daily": 0.796,
+   "pf_monthly": 0.301,
+   "trades": 7778,
+   "pf_trades": 0.6,
+   "win_trades": 0.327,
+   "maxdd_pct": 447.6,
+   "cost_pa": 7.92,
+   "fin_pa": -22.29
+  },
+  "validation": {
+   "ann_ret": -38.38,
+   "ann_vol": 28.25,
+   "sharpe": -1.36,
+   "pf_daily": 0.77,
+   "pf_monthly": 0.316,
+   "trades": 2543,
+   "pf_trades": 0.487,
+   "win_trades": 0.286,
+   "maxdd_pct": 196.5,
+   "cost_pa": 6.49,
+   "fin_pa": -29.91
+  },
+  "holdout": {
+   "ann_ret": -38.06,
+   "ann_vol": 22.06,
+   "sharpe": -1.73,
+   "pf_daily": 0.732,
+   "pf_monthly": 0.171,
+   "trades": 2342,
+   "pf_trades": 0.479,
+   "win_trades": 0.26,
+   "maxdd_pct": 185.8,
+   "cost_pa": 5.85,
+   "fin_pa": -27.94
+  },
+  "full": {
+   "ann_ret": -31.64,
+   "ann_vol": 23.86,
+   "sharpe": -1.33,
+   "pf_daily": 0.778,
+   "pf_monthly": 0.279,
+   "trades": 12518,
+   "pf_trades": 0.548,
+   "win_trades": 0.304,
+   "maxdd_pct": 820.9,
+   "cost_pa": 7.25,
+   "fin_pa": -24.84
+  }
+ },
+ "CARRY_FX|2.0": {
+  "development": {
+   "ann_ret": -15.32,
+   "ann_vol": 27.82,
+   "sharpe": -0.55,
+   "pf_daily": 0.907,
+   "pf_monthly": 0.612,
+   "trades": 156,
+   "pf_trades": 0.123,
+   "win_trades": 0.288,
+   "maxdd_pct": 261.9,
+   "cost_pa": 0.62,
+   "fin_pa": 0.65
+  },
+  "validation": {
+   "ann_ret": -10.63,
+   "ann_vol": 21.07,
+   "sharpe": -0.5,
+   "pf_daily": 0.913,
+   "pf_monthly": 0.643,
+   "trades": 86,
+   "pf_trades": 0.387,
+   "win_trades": 0.384,
+   "maxdd_pct": 70.8,
+   "cost_pa": 0.35,
+   "fin_pa": 0.1
+  },
+  "holdout": {
+   "ann_ret": 3.13,
+   "ann_vol": 20.28,
+   "sharpe": 0.15,
+   "pf_daily": 1.029,
+   "pf_monthly": 1.18,
+   "trades": 66,
+   "pf_trades": 1.459,
+   "win_trades": 0.5,
+   "maxdd_pct": 57.6,
+   "cost_pa": 0.33,
+   "fin_pa": 3.17
+  },
+  "full": {
+   "ann_ret": -10.9,
+   "ann_vol": 25.3,
+   "sharpe": -0.43,
+   "pf_daily": 0.925,
+   "pf_monthly": 0.673,
+   "trades": 229,
+   "pf_trades": 0.235,
+   "win_trades": 0.345,
+   "maxdd_pct": 337.8,
+   "cost_pa": 0.51,
+   "fin_pa": 1.02
+  }
+ },
+ "COMBINED|2.0": {
+  "development": {
+   "sharpe": -1.28,
+   "pf_daily": 0.789,
+   "pf_monthly": 0.282
+  },
+  "validation": {
+   "sharpe": -1.52,
+   "pf_daily": 0.76,
+   "pf_monthly": 0.23
+  },
+  "holdout": {
+   "sharpe": -1.13,
+   "pf_daily": 0.812,
+   "pf_monthly": 0.343
+  },
+  "full": {
+   "sharpe": -1.3,
+   "pf_daily": 0.787,
+   "pf_monthly": 0.281
+  }
+ }
+}

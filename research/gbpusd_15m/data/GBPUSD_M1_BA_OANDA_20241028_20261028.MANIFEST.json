@@ -1,0 +1,27 @@
+{
+  "file": "GBPUSD_M1_BA_OANDA_20241028_20261028.csv.gz",
+  "sha256_gz": "a5c8b22030f63fb95257f8f47b449df16f5d2b19af736568f27697a5efe80781",
+  "sha256_csv_uncompressed": "6528e87dddb5447c4f0250a18a472f971f53d913cbc3e39ea989eca0d69cf55a",
+  "rows": 742751,
+  "first_bar_open_utc": "2024-10-28 00:00:00+00:00",
+  "last_bar_open_utc": "2026-10-28 19:28:00+00:00",
+  "source": "OANDA v20 REST GET /v3/accounts/{practice}/instruments/GBP_USD/candles granularity=M1 price=BA count=5000, complete candles only",
+  "retrieved_utc": "2026-10-28T19:24-19:29Z",
+  "retrieval_route": "temporary read-only Make.com scenario (deleted after use), Make Text-parser regex compaction to time_bidOHLC_askOHLC_volume rows, parsed locally; authorised by Andy 2026-10-28",
+  "timestamp_semantics": "OANDA candle time = bar OPEN, UTC",
+  "columns": [
+    "time_utc",
+    "bid_o",
+    "bid_h",
+    "bid_l",
+    "bid_c",
+    "ask_o",
+    "ask_h",
+    "ask_l",
+    "ask_c",
+    "volume"
+  ],
+  "windows": "overlapping 5000-candle windows; duplicates removed by timestamp; no window missing",
+  "max_gap_hours": 49.08,
+  "cross_checks": "every M5 bid and ask close in the overlapping period (149,357 bars) equals the M1-derived 5m close"
+}

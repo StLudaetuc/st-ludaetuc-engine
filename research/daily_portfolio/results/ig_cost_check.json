@@ -1,0 +1,23 @@
+{
+ "OANDA CFD": {
+  "dev": 0.21,
+  "val": 0.61,
+  "hold": 0.3,
+  "full": 0.31,
+  "ann_ret_%": 3.37
+ },
+ "IG futures-style": {
+  "dev": 0.38,
+  "val": 0.83,
+  "hold": 0.5,
+  "full": 0.5,
+  "ann_ret_%": 5.39,
+  "ann_cost_%": 0.84
+ },
+ "frictionless": {
+  "dev": 0.47,
+  "val": 0.9,
+  "hold": 0.58,
+  "full": 0.58
+ }
+}

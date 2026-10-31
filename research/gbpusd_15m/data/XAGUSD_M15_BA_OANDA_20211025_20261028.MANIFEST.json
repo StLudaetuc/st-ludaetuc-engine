@@ -1,0 +1,13 @@
+{
+  "file": "XAGUSD_M15_BA_OANDA_20211025_20261028.csv.gz",
+  "sha256_gz": "ad7183eb58eb58ce6b52201eed4c265b3f513227f2aa9f1277f124151cb65f7d",
+  "sha256_csv_uncompressed": "15f6f90e9ad345adedd68b53c4663c5967e0bb17089d397635475ac904bc0ea8",
+  "rows": 118538,
+  "first_bar_open_utc": "2021-10-25 00:00:00+00:00",
+  "last_bar_open_utc": "2026-10-28 22:30:00+00:00",
+  "source": "OANDA v20 REST GET /v3/accounts/{practice}/instruments/XAG_USD/candles granularity=M15 price=BA count=5000, complete candles only",
+  "retrieved_utc": "2026-10-28T22:47-22:49Z",
+  "retrieval_route": "temporary read-only Make.com scenario (deleted after use), regex-compacted; authorised by Andy 2026-10-28",
+  "timestamp_semantics": "OANDA candle time = bar OPEN, UTC",
+  "gaps": "daily 1h maintenance break; gaps >1.5h are US holiday closures / early closes only (identical pattern in both metals)"
+}

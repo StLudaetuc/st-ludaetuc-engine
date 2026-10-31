@@ -1,0 +1,14 @@
+{
+  "file": "EURUSD_M15_BA_OANDA_20211025_20261028.csv.gz",
+  "sha256_gz": "ac0bf1327f99e878058f1f6ae8f54075b6e2d0d4aef4d55ae996ad77b7451e69",
+  "sha256_csv_uncompressed": "7510178b6ef475c76ef4e348ab83d5870083b50d9234fdb68fdf3840ad2d2add",
+  "rows": 124850,
+  "first_bar_open_utc": "2021-10-25 00:00:00+00:00",
+  "last_bar_open_utc": "2026-10-28 22:00:00+00:00",
+  "source": "OANDA v20 REST GET /v3/accounts/{practice}/instruments/EUR_USD/candles granularity=M15 price=BA count=5000, complete candles only",
+  "retrieved_utc": "2026-10-28T22:16-22:19Z",
+  "retrieval_route": "temporary read-only Make.com scenario (deleted after use), regex-compacted; authorised by Andy 2026-10-28",
+  "timestamp_semantics": "OANDA candle time = bar OPEN, UTC",
+  "gaps_over_1h_within_week": "only 24h holiday closures (Christmas/New Year) and one 2h45m gap",
+  "median_spread_over_atr": 0.125
+}
